@@ -142,14 +142,11 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
         },
         words = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // The word at the wordmark's size.
-                    Text(
-                        stringResource(R.string.rail_desktop), fontSize = if (narrow) 30.sp else 42.sp, lineHeight = if (narrow) 34.sp else 46.sp,
-                        fontWeight = FontWeight.Black, color = colors.onBackground,
-                    )
-                    Chip(stringResource(R.string.desktop_shell_kde), ok = true)
-                }
+                // The word at the wordmark's size.
+                Text(
+                    stringResource(R.string.rail_desktop), fontSize = if (narrow) 30.sp else 42.sp, lineHeight = if (narrow) 34.sp else 46.sp,
+                    fontWeight = FontWeight.Black, color = colors.onBackground,
+                )
                 BusyChip(s)
             }
         },

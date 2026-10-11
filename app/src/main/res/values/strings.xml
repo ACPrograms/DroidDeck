@@ -2223,7 +2223,6 @@
     <string name="flathub_remove_note">Its settings and files are kept.</string>
     <string name="flathub_keep">Keep</string>
     <!-- Desktop in the Steam tab's shape. -->
-    <string name="desktop_shell_kde">KDE Plasma</string>
     <string name="desktop_no_apps">Nothing yet. Get an emulator or add an app below.</string>
     <string name="desktop_get_more">Get more</string>
     <string name="desktop_size">Size on disk</string>

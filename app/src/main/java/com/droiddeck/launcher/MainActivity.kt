@@ -1600,7 +1600,10 @@ class MainActivity : ComponentActivity() {
         val scanGeneration = ++libraryScanGeneration
         if (shortcutPicker) shortcutLibraryScanning = true
         Thread({
-            // Steam's own games first, from their manifests alone (quick), beside the added games
+            // The emulators first: they need no walk of the games, and Desktop's dock is made of them.
+            val emus = Library.emulators(this) { id -> DesktopCatalog.installed(this, id) != null }
+            ui.post { if (scanGeneration == libraryScanGeneration) emulatorList = emus }
+            // Steam's own games next, from their manifests alone (quick), beside the added games
             // already listed: a game Steam installed during the session shows as the session ends,
             // without waiting for the added games' walk below. Its Windows components' list is
             // queued then too, on the low-priority worker, so its page is usually ready.
@@ -1621,7 +1624,6 @@ class MainActivity : ComponentActivity() {
             // so a partial list first would shuffle every capsule when the rest arrived.
             // LibraryCache covers the wait.
             val games = if (ready) Library.launchableGames(this) else emptyList()
-            val emus = Library.emulators(this) { id -> DesktopCatalog.installed(this, id) != null }
             val all = games.distinctBy { it.gameId }
             if (ready) com.droiddeck.launcher.frontend.LibraryCache.save(this, all)
             // Once per app start: the Steam games' Windows components from Steam's lists.
@@ -1636,7 +1638,6 @@ class MainActivity : ComponentActivity() {
             ui.post {
                 if (scanGeneration == libraryScanGeneration) {
                     steamGames = all
-                    emulatorList = emus
                     shortcutLibraryScanning = false
                     handleGameLink(all)
                 }
