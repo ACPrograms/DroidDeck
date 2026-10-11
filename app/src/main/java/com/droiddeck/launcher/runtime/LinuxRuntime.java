@@ -200,6 +200,13 @@ public final class LinuxRuntime {
         bind(cmd, "/dev");
         bind(cmd, "/proc");
         bind(cmd, "/sys");
+        if (com.droiddeck.launcher.gpu.SystemVulkanDriver.isPowerVr()) {
+            // The glibc bridge loads the device's existing Android HAL and its dependencies.
+            // These read-only Android partitions remain subject to the app's normal permissions.
+            for (String path : new String[]{"/system", "/vendor", "/apex", "/system_ext", "/product", "/odm"})
+                if (new File(path).isDirectory()) bind(cmd, path);
+            if (new File("/linkerconfig/ld.config.txt").isFile()) bind(cmd, "/linkerconfig/ld.config.txt");
+        }
         bind(cmd, "/dev/urandom:/dev/random");
         bind(cmd, "/proc/self/fd:/dev/fd");
         bind(cmd, "/proc/self/fd/0:/dev/stdin");
@@ -277,7 +284,11 @@ public final class LinuxRuntime {
                 bind(cmd, fake.getPath() + ":" + entry[1]);
             }
         }
-        bindGpuNode(context, cmd);
+        if (com.droiddeck.launcher.gpu.SystemVulkanDriver.isPowerVr()) {
+            bindPowerVrGpuNode(context, cmd);
+        } else {
+            bindGpuNode(context, cmd);
+        }
         bindAdrenoStats(cmd, extraBinds);
         bindCpuTemps(cmd, root);
         if (extraBinds != null) {
@@ -286,6 +297,28 @@ public final class LinuxRuntime {
         List<String> specs = new ArrayList<>();
         for (int i = 0; i + 1 < cmd.size(); i += 2) specs.add(cmd.get(i + 1));
         return specs;
+    }
+
+    /**
+     * Tensor's render node is accessible directly, but Android denies listing its parent
+     * directory. libdrm enumerates that directory even when given the device number. Expose
+     * the real node through a listable private directory; retain its real sysfs identity.
+     */
+    private static void bindPowerVrGpuNode(Context context, List<String> cmd) {
+        if (new File("/dev/dri").list() != null) return;
+        String node = "/dev/dri/renderD128";
+        File dri = new File(context.getCacheDir(), "powervr-drm/dri");
+        try {
+            if (!SystemVulkanDriver.renderNodeAvailable()) return;
+            if (!dri.isDirectory() && !dri.mkdirs()) return;
+            new File(dri, "renderD128").createNewFile();
+        } catch (IOException e) {
+            android.util.Log.w("LinuxRuntime", "Cannot expose the PowerVR render node", e);
+            return;
+        }
+        bind(cmd, dri.getPath() + ":/dev/dri");
+        bind(cmd, node + ":" + node);
+        android.util.Log.i("LinuxRuntime", "PowerVR: exposing real renderD128 through a listable directory");
     }
 
     /**

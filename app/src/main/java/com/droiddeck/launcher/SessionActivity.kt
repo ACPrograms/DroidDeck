@@ -1009,8 +1009,8 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         // the evdev codes we inject.
         FileUtils.copyAsset(this, "wayland/keymap.xkb", File(runtimeDir, "keymap.xkb"))
 
-        // Turnip, not the system Adreno driver: importing the dma-bufs gamescope commits needs
-        // VK_EXT_image_drm_format_modifier, which the system driver does not implement.
+        // Adreno imports dma-bufs with Turnip. PowerVR uses its system Vulkan driver
+        // to import the Android hardware buffers supplied by the runtime bridge.
         val turnip = TurnipDriver(this)
         val driverId = if (CompositorHost.isStarted) null else turnip.install()
 
