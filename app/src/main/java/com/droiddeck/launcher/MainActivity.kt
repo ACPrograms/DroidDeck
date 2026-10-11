@@ -182,7 +182,6 @@ class MainActivity : ComponentActivity() {
     private val wifiLocationReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
             refreshWifiDiscovery()
-        refreshPermissionRows()
         }
     }
     private val mediaRefresh = Runnable {
@@ -1032,6 +1031,7 @@ class MainActivity : ComponentActivity() {
         orientation = SessionPrefs.orientation(this)
         requestedOrientation = orientation
         refreshWifiDiscovery()
+        refreshPermissionRows()
         // Back from a store's sign-in page: the Stores chips show the account at once. A store
         // install finishing while this screen is up rebuilds the Games list through the listener.
         if (gameStoresEnabled) com.droiddeck.launcher.stores.StoresState.refresh(this)
