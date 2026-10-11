@@ -496,8 +496,6 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
             Hops.origin = null
             Hops.restore = null
             Hops.sinking = null
-            // Picked from the rail, Desktop starts at its hero; back from one of its pages it is where it was.
-            if (key == "desktop" && selected != "desktop") DesktopMemory.scroll = 0
             selected = key
         }
     }

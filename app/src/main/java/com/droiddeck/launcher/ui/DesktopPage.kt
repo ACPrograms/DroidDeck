@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -97,11 +98,6 @@ import kotlinx.coroutines.withContext
 // Files). Under the hero the page scrolls to two shelves - the apps that run in the desktop, and
 // what can be added - and the hero folds into a slim header as it goes.
 
-/** What Desktop remembers between visits: how far down it was scrolled. */
-internal object DesktopMemory {
-    var scroll = 0
-}
-
 /** The desktop's own chips: its session settings, then Files. */
 private val DESKTOP_TABS = modeSheetTabs(steam = false) + SheetTab.FILES
 
@@ -111,184 +107,167 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
     val density = LocalDensity.current
     val narrow = LocalNarrowPane.current
     val colors = MaterialTheme.colorScheme
-    val pal = LocalPalette.current
     LaunchedEffect(Unit) { UserAppsState.refresh(ctx) }
-    // Flathub's installed apps sit with the others in Your apps.
+    // Flathub's installed apps sit with the others on the dock.
     LaunchedEffect(s.ready, s.storeEnabled) { if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.refresh(ctx) }
     val installed = s.emulators.filter { it.installed }
-    val available = s.emulators.filter { !it.installed }
     val apps = UserAppsState.items
     var adding by rememberSaveable { mutableStateOf(false) }
-    var sheetOpen by remember { mutableStateOf(false) }
-    // Where the page was scrolled, kept while one of its own pages (an emulator's, Flathub) is
-    // open: back on Desktop the page draws into its card where the card still is.
-    val scroll = rememberScrollState(DesktopMemory.scroll)
-    LaunchedEffect(scroll) { androidx.compose.runtime.snapshotFlow { scroll.value }.collect { DesktopMemory.scroll = it } }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    // Where the Your apps shelf ends, for a new emulator's dot to land.
-    var yourAppsAt by remember { mutableStateOf<Rect?>(null) }
-    var lastCardAt by remember { mutableStateOf<Rect?>(null) }
     val mode = SessionService.MODE_DESKTOP
     val tabs = DESKTOP_TABS.map { it to sheetTabLabel(it) }
     val open = if (s.desktopInstalled) stringResource(R.string.content_open_desktop) else stringResource(R.string.content_install_open_desktop)
     // Opened from a card: the page floods out of it, its picture on the tile.
-    fun openFrom(key: String, at: Rect?, art: Any?, page: String) {
+    fun openFrom(at: Rect?, art: Any?, page: String) {
         at?.let { PageOrigin.mark(Origin(it, 16f * density.density, art = art)) }
         onSelect(page)
     }
 
-    BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
-        val paneH = maxHeight
-        Column(Modifier.fillMaxSize().verticalScroll(scroll, enabled = !sheetOpen)) {
-            // The wall stays inside the hero; the shelves sit on the page's own ground.
-            Box(Modifier.fillMaxWidth().height(paneH).clipToBounds()) {
-                LiftHero(
-                    key = "desktop", tabs = tabs,
-                    onOpen = { scope.launch { scroll.animateScrollTo(0) }; a.onDesktopSettings() },
-                    onPrimary = a.onDesktop, downOpens = false, onOpenChange = { sheetOpen = it },
-                    start = if (narrow) 20.dp else 44.dp, bottom = if (narrow) 20.dp else 44.dp,
-                    background = { DesktopWall(installed.map { it.iconRes } + apps.mapNotNull { it.icon }) },
-                    scrim = { WallFade() },
-                    words = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                // The word at the wordmark's size.
-                                Text(
-                                    stringResource(R.string.rail_desktop), fontSize = if (narrow) 30.sp else 42.sp, lineHeight = if (narrow) 34.sp else 46.sp,
-                                    fontWeight = FontWeight.Black, color = colors.onBackground,
-                                )
-                                Chip(stringResource(R.string.desktop_shell_kde), ok = true)
-                            }
-                            BusyChip(s)
-                        }
-                    },
-                    button = { click ->
-                        // Enabled without a runtime or the desktop: the session's loading screen installs them first.
-                        PrimaryButton(open, enabled = !s.busy, main = true, large = true, icon = Icons.Outlined.DesktopWindows, onClick = click)
-                    },
-                    rows = { tab ->
-                        if (tab == SheetTab.FILES) DesktopFiles(s, a)
-                        else a.modeSheet(mode, tab, SheetExtras())
-                    },
-                )
+    // The Steam tab's shape, the whole pane: the dock of apps along the top of the wall, the word
+    // and Open desktop at the foot, and nothing under the settings sheet but the hero itself.
+    LiftHero(
+        key = "desktop", tabs = tabs,
+        onOpen = a.onDesktopSettings, onPrimary = a.onDesktop,
+        modifier = modifier.clipToBounds(),
+        start = if (narrow) 20.dp else 44.dp, bottom = if (narrow) 20.dp else 44.dp,
+        background = {
+            DesktopWall(installed.map { it.iconRes } + apps.mapNotNull { it.icon })
+        },
+        scrim = { lifted ->
+            WallFade()
+            // Over the fades, so the cards read at full strength; gone as the sheet lifts, so
+            // nothing but the wall is behind it.
+            Box(Modifier.graphicsLayer { val v = lifted(); alpha = 1f - v; translationY = -12.dp.toPx() * v }) {
+                DesktopDock(s, a, installed, apps, onAdd = { if (!s.busy) adding = true }, openFrom = ::openFrom)
             }
-            Column(Modifier.fillMaxWidth().padding(start = if (narrow) 16.dp else 22.dp, end = if (narrow) 16.dp else 22.dp, bottom = 24.dp)) {
-                // ---- Your apps: the emulators installed, and the apps added ----
-                ShelfTitle(stringResource(R.string.user_apps_section), (installed.size + apps.size).takeIf { it > 0 }?.toString())
-                val seen = remember { mutableSetOf<String>() }
-                val mounted = remember { booleanArrayOf(false) }
-                val yourScroll = rememberScrollState()
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth().onGloballyPositioned { yourAppsAt = it.boundsInRoot() }.edgeFade(yourScroll).horizontalScroll(yourScroll).padding(vertical = 2.dp),
-                ) {
-                    val flatpaks = if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.installed else emptyList()
-                    val keys = installed.map { "emu:${it.id}" } + apps.map { "user:${it.key}" } + flatpaks.map { "flatpak:${it.id}" }
-                    keys.forEachIndexed { i, k ->
-                        key(k) {
-                            // A card that arrives after the shelf is up (an emulator just installed) opens in.
-                            val state = remember { MutableTransitionState(!mounted[0] || k in seen) }.apply { targetState = true }
-                            LaunchedEffect(Unit) { seen += k }
-                            AnimatedVisibility(state, enter = expandHorizontally(Motion.sp(0.75f)) + fadeIn(Motion.tw(300, 80))) {
-                                val last = Modifier.then(if (i == keys.lastIndex) Modifier.onGloballyPositioned { lastCardAt = it.boundsInRoot() } else Modifier)
-                                Box(last) {
-                                    val e = installed.firstOrNull { "emu:${it.id}" == k }
-                                    val flatpak = flatpaks.firstOrNull { "flatpak:${it.id}" == k }
-                                    val app = apps.firstOrNull { "user:${it.key}" == k }
-                                    if (e != null) {
-                                        val system = if (e.systemRes != 0) stringResource(e.systemRes) else e.system.replaceFirstChar { c -> c.uppercase() }
-                                        DesktopCard(
-                                            k, e.name,
-                                            if (e.id == "retroarch") system else "$system · " + pluralStringResource(R.plurals.mode_added_count, e.games.size, e.games.size),
-                                            art = e.iconRes, first = i == 0,
-                                        ) { at -> openFrom(k, at, e.iconRes, k) }
-                                    } else if (flatpak != null) DesktopCard(
-                                        k, flatpak.name, flatpak.summary ?: stringResource(R.string.flathub_name),
-                                        art = flatpak.icon ?: com.droiddeck.launcher.store.FlathubApi.iconUrl(flatpak.id), first = i == 0,
-                                    ) { at ->
-                                        // Its page on Flathub: open, update or remove it there.
-                                        com.droiddeck.launcher.store.StoreState.openRequest = flatpak.id
-                                        openFrom(k, at, flatpak.icon, "store")
-                                    } else if (app != null) DesktopCard(k, app.name, stringResource(app.kind.label()), art = app.icon, fallback = if (app.kind == UserApps.Kind.SCRIPT) Icons.Outlined.Terminal else Icons.Outlined.Apps, first = i == 0) { at ->
-                                        openFrom(k, at, app.icon, k)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (keys.isEmpty()) Text(stringResource(R.string.desktop_no_apps), fontSize = 13.sp, color = colors.onSurfaceVariant, modifier = Modifier.padding(vertical = 12.dp))
+        },
+        words = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // The word at the wordmark's size.
+                    Text(
+                        stringResource(R.string.rail_desktop), fontSize = if (narrow) 30.sp else 42.sp, lineHeight = if (narrow) 34.sp else 46.sp,
+                        fontWeight = FontWeight.Black, color = colors.onBackground,
+                    )
+                    Chip(stringResource(R.string.desktop_shell_kde), ok = true)
                 }
-                LaunchedEffect(Unit) { mounted[0] = true }
-                if (UserAppsState.working != null || UserAppsState.lastError != null) Box(Modifier.padding(top = 8.dp)) { UserAppsProgressLine() }
-
-                // ---- Get more: the emulators not installed, adding an app, and Flathub ----
-                ShelfTitle(stringResource(R.string.desktop_get_more), null)
-                val moreScroll = rememberScrollState()
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().edgeFade(moreScroll).horizontalScroll(moreScroll).padding(vertical = 2.dp)) {
-                    available.forEach { e ->
-                        key(e.id) {
-                            val pkgId = Library.packageId(e.id)
-                            val pkg = pkgId?.let { id -> s.packages?.firstOrNull { it.id == id } }
-                            val busyHere = pkg != null && s.packageBusyId == pkg.id
-                            val canGet = pkg != null && !s.busy && s.packageBusyId == null && s.ready && !s.packageCatalogLoading && !s.sessionRunning
-                            val system = if (e.systemRes != 0) stringResource(e.systemRes) else e.system.replaceFirstChar { c -> c.uppercase() }
-                            DesktopCard(
-                                "emu:${e.id}", e.name, if (busyHere) (s.packageStage ?: stringResource(R.string.store_installing)) else system,
-                                art = e.iconRes, badge = if (busyHere) null else stringResource(R.string.comp_get),
-                                progress = if (busyHere) s.packagePercent else null,
-                            ) { at ->
-                                // Get installs it there and then, and a dot flies to where its card will be;
-                                // when it cannot (no runtime, a session running), its page says why.
-                                if (canGet && pkg != null && at != null) {
-                                    a.onInstallPackage(pkg.id)
-                                    val shelf = yourAppsAt
-                                    val endAt = lastCardAt
-                                    Flights.fly(Flight(at, to = {
-                                        val r = shelf ?: return@Flight null
-                                        Offset(minOf((endAt?.right ?: r.left) + 70.dp.toPx(), r.right - 20.dp.toPx()), r.center.y)
-                                    }))
-                                } else openFrom("emu:${e.id}", at, e.iconRes, "emu:${e.id}")
-                            }
-                        }
-                    }
-                    DesktopCard("add", stringResource(R.string.user_apps_add), stringResource(R.string.user_apps_add_detail), art = null, fallback = Icons.Filled.Add, accent = true) { if (!s.busy) adding = true }
-                    if (s.storeEnabled) {
-                        // Flathub's apps run in the desktop: its storefront is a page of Desktop's,
-                        // flooding out of this card as an emulator's does.
-                        DesktopCard("flathub", stringResource(R.string.flathub_name), stringResource(R.string.flathub_line), art = null, fallback = Icons.Outlined.Storefront, tint = FlathubTeal) { at ->
-                            openFrom("flathub", at, null, "store")
-                        }
-                    }
-                }
+                BusyChip(s)
             }
-        }
-        // Scrolled past the hero: it folds into a slim header with the word and a compact Open desktop.
-        val collapsed = with(density) { scroll.value > (paneH - 48.dp).toPx() }
-        AnimatedVisibility(
-            collapsed,
-            enter = fadeIn(Motion.tw(200)) + slideInVertically(Motion.tw(240)) { -it },
-            exit = fadeOut(Motion.tw(160)) + slideOutVertically(Motion.tw(200)) { -it },
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().height(48.dp).background(colors.background.copy(alpha = 0.96f)).padding(horizontal = if (narrow) 16.dp else 22.dp),
-            ) {
-                Text(stringResource(R.string.rail_desktop), fontSize = 20.sp, fontWeight = FontWeight.Black, color = colors.onBackground)
-                Spacer(Modifier.weight(1f))
-                PrimaryButton(open, enabled = !s.busy, compact = true, onClick = a.onDesktop)
-            }
-        }
-    }
+        },
+        button = { click ->
+            // Enabled without a runtime or the desktop: the session's loading screen installs them first.
+            PrimaryButton(open, enabled = !s.busy, main = true, large = true, icon = Icons.Outlined.DesktopWindows, onClick = click)
+        },
+        rows = { tab ->
+            if (tab == SheetTab.FILES) DesktopFiles(s, a)
+            else a.modeSheet(mode, tab, SheetExtras())
+        },
+    )
     if (adding && !s.busy) AddAppDialog(s.ready, onDismiss = { adding = false }) { request, label -> UserAppsState.add(ctx, request, label) }
 }
 
-/** A shelf's heading, with a count beside it. */
+/**
+ * The dock along the top of the Desktop hero: what runs in the desktop (emulators installed, apps
+ * added, Flathub's installed apps), then what can be added (emulators to get, Add, Flathub) - one
+ * row of cards that scrolls sideways, over the wall. It sinks back with the wall as the sheet lifts.
+ */
 @Composable
-private fun ShelfTitle(title: String, count: String?) {
+private fun DesktopDock(
+    s: FrontEndState, a: FrontEndActions, installed: List<Library.Emulator>, apps: List<UserApps.App>,
+    onAdd: () -> Unit, openFrom: (Rect?, Any?, String) -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 18.dp, bottom = 8.dp)) {
-        Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onBackground)
-        if (count != null) Text(count, fontSize = 13.sp, color = colors.onSurfaceVariant)
+    val pal = LocalPalette.current
+    val narrow = LocalNarrowPane.current
+    val available = s.emulators.filter { !it.installed }
+    val flatpaks = if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.installed else emptyList()
+    val keys = installed.map { "emu:${it.id}" } + apps.map { "user:${it.key}" } + flatpaks.map { "flatpak:${it.id}" }
+    // Where the last of your apps sits, for a new emulator's dot to land after it.
+    var lastAt by remember { mutableStateOf<Rect?>(null) }
+    var dockAt by remember { mutableStateOf<Rect?>(null) }
+    val seen = remember { mutableSetOf<String>() }
+    val mounted = remember { booleanArrayOf(false) }
+    LaunchedEffect(Unit) { mounted[0] = true }
+    val scroll = rememberScrollState()
+    Column(Modifier.fillMaxWidth().padding(top = if (narrow) 14.dp else 22.dp)) {
+        Text(
+            stringResource(R.string.user_apps_section).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp,
+            color = colors.onSurfaceVariant, modifier = Modifier.padding(start = if (narrow) 20.dp else 44.dp, bottom = 8.dp),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top,
+            modifier = Modifier.fillMaxWidth().onGloballyPositioned { dockAt = it.boundsInRoot() }
+                .edgeFade(scroll).horizontalScroll(scroll).padding(start = if (narrow) 20.dp else 44.dp, end = 20.dp, top = 2.dp, bottom = 4.dp),
+        ) {
+            keys.forEachIndexed { i, k ->
+                key(k) {
+                    // A card that arrives after the dock is up (an emulator just installed) opens in.
+                    val state = remember { MutableTransitionState(!mounted[0] || k in seen) }.apply { targetState = true }
+                    LaunchedEffect(Unit) { seen += k }
+                    AnimatedVisibility(state, enter = expandHorizontally(Motion.sp(0.75f)) + fadeIn(Motion.tw(300, 80))) {
+                        Box(if (i == keys.lastIndex) Modifier.onGloballyPositioned { lastAt = it.boundsInRoot() } else Modifier) {
+                            val e = installed.firstOrNull { "emu:${it.id}" == k }
+                            val flatpak = flatpaks.firstOrNull { "flatpak:${it.id}" == k }
+                            val app = apps.firstOrNull { "user:${it.key}" == k }
+                            if (e != null) {
+                                val system = if (e.systemRes != 0) stringResource(e.systemRes) else e.system.replaceFirstChar { c -> c.uppercase() }
+                                DesktopCard(
+                                    k, e.name,
+                                    if (e.id == "retroarch") system else "$system · " + pluralStringResource(R.plurals.mode_added_count, e.games.size, e.games.size),
+                                    art = e.iconRes, first = i == 0,
+                                ) { at -> openFrom(at, e.iconRes, k) }
+                            } else if (flatpak != null) DesktopCard(
+                                k, flatpak.name, flatpak.summary ?: stringResource(R.string.flathub_name),
+                                art = flatpak.icon ?: com.droiddeck.launcher.store.FlathubApi.iconUrl(flatpak.id), first = i == 0,
+                            ) { at ->
+                                // Its page on Flathub: open, update or remove it there.
+                                com.droiddeck.launcher.store.StoreState.openRequest = flatpak.id
+                                openFrom(at, flatpak.icon, "store")
+                            } else if (app != null) DesktopCard(k, app.name, stringResource(app.kind.label()), art = app.icon, fallback = if (app.kind == UserApps.Kind.SCRIPT) Icons.Outlined.Terminal else Icons.Outlined.Apps, first = i == 0) { at ->
+                                openFrom(at, app.icon, k)
+                            }
+                        }
+                    }
+                }
+            }
+            // Between yours and what can be added: a thin rule.
+            if (keys.isNotEmpty()) Box(Modifier.padding(horizontal = 4.dp).width(1.dp).height(120.dp).background(pal.line2))
+            available.forEach { e ->
+                key(e.id) {
+                    val pkg = Library.packageId(e.id)?.let { id -> s.packages?.firstOrNull { it.id == id } }
+                    val busyHere = pkg != null && s.packageBusyId == pkg.id
+                    val canGet = pkg != null && !s.busy && s.packageBusyId == null && s.ready && !s.packageCatalogLoading && !s.sessionRunning
+                    val system = if (e.systemRes != 0) stringResource(e.systemRes) else e.system.replaceFirstChar { c -> c.uppercase() }
+                    DesktopCard(
+                        "emu:${e.id}", e.name, if (busyHere) (s.packageStage ?: stringResource(R.string.store_installing)) else system,
+                        art = e.iconRes, badge = if (busyHere) null else stringResource(R.string.comp_get),
+                        progress = if (busyHere) s.packagePercent else null, first = keys.isEmpty() && e == available.first(),
+                    ) { at ->
+                        // Get installs it there and then, and a dot flies to where its card will be;
+                        // when it cannot (no runtime, a session running), its page says why.
+                        if (canGet && pkg != null && at != null) {
+                            a.onInstallPackage(pkg.id)
+                            val end = lastAt
+                            val row = dockAt
+                            Flights.fly(Flight(at, to = {
+                                val r = row ?: return@Flight null
+                                Offset((end?.right ?: r.left) + 70.dp.toPx(), r.center.y)
+                            }))
+                        } else openFrom(at, e.iconRes, "emu:${e.id}")
+                    }
+                }
+            }
+            DesktopCard("add", stringResource(R.string.user_apps_add), stringResource(R.string.user_apps_add_detail), art = null, fallback = Icons.Filled.Add, accent = true) { onAdd() }
+            if (s.storeEnabled) {
+                // Flathub's apps run in the desktop: its storefront is a page of Desktop's,
+                // flooding out of this card as an emulator's does.
+                DesktopCard("flathub", stringResource(R.string.flathub_name), stringResource(R.string.flathub_line), art = null, fallback = Icons.Outlined.Storefront, tint = FlathubTeal) { at ->
+                    openFrom(at, null, "store")
+                }
+            }
+        }
+        if (UserAppsState.working != null || UserAppsState.lastError != null) {
+            Box(Modifier.padding(start = if (narrow) 20.dp else 44.dp, end = 20.dp, top = 6.dp)) { UserAppsProgressLine() }
+        }
     }
 }
 
@@ -325,7 +304,7 @@ private fun DesktopCard(
     val scale by animateFloatAsState(if (pressed) 0.96f else if (hot) 1.03f else 1f, Motion.sp(0.5f, Spring.StiffnessMedium), label = "deskCard")
     val shape = RoundedCornerShape(16.dp)
     var artAt by remember { mutableStateOf<Rect?>(null) }
-    val width = if (LocalNarrowPane.current) 132.dp else 156.dp
+    val width = if (LocalNarrowPane.current) 116.dp else 132.dp
     val artH = width * 0.62f
     val ground = tint?.copy(alpha = 0.25f) ?: if (accent) pal.signal.copy(alpha = 0.12f) else colors.surfaceVariant
     Column(
