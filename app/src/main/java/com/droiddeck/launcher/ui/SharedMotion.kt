@@ -21,6 +21,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -206,3 +208,22 @@ internal fun FlightDot(f: Flight, origin: Offset, onDone: () -> Unit) {
         }
     }
 }
+
+/**
+ * A row that scrolls sideways fades out at an edge it has more past, instead of slicing a pill or
+ * a card through: the content's own alpha, so whatever is behind the row shows through.
+ */
+internal fun Modifier.edgeFade(scroll: androidx.compose.foundation.ScrollState, width: Dp = 28.dp): Modifier =
+    this.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val w = width.toPx().coerceAtMost(size.width / 3f)
+            if (scroll.value > 0) drawRect(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(0f to Color.Transparent, 1f to Color.Black, startX = 0f, endX = w),
+                size = Size(w, size.height), blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+            )
+            if (scroll.value < scroll.maxValue) drawRect(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(0f to Color.Black, 1f to Color.Transparent, startX = size.width - w, endX = size.width),
+                topLeft = Offset(size.width - w, 0f), size = Size(w, size.height), blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+            )
+        }

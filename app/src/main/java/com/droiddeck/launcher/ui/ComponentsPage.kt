@@ -249,9 +249,20 @@ fun ComponentsPage(
     LaunchedEffect(requestInitialFocus) {
         if (!requestInitialFocus || inputMode.inputMode != InputMode.Keyboard) return@LaunchedEffect
         delay(Motion.ms(200).toLong())
-        focusWithinFrames({ false }) { layerFocus.getValue(layer) }
+        focusSoon { layerFocus.getValue(layer) }
     }
     var travel by remember { mutableIntStateOf(1) }
+    // LB / RB (taken by the activity before the page sees them): a pad anywhere on the page goes to
+    // the new layer's card, so one on a row - which leaves with its layer - is never left with nothing.
+    var pageFocused by remember { mutableStateOf(false) }
+    val seenLayer = remember { arrayOf(layer) }
+    LaunchedEffect(layer) {
+        if (seenLayer[0] == layer) return@LaunchedEffect
+        seenLayer[0] = layer
+        if (!pageFocused || inputMode.inputMode != InputMode.Keyboard) return@LaunchedEffect
+        if (narrowOpen != null) runCatching { firstRow.requestFocus() }
+        else focusSoon { layerFocus.getValue(layer) }
+    }
     val pick: (String) -> Unit = { l ->
         if (l != layer) { travel = if (LAYERS.indexOf(l) > LAYERS.indexOf(layer)) 1 else -1; onComp(l) }
     }
@@ -514,7 +525,7 @@ fun ComponentsPage(
         }
     }
 
-    Box(Modifier.fillMaxSize().onGloballyPositioned { pageAt = it.positionInRoot() }) {
+    Box(Modifier.fillMaxSize().onGloballyPositioned { pageAt = it.positionInRoot() }.onFocusChanged { pageFocused = it.hasFocus }) {
         Column(
             Modifier.fillMaxSize().padding(horizontal = if (narrow) 16.dp else 22.dp, vertical = if (narrow) 12.dp else 18.dp)
                 .bumpers(onPrevious = { pick(layerStep(layer, -1)) }, onNext = { pick(layerStep(layer, 1)) }),

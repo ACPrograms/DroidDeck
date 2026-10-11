@@ -237,7 +237,7 @@ private fun SetupButton(s: FrontEndState, busy: Boolean, full: Dp, ring: Int, on
         return
     }
     // A pad keeps its place on the rail that took the button's.
-    if (ff != null) LaunchedEffect(Unit) { if (inputMode.inputMode == InputMode.Keyboard) focusWithinFrames({ false }) { ff.primary } }
+    if (ff != null) LaunchedEffect(Unit) { if (inputMode.inputMode == InputMode.Keyboard) focusSoon { ff.primary } }
     val width = androidx.compose.ui.unit.lerp(restW.coerceAtLeast(120.dp), full, grow)
     val shape = RoundedCornerShape(12.dp)
     val shimmer = rememberInfiniteTransition(label = "setupShimmer")
@@ -303,7 +303,7 @@ private fun Storefront(s: FrontEndState, a: FrontEndActions) {
             detailFrom = cards[id]?.let { Origin(it.translate(-viewportAt), 16f * density.density) }
             leaving = false
             detail = id
-            if (inputMode.inputMode == InputMode.Keyboard && ff != null) { delay(Motion.ms(300).toLong()); focusWithinFrames({ false }) { ff.primary } }
+            if (inputMode.inputMode == InputMode.Keyboard && ff != null) { delay(Motion.ms(300).toLong()); focusSoon { ff.primary } }
         } else if (detail != null) {
             lastApp = detail
             if (detailFrom != null) { leaving = true; delay(Motion.ms(PAGE_RETURN_MS).toLong()) }
@@ -314,7 +314,7 @@ private fun Storefront(s: FrontEndState, a: FrontEndActions) {
     LaunchedEffect(detail) {
         if (detail != null || inputMode.inputMode != InputMode.Keyboard || ff == null) return@LaunchedEffect
         val id = lastApp ?: return@LaunchedEffect
-        ff.items["tile:store:$id"]?.let { req -> focusWithinFrames({ false }) { req } }
+        ff.items["tile:store:$id"]?.let { req -> focusSoon { req } }
     }
     BackHandler(enabled = openApp != null) { openApp = null }
     // An app's card on Desktop asked for its page.
@@ -323,6 +323,14 @@ private fun Storefront(s: FrontEndState, a: FrontEndActions) {
     val sink by animateFloatAsState(if (covering) 0.95f else 1f, if (covering) Motion.tw(480) else Motion.tw(460, 40), label = "flathubSink")
     val fade by animateFloatAsState(if (covering) 0f else 1f, if (covering) Motion.tw(320, 80) else Motion.tw(300, 100), label = "flathubFade")
     val modes = buildList { add(MODE_DISCOVER); add(MODE_INSTALLED); if (updates.isNotEmpty()) add(MODE_UPDATES) }
+    // LB / RB with a pad: focus goes to the new mode's chip; the cards it was on leave with the old mode.
+    val seenMode = remember { arrayOf(mode) }
+    LaunchedEffect(mode) {
+        if (seenMode[0] == mode) return@LaunchedEffect
+        seenMode[0] = mode
+        if (inputMode.inputMode != InputMode.Keyboard || ff == null) return@LaunchedEffect
+        ff.items["flathub:$mode"]?.let { req -> focusSoon { req } }
+    }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = padH, vertical = if (narrow) 10.dp else 14.dp)
@@ -443,9 +451,10 @@ private fun Discover(
             stringResource(R.string.store_tab_discover), query, onQuery, stringResource(R.string.store_search_placeholder),
         ) {
             // The categories as small pills, at the right of the header.
+            val pills = rememberScrollState()
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.widthIn(max = 420.dp).horizontalScroll(rememberScrollState()),
+                modifier = Modifier.widthIn(max = 420.dp).edgeFade(pills).horizontalScroll(pills),
             ) {
                 FlathubApi.categories.forEach { c -> PillButton(stringResource(c.label), selected = category == c.id) { onCategory(c.id) } }
             }
@@ -509,7 +518,8 @@ private fun Shelf(title: String, apps: List<CardApp>?, first: Boolean, cards: Ha
         if (apps == null) Text(stringResource(R.string.store_section_loading), fontSize = 13.sp, color = colors.onSurfaceVariant)
         else if (apps.isNotEmpty()) BoxWithConstraints(Modifier.fillMaxWidth()) {
             val size = cardSize(maxWidth)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 2.dp)) {
+            val shelf = rememberScrollState()
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().edgeFade(shelf).horizontalScroll(shelf).padding(vertical = 2.dp)) {
                 apps.take(18).forEachIndexed { i, app -> key(app.id) { AppCard(app, size, first && i == 0, cards) { onOpen(app.id) } } }
             }
         }
@@ -685,7 +695,8 @@ private fun AppDetail(s: FrontEndState, a: FrontEndActions, id: String, onBack: 
     if (d.screenshots.isNotEmpty()) {
         Rise(3) { SectionTitle(stringResource(R.string.store_screenshots), null) }
         Rise(3) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            val shots = rememberScrollState()
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().edgeFade(shots).horizontalScroll(shots)) {
                 d.screenshots.take(6).forEach { shot ->
                     AsyncImage(
                         model = shot.thumb, contentDescription = null, contentScale = ContentScale.Crop,

@@ -390,6 +390,18 @@ internal suspend fun focusWithinFrames(done: () -> Boolean, target: () -> FocusR
     }
 }
 
+/**
+ * Asks [target] for focus on the next frames until a request lands (a control can take focus only
+ * once it is laid out), for at most half a second; then leaves focus alone, so a press right after
+ * is never pulled back.
+ */
+internal suspend fun focusSoon(target: () -> FocusRequester) {
+    repeat(30) {
+        androidx.compose.runtime.withFrameNanos { }
+        if (runCatching { target().requestFocus() }.isSuccess) return
+    }
+}
+
 @Composable
 fun FrontEndScreen(s: FrontEndState, a: FrontEndActions, page: (@Composable () -> Unit)? = null) {
     val frontFocus = remember { FrontFocus() }

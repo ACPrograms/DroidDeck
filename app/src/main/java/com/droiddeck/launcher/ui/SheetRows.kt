@@ -1,34 +1,12 @@
 package com.droiddeck.launcher.ui
 
-import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.droiddeck.launcher.R
-import com.droiddeck.launcher.session.SessionDisplay
-import com.droiddeck.launcher.session.SessionPrefs
 
 // The rows the lifted sheets add to what the session settings already had: frame generation,
 // Performance and the link to the GPU drivers on Components.
-
-/**
- * What a mode's lip says: its session size, then (when [full]) its frame-rate cap and upscaler,
- * then its touch mode, each left out at its default.
- */
-internal fun lipFor(ctx: Context, mode: String, full: Boolean): List<Pair<String, String>> {
-    val panel = SessionDisplay.panelSize(ctx)
-    val size = SessionDisplay.resolveChoice(panel, SessionPrefs.resolutionChoice(ctx, mode, panel))
-    val fps = if (full) SessionPrefs.fpsLimit(ctx, mode) else 0
-    val upscaler = if (!full) null else SessionPrefs.upscaler(ctx).takeIf { it != 0 }
-        ?.let { m -> SessionPrefs.upscalerChoices(ctx).firstOrNull { it.first == m }?.second }
-    val touch = when (SessionPrefs.touchMode(ctx)) {
-        SessionPrefs.TOUCH_PAD -> ctx.getString(R.string.mode_touch_touchpad)
-        SessionPrefs.TOUCH_DIRECT -> ctx.getString(R.string.mode_touch_direct)
-        SessionPrefs.TOUCH_OFF -> ctx.getString(R.string.lip_touch_off)
-        else -> null
-    }
-    return lipParts(size, fps, { ctx.getString(R.string.lip_fps, it) }, upscaler, touch)
-}
 
 /** Frame generation, moved here from Setup: it is how Play's games are drawn. */
 @Composable

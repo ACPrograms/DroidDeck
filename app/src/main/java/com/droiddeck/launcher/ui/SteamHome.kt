@@ -83,7 +83,6 @@ internal fun SteamHome(s: FrontEndState, a: FrontEndActions, modifier: Modifier)
     // came out differently from one read of the library to the next moved every capsule.
     val games = remember(s.steamGames) { s.steamGames.sortedWith(compareByDescending<Library.SteamGame> { it.lastPlayed }.thenBy { it.gameId }) }
     val narrow = LocalNarrowPane.current
-    val ctx = androidx.compose.ui.platform.LocalContext.current
     // Where the words and buttons sit, for the empty library's wandering mark to keep off.
     var words by remember { mutableStateOf<Rect?>(null) }
     val mode = com.droiddeck.launcher.session.SessionService.MODE_STEAM
@@ -95,7 +94,7 @@ internal fun SteamHome(s: FrontEndState, a: FrontEndActions, modifier: Modifier)
         drivers = { summary -> DriversLink(a, summary, "steam", back) },
     )
     LiftHero(
-        key = "steam", tabs = tabs, lip = { lipFor(ctx, mode, full = true) },
+        key = "steam", tabs = tabs,
         onOpen = a.onSteamSettings, onPrimary = a.onPlay,
         modifier = modifier.clipToBounds(),
         start = if (narrow) 20.dp else 44.dp, bottom = if (narrow) 20.dp else 44.dp,

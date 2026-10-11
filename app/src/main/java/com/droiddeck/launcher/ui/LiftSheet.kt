@@ -40,7 +40,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -85,6 +86,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -117,21 +121,6 @@ internal object SheetTab {
 }
 
 /**
- * What the lip says, in order, by part: the session's size, then its frame-rate cap, its upscaler
- * and its touch mode, each left out at its default (null or 0) to keep the lip short.
- */
-internal fun lipParts(size: Pair<Int, Int>, fps: Int, fpsLabel: (Int) -> String, upscaler: String?, touch: String?): List<Pair<String, String>> = buildList {
-    add("size" to "${size.first}×${size.second}")
-    if (fps > 0) add("fps" to fpsLabel(fps))
-    if (upscaler != null) add("upscaler" to upscaler)
-    if (touch != null) add("touch" to touch)
-}
-
-/** The parts of [now] whose value differs from what the lip showed last ([seen]); none the first time. */
-internal fun lipChanged(seen: Map<String, String>?, now: List<Pair<String, String>>): Set<String> =
-    if (seen == null) emptySet() else now.filter { (k, v) -> seen[k] != v }.map { it.first }.toSet()
-
-/**
  * Where the open sheet's top edge sits in a pane [paneH] tall (px), for a button [buttonH] tall
  * riding it: 82dp down a 360dp pane, the same share of any other, and never so high that the
  * button's top comes closer than [minAbove] to the pane's. [ride] is how far below the edge the
@@ -139,11 +128,6 @@ internal fun lipChanged(seen: Map<String, String>?, now: List<Pair<String, Strin
  */
 internal fun sheetTop(paneH: Float, buttonH: Float, minAbove: Float, ride: Float): Float =
     maxOf(paneH * 82f / 360f, minAbove + buttonH / 2f - ride)
-
-/** What the lip showed last, per sheet: a value that changed since is lit the next time it shows. */
-private object LipMemory {
-    val seen = HashMap<String, Map<String, String>>()
-}
 
 /** One piece of the sheet's rows fades and rises in on its own beat (a settings group asks for its index). */
 internal class SheetBeat(private val pieces: List<Animatable<Float, AnimationVector1D>>) {
@@ -185,7 +169,6 @@ private const val PIECES = 12
 internal fun LiftHero(
     key: String,
     tabs: List<Pair<String, String>>,
-    lip: () -> List<Pair<String, String>>,
     onOpen: () -> Unit,
     onPrimary: () -> Unit,
     background: @Composable () -> Unit,
@@ -230,7 +213,6 @@ internal fun LiftHero(
     val hot = remember { Animatable(1f) }
     val lipShow = remember { Animatable(0f) }
     val lipGone = remember { Animatable(0f) }
-    val lipLit = remember { Animatable(0f) }
     val fold = remember { Animatable(0f) }
     val foldTop = remember { Animatable(0f) }
     val pieces = remember { List(PIECES) { Animatable(0f) } }
@@ -240,7 +222,6 @@ internal fun LiftHero(
     var playFocused by remember { mutableStateOf(false) }
     var heroAt by remember { mutableStateOf(Offset.Zero) }
     var rest by remember { mutableStateOf<Rect?>(null) }
-    var lit by remember { mutableStateOf(emptySet<String>()) }
     fun focusPlay() { if (ff != null && inputMode.inputMode == InputMode.Keyboard) runCatching { ff.primary.requestFocus() } }
     fun close() {
         if (!open) return
@@ -338,20 +319,14 @@ internal fun LiftHero(
     // The lip: there while Play has a pad or a pointer on it, or always with touch alone.
     val touchOnly = inputMode.inputMode == InputMode.Touch
     val lipFocus = remember { FocusRequester() }
+    val settingsLabel = stringResource(R.string.drawer_page_settings)
     var lipFocused by remember { mutableStateOf(false) }
     val lipWanted = !open && (!shown || lipBack) && (playFocused || playHovered || touchOnly || lipFocused)
-    val lipNow = rememberUpdatedState(lip)
     LaunchedEffect(lipWanted) {
         if (lipWanted) {
             // Back from the sheet it comes straight away; otherwise a beat after Play has focus.
             if (!lipBack) delay(Motion.ms(160).toLong())
-            val now = lipNow.value()
-            lit = lipChanged(LipMemory.seen[key], now)
-            LipMemory.seen[key] = now.toMap()
-            coroutineScope {
-                launch { lipShow.animateTo(1f, Motion.tw(220)) }
-                if (lit.isNotEmpty()) launch { lipLit.snapTo(1f); lipLit.animateTo(0f, Motion.tw(600)) }
-            }
+            lipShow.animateTo(1f, Motion.tw(220))
         } else {
             delay(Motion.ms(140).toLong())
             lipShow.animateTo(0f, Motion.tw(220))
@@ -422,7 +397,9 @@ internal fun LiftHero(
                 if (narrow || pill == null) 16.dp.toPx() else pill.right + 20.dp.toPx() - sheetLeft
             }
             val chipsY = with(density) { if (narrow && pill != null) (pill.bottom - openTop) + 10.dp.toPx() else ChipsTop.toPx() }
-            val rowsY = with(density) { if (narrow && pill != null) chipsY + 54.dp.toPx() else RowsTop.toPx() }
+            // The rows start under the chips, which are 44dp to touch: from 54dp they ran under the
+            // chips' feet and, scrolled, covered them.
+            val rowsY = with(density) { maxOf(RowsTop.toPx(), chipsY + 52.dp.toPx()) }
             val sheetW = sheetRight - sheetLeft
             Box(
                 Modifier
@@ -432,8 +409,10 @@ internal fun LiftHero(
                     .pointerInput(Unit) { detectTapGestures { } }
                     .controllerBack { close() }
                     .bumpers(
-                        onPrevious = { if (tab > 0) { travel = -1; tab-- } },
-                        onNext = { if (tab < tabs.lastIndex) { travel = 1; tab++ } },
+                        // LB / RB: focus goes to the new tab's chip, so a pad on a row (which goes with
+                        // its tab) is never left with nothing.
+                        onPrevious = { if (tab > 0) { travel = -1; tab--; runCatching { chipFocus[tab].requestFocus() } } },
+                        onNext = { if (tab < tabs.lastIndex) { travel = 1; tab++; runCatching { chipFocus[tab].requestFocus() } } },
                     )
                     // A pad stays in the sheet until it folds; Left from it reaches Play, the handle.
                     .focusProperties { exit = { dir -> if (!openState.value || launchingState.value) FocusRequester.Default else if (dir == FocusDirection.Left && ff != null) ff.primary else FocusRequester.Cancel } }
@@ -442,6 +421,8 @@ internal fun LiftHero(
                 Box(
                     Modifier
                         .offset { IntOffset(chipsX.roundToInt(), chipsY.roundToInt()) }
+                        // Over the rows, whatever they scroll under them.
+                        .zIndex(1f)
                         .width(with(density) { (sheetW - chipsX - 16.dp.toPx()).coerceAtLeast(0f).toDp() })
                         .graphicsLayer { val v = pieces[0].value; alpha = v; translationY = (1f - v) * 6.dp.toPx() }
                         // A pull down on the chips folds the sheet; so does Up from them.
@@ -535,14 +516,15 @@ internal fun LiftHero(
         val r0 = restRect
         // A lip a pad can reach stays composed (unseen at rest) so Down always has it to land on.
         if (r0 != null && (lipShow.value > 0.01f || pull.value > 0.5f || (!downOpens && !open && !shown))) {
-            val lipH = 26.dp + pull.value.dp
+            val lipH = 22.dp + pull.value.dp
             val lift = { if (!open) open = true }
             Box(
                 Modifier
-                    .offset { IntOffset((r0.left + 16.dp.toPx()).roundToInt(), (r0.bottom + raise * ride.value + (lipShow.value - 1f) * 8.dp.toPx()).roundToInt()) }
+                    .offset { IntOffset((r0.center.x - HandleWidth.toPx() / 2f).roundToInt(), (r0.bottom + raise * ride.value + (lipShow.value - 1f) * 8.dp.toPx()).roundToInt()) }
                     .graphicsLayer { alpha = lipShow.value * (1f - lipGone.value) }
-                    // 44dp to touch; the tab itself is the top 26.
+                    // 44dp to touch; the tab itself is the top 22.
                     .heightIn(min = 44.dp)
+                    .semantics { contentDescription = settingsLabel }
                     .pointerInput(Unit) {
                         var dy = 0f
                         detectVerticalDragGestures(onDragStart = { dy = 0f }) { change, amount ->
@@ -556,36 +538,51 @@ internal fun LiftHero(
                     )
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = lift),
             ) {
-                Box(Modifier.glideBorder(lipFocused, RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp), LocalPalette.current.signal)) {
-                    Lip(lip(), lit, lipLit.value, lipH)
+                Box(Modifier.glideBorder(lipFocused, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp), LocalPalette.current.signal)) {
+                    Handle(lipH)
                 }
             }
         }
     }
 }
 
-/** The lip's tab: what Play will do, a part lit while it says something new. */
+/** The handle's width: a small tab, not a sentence. */
+private val HandleWidth = 52.dp
+
+/**
+ * The sheet's handle, tucked under Play: a small tab with a chevron that bobs up every so often,
+ * saying there is a drawer to pull up. Still with animations off.
+ */
 @Composable
-private fun Lip(parts: List<Pair<String, String>>, lit: Set<String>, glow: Float, height: Dp) {
+private fun Handle(height: Dp) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
-    val shape = RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.height(height).clip(shape).background(colors.surface)
-            .drawBorderSidesAndFoot(pal.line, 14.dp)
-            .padding(start = 12.dp, end = 8.dp),
+    val shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
+    val still = Motion.scale == 0f
+    val bob = androidx.compose.animation.core.rememberInfiniteTransition(label = "handle")
+    // A quick lift and settle, then a rest: a nudge, not a pulse.
+    val lift by bob.animateFloat(
+        0f, 0f,
+        androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.keyframes {
+                durationMillis = 2400
+                0f at 0
+                1f at 180 using androidx.compose.animation.core.FastOutSlowInEasing
+                -0.25f at 420
+                0f at 620
+            },
+        ),
+        label = "handleBob",
+    )
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.width(HandleWidth).height(height).clip(shape).background(colors.surface)
+            .drawBorderSidesAndFoot(pal.line, 12.dp),
     ) {
-        parts.forEachIndexed { i, (k, v) ->
-            if (i > 0) Text(" · ", fontSize = 12.sp, color = colors.onSurfaceVariant)
-            Text(
-                v, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurfaceVariant, maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(4.dp))
-                    .background(if (k in lit) pal.signal.copy(alpha = 0.25f * glow) else Color.Transparent)
-                    .padding(horizontal = 2.dp),
-            )
-        }
-        Icon(Icons.Filled.KeyboardArrowDown, null, tint = colors.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp).size(16.dp))
+        Icon(
+            Icons.Filled.KeyboardArrowUp, null, tint = colors.onSurfaceVariant,
+            modifier = Modifier.size(18.dp).graphicsLayer { translationY = if (still) 0f else -3.dp.toPx() * lift },
+        )
     }
 }
 
@@ -624,7 +621,7 @@ internal fun SheetChips(labels: List<String>, selected: Int, focus: List<FocusRe
     BoxWithConstraints(Modifier.fillMaxWidth().onFocusChanged { within = it.hasFocus }) {
         val equal = maxWidth / labels.size.coerceAtLeast(1) >= 96.dp
         val scroll = rememberScrollState()
-        Box(if (equal) Modifier.fillMaxWidth() else Modifier.horizontalScroll(scroll)) {
+        Box(if (equal) Modifier.fillMaxWidth() else Modifier.edgeFade(scroll).horizontalScroll(scroll)) {
             ChipGlide(selected, bounds[selected], tint)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = if (equal) Modifier.fillMaxWidth() else Modifier) {
                 labels.forEachIndexed { i, label ->

@@ -143,7 +143,7 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
             // The wall stays inside the hero; the shelves sit on the page's own ground.
             Box(Modifier.fillMaxWidth().height(paneH).clipToBounds()) {
                 LiftHero(
-                    key = "desktop", tabs = tabs, lip = { lipFor(ctx, mode, full = false) },
+                    key = "desktop", tabs = tabs,
                     onOpen = { scope.launch { scroll.animateScrollTo(0) }; a.onDesktopSettings() },
                     onPrimary = a.onDesktop, downOpens = false, onOpenChange = { sheetOpen = it },
                     start = if (narrow) 20.dp else 44.dp, bottom = if (narrow) 20.dp else 44.dp,
@@ -177,9 +177,10 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
                 ShelfTitle(stringResource(R.string.user_apps_section), (installed.size + apps.size).takeIf { it > 0 }?.toString())
                 val seen = remember { mutableSetOf<String>() }
                 val mounted = remember { booleanArrayOf(false) }
+                val yourScroll = rememberScrollState()
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth().onGloballyPositioned { yourAppsAt = it.boundsInRoot() }.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),
+                    modifier = Modifier.fillMaxWidth().onGloballyPositioned { yourAppsAt = it.boundsInRoot() }.edgeFade(yourScroll).horizontalScroll(yourScroll).padding(vertical = 2.dp),
                 ) {
                     val flatpaks = if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.installed else emptyList()
                     val keys = installed.map { "emu:${it.id}" } + apps.map { "user:${it.key}" } + flatpaks.map { "flatpak:${it.id}" }
@@ -222,7 +223,8 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
 
                 // ---- Get more: the emulators not installed, adding an app, and Flathub ----
                 ShelfTitle(stringResource(R.string.desktop_get_more), null)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 2.dp)) {
+                val moreScroll = rememberScrollState()
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().edgeFade(moreScroll).horizontalScroll(moreScroll).padding(vertical = 2.dp)) {
                     available.forEach { e ->
                         key(e.id) {
                             val pkgId = Library.packageId(e.id)
