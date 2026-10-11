@@ -12,6 +12,8 @@
 #include <sys/statvfs.h>
 #include <unistd.h>
 
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
+
 /* NOEXEC_TEST: tools/tests builds it for the host. */
 #if defined(__aarch64__) || defined(NOEXEC_TEST)
 
@@ -42,7 +44,7 @@ static int (*real_mprotect)(void *, size_t, int);
 
 /* Looked up before anything runs: Wine calls mprotect from its signal handlers, where dlsym is unsafe. */
 __attribute__((constructor)) static void noexec_init(void) {
-  real_mprotect = (int (*)(void *, size_t, int))dlsym(RTLD_NEXT, "mprotect");
+  real_mprotect = (int (*)(void *, size_t, int))bl_next("mprotect");
 }
 
 int mprotect(void *addr, size_t len, int prot) {

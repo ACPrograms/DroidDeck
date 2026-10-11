@@ -38,6 +38,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
+
 struct stand_in {
   int fd;       /* the descriptor handed out, -1 when the slot is free */
   int peer;     /* the other end, kept open */
@@ -131,7 +133,7 @@ int socket(int domain, int type, int protocol) {
   static int (*real_socket)(int, int, int);
   int fd;
 
-  if (real_socket == NULL) real_socket = dlsym(RTLD_NEXT, "socket");
+  if (real_socket == NULL) real_socket = bl_next("socket");
   if (real_socket == NULL) {
     errno = ENOSYS;
     return -1;
@@ -168,7 +170,7 @@ int getsockname(int fd, struct sockaddr *addr, socklen_t *len) {
     *len = sizeof(nl);
     return 0;
   }
-  if (real_getsockname == NULL) real_getsockname = dlsym(RTLD_NEXT, "getsockname");
+  if (real_getsockname == NULL) real_getsockname = bl_next("getsockname");
   if (real_getsockname == NULL) {
     errno = ENOSYS;
     return -1;
@@ -187,7 +189,7 @@ int setsockopt(int fd, int level, int optname, const void *optval, socklen_t opt
     if (level == SOL_SOCKET && (optname == SO_ATTACH_FILTER || optname == SO_DETACH_FILTER))
       return 0;
   }
-  if (real_setsockopt == NULL) real_setsockopt = dlsym(RTLD_NEXT, "setsockopt");
+  if (real_setsockopt == NULL) real_setsockopt = bl_next("setsockopt");
   if (real_setsockopt == NULL) {
     errno = ENOSYS;
     return -1;

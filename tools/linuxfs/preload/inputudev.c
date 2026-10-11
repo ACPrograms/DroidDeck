@@ -39,6 +39,8 @@
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
+
 /* The app opens one ring per configured controller; four is what its launcher offers. Nodes from
  * UINPUT_BASE up are the virtual pads made through libfakeinput's /dev/uinput stand-in. */
 #define RING_MAX 4
@@ -208,8 +210,6 @@ static struct pad *pad_for_syslink(const char *path) {
   return NULL;
 }
 
-static void *next_symbol(const char *name) { return dlsym(RTLD_NEXT, name); }
-
 char *bl_cached_realpath(const char *path, char *resolved, char *(*real)(const char *, char *))
     __attribute__((visibility("hidden")));
 
@@ -232,7 +232,7 @@ char *realpath(const char *path, char *resolved) {
     memcpy(resolved, pad->syspath, strlen(pad->syspath) + 1);
     return resolved;
   }
-  if (real_realpath == NULL) real_realpath = next_symbol("realpath");
+  if (real_realpath == NULL) real_realpath = bl_next("realpath");
   if (real_realpath == NULL) return NULL;
   return bl_cached_realpath(path, resolved, real_realpath);
 }
@@ -243,7 +243,7 @@ void *udev_device_new_from_syspath(void *udev, const char *syspath) {
   struct pad *pad = caller_is_winebus(caller) ? pad_for_syspath(syspath) : NULL;
 
   if (pad != NULL) return pad;
-  if (real_new == NULL) real_new = next_symbol("udev_device_new_from_syspath");
+  if (real_new == NULL) real_new = bl_next("udev_device_new_from_syspath");
   if (real_new == NULL) return NULL;
   return real_new(udev, syspath);
 }
@@ -252,7 +252,7 @@ void *udev_device_ref(void *device) {
   static void *(*real_ref)(void *);
 
   if (pad_for_device(device) != NULL) return device;
-  if (real_ref == NULL) real_ref = next_symbol("udev_device_ref");
+  if (real_ref == NULL) real_ref = bl_next("udev_device_ref");
   if (real_ref == NULL) return NULL;
   return real_ref(device);
 }
@@ -261,7 +261,7 @@ void *udev_device_unref(void *device) {
   static void *(*real_unref)(void *);
 
   if (pad_for_device(device) != NULL) return NULL;
-  if (real_unref == NULL) real_unref = next_symbol("udev_device_unref");
+  if (real_unref == NULL) real_unref = bl_next("udev_device_unref");
   if (real_unref == NULL) return NULL;
   return real_unref(device);
 }
@@ -271,7 +271,7 @@ const char *udev_device_get_devnode(void *device) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return pad->devnode;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_devnode");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_devnode");
   if (real_get == NULL) return NULL;
   return real_get(device);
 }
@@ -281,7 +281,7 @@ const char *udev_device_get_syspath(void *device) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return pad->syspath;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_syspath");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_syspath");
   if (real_get == NULL) return NULL;
   return real_get(device);
 }
@@ -291,7 +291,7 @@ const char *udev_device_get_sysname(void *device) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return pad->sysname;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_sysname");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_sysname");
   if (real_get == NULL) return NULL;
   return real_get(device);
 }
@@ -301,7 +301,7 @@ const char *udev_device_get_subsystem(void *device) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return "input";
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_subsystem");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_subsystem");
   if (real_get == NULL) return NULL;
   return real_get(device);
 }
@@ -311,7 +311,7 @@ const char *udev_device_get_devtype(void *device) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return NULL;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_devtype");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_devtype");
   if (real_get == NULL) return NULL;
   return real_get(device);
 }
@@ -321,7 +321,7 @@ const char *udev_device_get_action(void *device) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return NULL;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_action");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_action");
   if (real_get == NULL) return NULL;
   return real_get(device);
 }
@@ -331,7 +331,7 @@ dev_t udev_device_get_devnum(void *device) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return pad->devnum;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_devnum");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_devnum");
   if (real_get == NULL) return makedev(0, 0);
   return real_get(device);
 }
@@ -349,7 +349,7 @@ void *udev_device_get_parent_with_subsystem_devtype(void *device, const char *su
     if (subsystem != NULL && strcmp(subsystem, "input") == 0 && devtype == NULL) return pad;
     return NULL;
   }
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_parent_with_subsystem_devtype");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_parent_with_subsystem_devtype");
   if (real_get == NULL) return NULL;
   return real_get(device, subsystem, devtype);
 }
@@ -359,7 +359,7 @@ const char *udev_device_get_sysattr_value(void *device, const char *attr) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return attr != NULL && strcmp(attr, "uevent") == 0 ? pad->uevent : NULL;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_sysattr_value");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_sysattr_value");
   if (real_get == NULL) return NULL;
   return real_get(device, attr);
 }
@@ -369,7 +369,7 @@ const char *udev_device_get_property_value(void *device, const char *key) {
   struct pad *pad = pad_for_device(device);
 
   if (pad != NULL) return key != NULL && strcmp(key, "ID_INPUT_JOYSTICK") == 0 ? "1" : NULL;
-  if (real_get == NULL) real_get = next_symbol("udev_device_get_property_value");
+  if (real_get == NULL) real_get = bl_next("udev_device_get_property_value");
   if (real_get == NULL) return NULL;
   return real_get(device, key);
 }

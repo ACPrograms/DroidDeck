@@ -277,6 +277,12 @@ public final class LinuxRuntime {
                 bind(cmd, fake.getPath() + ":" + entry[1]);
             }
         }
+        // libpci prefers sysfs to procfs, and where the app may list /sys/bus/pci/devices but not
+        // read the files of a device in it (a RedMagic's PCIe root port) it die()s the same way.
+        // Every Chromium GPU process exits with it: the Steam client's, an Electron app's.
+        if (unreadablePciDevice()) {
+            bind(cmd, new File(root, "etc/droiddeck/empty").getPath() + ":/sys/bus/pci/devices");
+        }
         bindGpuNode(context, cmd);
         bindAdrenoStats(cmd, extraBinds);
         bindCpuTemps(cmd, root);
@@ -286,6 +292,16 @@ public final class LinuxRuntime {
         List<String> specs = new ArrayList<>();
         for (int i = 0; i + 1 < cmd.size(); i += 2) specs.add(cmd.get(i + 1));
         return specs;
+    }
+
+    /** Whether /sys/bus/pci/devices lists a device whose vendor the app may not read. */
+    private static boolean unreadablePciDevice() {
+        File[] devices = new File("/sys/bus/pci/devices").listFiles();
+        if (devices == null) return false;
+        for (File device : devices) {
+            if (!new File(device, "vendor").canRead()) return true;
+        }
+        return false;
     }
 
     /**

@@ -13,7 +13,6 @@
  */
 #define _GNU_SOURCE 1
 #include <arpa/inet.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
@@ -31,6 +30,8 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 #define LINK_FILE "/etc/droiddeck-net"
 #define LO_NAME "lo"
@@ -68,7 +69,7 @@ typedef FILE *(*fopen_fn)(const char *, const char *);
 
 static int read_link(struct link *link) {
     static fopen_fn real_fopen;
-    if (real_fopen == NULL) real_fopen = (fopen_fn) dlsym(RTLD_NEXT, "fopen");
+    if (real_fopen == NULL) real_fopen = (fopen_fn) bl_next("fopen");
     FILE *f = real_fopen ? real_fopen(LINK_FILE, "re") : NULL;
     if (f == NULL) return 0;
 
@@ -222,8 +223,8 @@ static freeifaddrs_fn real_freeifaddrs;
 int getifaddrs(struct ifaddrs **out) {
     typedef int (*getifaddrs_fn)(struct ifaddrs **);
     static getifaddrs_fn real;
-    if (real == NULL) real = (getifaddrs_fn) dlsym(RTLD_NEXT, "getifaddrs");
-    if (real_freeifaddrs == NULL) real_freeifaddrs = (freeifaddrs_fn) dlsym(RTLD_NEXT, "freeifaddrs");
+    if (real == NULL) real = (getifaddrs_fn) bl_next("getifaddrs");
+    if (real_freeifaddrs == NULL) real_freeifaddrs = (freeifaddrs_fn) bl_next("freeifaddrs");
     struct ifaddrs *list = NULL;
     int asked = !fresh(&ifaddrs_unusable_at);
     int rc = -1, saved = errno;
@@ -273,7 +274,7 @@ void freeifaddrs(struct ifaddrs *list) {
         free((struct entry *) list - 1);
         return;
     }
-    if (real_freeifaddrs == NULL) real_freeifaddrs = (freeifaddrs_fn) dlsym(RTLD_NEXT, "freeifaddrs");
+    if (real_freeifaddrs == NULL) real_freeifaddrs = (freeifaddrs_fn) bl_next("freeifaddrs");
     real_freeifaddrs(list);
 }
 
@@ -286,7 +287,7 @@ struct name_block {
 struct if_nameindex *if_nameindex(void) {
     typedef struct if_nameindex *(*if_nameindex_fn)(void);
     static if_nameindex_fn real;
-    if (real == NULL) real = (if_nameindex_fn) dlsym(RTLD_NEXT, "if_nameindex");
+    if (real == NULL) real = (if_nameindex_fn) bl_next("if_nameindex");
     struct if_nameindex *list = NULL;
     int asked = !fresh(&nameindex_unusable_at);
     int saved = errno;
@@ -323,12 +324,12 @@ void if_freenameindex(struct if_nameindex *list) {
         free(list);
         return;
     }
-    ((if_freenameindex_fn) dlsym(RTLD_NEXT, "if_freenameindex"))(list);
+    ((if_freenameindex_fn) bl_next("if_freenameindex"))(list);
 }
 
 unsigned int if_nametoindex(const char *name) {
     typedef unsigned int (*if_nametoindex_fn)(const char *);
-    unsigned int index = ((if_nametoindex_fn) dlsym(RTLD_NEXT, "if_nametoindex"))(name);
+    unsigned int index = ((if_nametoindex_fn) bl_next("if_nametoindex"))(name);
     if (index != 0 || name == NULL) return index;
     int saved = errno;
     struct link link;
@@ -340,7 +341,7 @@ unsigned int if_nametoindex(const char *name) {
 
 char *if_indextoname(unsigned int index, char name[IF_NAMESIZE]) {
     typedef char *(*if_indextoname_fn)(unsigned int, char *);
-    char *found = ((if_indextoname_fn) dlsym(RTLD_NEXT, "if_indextoname"))(index, name);
+    char *found = ((if_indextoname_fn) bl_next("if_indextoname"))(index, name);
     if (found || name == NULL) return found;
     int saved = errno;
     struct link link;
@@ -439,7 +440,7 @@ int ioctl(int fd, unsigned long request, ...) {
     int rc;
     if (bl_ntsync_ioctl(fd, request, arg, &rc)) return rc;
     if (bl_drm_gem_close(fd, request, arg, &rc)) return rc;
-    if (real == NULL) real = (ioctl_fn) dlsym(RTLD_NEXT, "ioctl");
+    if (real == NULL) real = (ioctl_fn) bl_next("ioctl");
     if (!bl_kgsl_poll(real, fd, request, arg, &rc)) rc = real(fd, request, arg);
     bl_kgsl_chip_id_fixup(request, arg, rc);
     if (arg == NULL || !is_link_query(request)) return rc;
@@ -579,12 +580,12 @@ static FILE *open_stream(fopen_fn real, const char *path, const char *mode) {
 
 FILE *fopen(const char *path, const char *mode) {
     static fopen_fn real;
-    if (real == NULL) real = (fopen_fn) dlsym(RTLD_NEXT, "fopen");
+    if (real == NULL) real = (fopen_fn) bl_next("fopen");
     return open_stream(real, path, mode);
 }
 
 FILE *fopen64(const char *path, const char *mode) {
     static fopen_fn real;
-    if (real == NULL) real = (fopen_fn) dlsym(RTLD_NEXT, "fopen64");
+    if (real == NULL) real = (fopen_fn) bl_next("fopen64");
     return open_stream(real, path, mode);
 }

@@ -7,7 +7,6 @@
  * and Qt ask before they start one. Only in the desktop session.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -19,6 +18,8 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 #ifndef BINFMT_HANDLER
 #define BINFMT_HANDLER "/usr/local/bin/droiddeck-open"
@@ -96,7 +97,7 @@ static void handler_args(char **args, const char *path, char *const argv[], int 
 
 static void hand_off(const char *path, char *const argv[], char *const envp[]) {
   static int (*real)(const char *, char *const[], char *const[]);
-  if (!real) real = (int (*)(const char *, char *const[], char *const[]))dlsym(RTLD_NEXT, "execve");
+  if (!real) real = (int (*)(const char *, char *const[], char *const[]))bl_next("execve");
   int n = count(argv);
   char *args[n + 4];
   handler_args(args, path, argv, n);
@@ -154,7 +155,7 @@ __attribute__((visibility("hidden"))) int bl_binfmt_spawn(pid_t *pid, const char
 
 int execvpe(const char *file, char *const argv[], char *const envp[]) {
   static int (*real)(const char *, char *const[], char *const[]);
-  if (!real) real = (int (*)(const char *, char *const[], char *const[]))dlsym(RTLD_NEXT, "execvpe");
+  if (!real) real = (int (*)(const char *, char *const[], char *const[]))bl_next("execvpe");
   bl_binfmt_before_search(file, argv, envp);
   real(file, argv, envp);
   return bl_binfmt_after_search(file, argv, envp, errno);
@@ -163,8 +164,8 @@ int execvpe(const char *file, char *const argv[], char *const envp[]) {
 int posix_spawnp(pid_t *pid, const char *file, const posix_spawn_file_actions_t *fa, const posix_spawnattr_t *attr,
                  char *const argv[], char *const envp[]) {
   static spawn_fn real, spawn;
-  if (!real) real = (spawn_fn)dlsym(RTLD_NEXT, "posix_spawnp");
-  if (!spawn) spawn = (spawn_fn)dlsym(RTLD_NEXT, "posix_spawn");
+  if (!real) real = (spawn_fn)bl_next("posix_spawnp");
+  if (!spawn) spawn = (spawn_fn)bl_next("posix_spawn");
   char path[PATH_MAX];
   if (!desktop() || !lookup(file, path, sizeof path)) return real(pid, file, fa, attr, argv, envp);
   return bl_binfmt_spawn(pid, path, fa, attr, argv, envp, spawn);

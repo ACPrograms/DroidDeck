@@ -19,12 +19,13 @@
  * card. Every other path is passed through untouched.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 /* A library root, or its steamapps, resolved to the directory that holds the games. Returns the
  * rewritten path in `buf`, or NULL when `path` is not one of ours and should be left alone. */
@@ -64,7 +65,7 @@ static const char *content_of(const char *path, char *buf, size_t len) {
     char buf[4096];                                                            \
     const char *content;                                                       \
     if (!real)                                                                 \
-      real = dlsym(RTLD_NEXT, #name);                                          \
+      real = bl_next(#name);                                          \
     if (!real)                                                                 \
       return -1;                                                               \
     content = content_of(path, buf, sizeof(buf));                              \

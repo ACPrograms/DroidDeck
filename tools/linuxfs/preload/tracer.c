@@ -34,14 +34,26 @@ static const char *skip_digits(const char *s) {
   return end == s ? NULL : end;
 }
 
-/* /proc/{self,thread-self,<pid>}[/task/<tid>]/status */
+static int is_own(const char *digits, const char *end) {
+  long id = 0;
+  for (; digits < end; digits++) {
+    if (id > 99999999) return 0;
+    id = id * 10 + (*digits - '0');
+  }
+  return id == (long)getpid() || id == syscall(SYS_gettid);
+}
+
+/* /proc/{self,thread-self,<own pid or tid>}[/task/<tid>]/status. A program asks whether it is
+ * traced about itself; another process's status is read as it is. Chromium opens each renderer's
+ * and hands it over as a read-only file, which it checks: a memfd is open for writing, so Chromium
+ * and every Electron program aborted as its first page connected. */
 static int is_status_path(const char *path) {
   const char *rest;
   if (path == NULL || strncmp(path, "/proc/", 6) != 0) return 0;
   path += 6;
   if (strncmp(path, "self/", 5) == 0) rest = path + 4;
   else if (strncmp(path, "thread-self/", 12) == 0) rest = path + 11;
-  else if ((rest = skip_digits(path)) == NULL) return 0;
+  else if ((rest = skip_digits(path)) == NULL || !is_own(path, rest)) return 0;
   if (strncmp(rest, "/task/", 6) == 0 && (rest = skip_digits(rest + 6)) == NULL) return 0;
   return strcmp(rest, "/status") == 0;
 }

@@ -14,7 +14,6 @@
  * BL_NO_PATH_CACHE=1 turns it off.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -23,6 +22,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 #define PATH_CACHE_SLOTS 256
 #define PATH_CACHE_KEY_MAX 512
@@ -148,7 +149,7 @@ static int cached_access(const char *path, int mode, int flags, int (*check)(con
 static int (*next_faccessat(void))(int, const char *, int, int) {
   static int (*real)(int, const char *, int, int);
 
-  if (real == NULL) real = (int (*)(int, const char *, int, int))dlsym(RTLD_NEXT, "faccessat");
+  if (real == NULL) real = (int (*)(int, const char *, int, int))bl_next("faccessat");
   return real;
 }
 

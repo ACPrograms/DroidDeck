@@ -18,13 +18,14 @@
  * becomes a rename that will not replace an existing name, which is all the link promised there.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 static int refused(int error) { return error == EPERM || error == EACCES; }
 
@@ -45,7 +46,7 @@ __attribute__((visibility("hidden"))) int bl_link_lock(const char *oldpath, cons
   if (result == 0 || !refused(errno)) return result;
   if (moves_instead()) return renameat2(AT_FDCWD, oldpath, AT_FDCWD, newpath, RENAME_NOREPLACE);
   if (!lock_name(newpath)) return result;
-  if (real_symlink == NULL) real_symlink = dlsym(RTLD_NEXT, "symlink");
+  if (real_symlink == NULL) real_symlink = bl_next("symlink");
   return real_symlink(oldpath, newpath);
 }
 
@@ -53,14 +54,14 @@ __attribute__((visibility("hidden"))) int bl_link_lock(const char *oldpath, cons
 #if __SIZEOF_POINTER__ != 8
 int link(const char *oldpath, const char *newpath) {
   static int (*real_link)(const char *, const char *);
-  if (real_link == NULL) real_link = dlsym(RTLD_NEXT, "link");
+  if (real_link == NULL) real_link = bl_next("link");
   return bl_link_lock(oldpath, newpath, real_link(oldpath, newpath));
 }
 #endif
 
 int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags) {
   static int (*real_linkat)(int, const char *, int, const char *, int);
-  if (real_linkat == NULL) real_linkat = dlsym(RTLD_NEXT, "linkat");
+  if (real_linkat == NULL) real_linkat = bl_next("linkat");
   int result = real_linkat(olddirfd, oldpath, newdirfd, newpath, flags);
   if (result != 0 && refused(errno) && flags == 0 && moves_instead())
     return renameat2(olddirfd, oldpath, newdirfd, newpath, RENAME_NOREPLACE);

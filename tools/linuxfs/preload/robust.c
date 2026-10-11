@@ -7,7 +7,6 @@
  * the link back finds the head without depending on libc's layout.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/futex.h>
@@ -18,6 +17,8 @@
 #include <sys/syscall.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 #ifndef SYS_openat2
 #define SYS_openat2 437
@@ -123,7 +124,7 @@ long syscall(long number, ...) {
     return handled;
   }
   if (!real_syscall) {
-    real_syscall = (long (*)(long, ...)) dlsym(RTLD_NEXT, "syscall");
+    real_syscall = (long (*)(long, ...)) bl_next("syscall");
   }
   if (number == SYS_openat2) {
     if (!__atomic_load_n(&openat2_missing, __ATOMIC_RELAXED)) {

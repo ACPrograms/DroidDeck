@@ -9,7 +9,6 @@
 #define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <spawn.h>
-#include <dlfcn.h>
 #include <fcntl.h>
 #include <linux/netlink.h>
 #include <netinet/in.h>
@@ -23,6 +22,8 @@
 #include <signal.h>
 #include <time.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 static const char *net_dir(void) {
   static char dir[256];
@@ -124,7 +125,7 @@ __attribute__((visibility("hidden"))) int bl_udevmon_stand_in(int fd);
 
 int bind(int fd, const struct sockaddr *addr, socklen_t len) {
   static bind_fn real;
-  if (!real) real = (bind_fn)dlsym(RTLD_NEXT, "bind");
+  if (!real) real = (bind_fn)bl_next("bind");
   if (bl_udevmon_stand_in(fd)) {
     if (addr == NULL || len < sizeof(struct sockaddr_nl) || addr->sa_family != AF_NETLINK) {
       errno = EINVAL;
@@ -151,7 +152,7 @@ int bind(int fd, const struct sockaddr *addr, socklen_t len) {
 
 int listen(int fd, int backlog) {
   static listen_fn real;
-  if (!real) real = (listen_fn)dlsym(RTLD_NEXT, "listen");
+  if (!real) real = (listen_fn)bl_next("listen");
   int ret = real(fd, backlog);
   if (ret == 0) record_port(fd, 0);
   return ret;
@@ -233,7 +234,7 @@ static int guest_peer(int fd) {
 
 int connect(int fd, const struct sockaddr *addr, socklen_t len) {
   static connect_fn real;
-  if (!real) real = (connect_fn)dlsym(RTLD_NEXT, "connect");
+  if (!real) real = (connect_fn)bl_next("connect");
   bind_before_loopback_connect(fd, addr, len);
   unsigned peer = loopback_family(addr, len) ? addr_port(addr, len) : 0;
   if (peer) record_port(fd, peer);
@@ -249,7 +250,7 @@ int connect(int fd, const struct sockaddr *addr, socklen_t len) {
 
 int accept4(int fd, struct sockaddr *addr, socklen_t *len, int flags) {
   static accept4_fn real;
-  if (!real) real = (accept4_fn)dlsym(RTLD_NEXT, "accept4");
+  if (!real) real = (accept4_fn)bl_next("accept4");
   for (;;) {
     int ret = real(fd, addr, len, flags);
     if (ret < 0) return ret;
@@ -327,7 +328,7 @@ static int maybe_answer_lsof(const char *path, char *const argv[]) {
 
 int execve(const char *path, char *const argv[], char *const envp[]) {
   static int (*real)(const char *, char *const[], char *const[]);
-  if (!real) real = (int (*)(const char *, char *const[], char *const[]))dlsym(RTLD_NEXT, "execve");
+  if (!real) real = (int (*)(const char *, char *const[], char *const[]))bl_next("execve");
   maybe_answer_lsof(path, argv);
   bl_binfmt_before(path, argv, envp);
   real(path, argv, envp);
@@ -353,7 +354,7 @@ static int answer_lsof_via_spawn(const char *path, char *const argv[], pid_t *pi
 
 int execvp(const char *file, char *const argv[]) {
   static int (*real)(const char *, char *const[]);
-  if (!real) real = (int (*)(const char *, char *const[]))dlsym(RTLD_NEXT, "execvp");
+  if (!real) real = (int (*)(const char *, char *const[]))bl_next("execvp");
   maybe_answer_lsof(file, argv);
   bl_binfmt_before_search(file, argv, environ);
   real(file, argv);
@@ -362,7 +363,7 @@ int execvp(const char *file, char *const argv[]) {
 
 int execv(const char *path, char *const argv[]) {
   static int (*real)(const char *, char *const[]);
-  if (!real) real = (int (*)(const char *, char *const[]))dlsym(RTLD_NEXT, "execv");
+  if (!real) real = (int (*)(const char *, char *const[]))bl_next("execv");
   maybe_answer_lsof(path, argv);
   bl_binfmt_before(path, argv, environ);
   real(path, argv);
@@ -377,6 +378,6 @@ int posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *
     return answer_lsof_via_spawn(path, argv, pid);
   }
   static spawn_fn real;
-  if (!real) real = (spawn_fn)dlsym(RTLD_NEXT, "posix_spawn");
+  if (!real) real = (spawn_fn)bl_next("posix_spawn");
   return bl_binfmt_spawn(pid, path, fa, attr, argv, envp, real);
 }

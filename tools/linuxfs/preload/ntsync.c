@@ -1,7 +1,6 @@
 /* droiddeck-ntsync: a userspace implementation of the /dev/ntsync interface for kernels without the driver.
  * Credit: ntsync, the kernel driver and its Wine client, by Elizabeth Figura. */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/futex.h>
@@ -20,6 +19,8 @@
 #include <sys/timerfd.h>
 #include <time.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 struct ns_sem_args {
   uint32_t count;
@@ -194,7 +195,7 @@ static int ns_on(void) {
 }
 
 static int ns_close_fd(int fd) {
-  if (!ns_real_close) ns_real_close = (int (*)(int))dlsym(RTLD_NEXT, "close");
+  if (!ns_real_close) ns_real_close = (int (*)(int))bl_next("close");
   return ns_real_close(fd);
 }
 
@@ -1242,7 +1243,7 @@ int bl_udevmon_recvmsg(int fd, struct msghdr *msg, int flags, ssize_t (*real_rec
 
 ssize_t recvmsg(int fd, struct msghdr *msg, int flags) {
   static ssize_t (*real)(int, struct msghdr *, int);
-  if (!real) real = (ssize_t (*)(int, struct msghdr *, int))dlsym(RTLD_NEXT, "recvmsg");
+  if (!real) real = (ssize_t (*)(int, struct msghdr *, int))bl_next("recvmsg");
   /* udevmon.c's stand-in netlink sockets first: their messages are dressed as udevd's. */
   ssize_t answered;
   if (msg && bl_udevmon_recvmsg(fd, msg, flags, real, &answered)) return answered;
@@ -1266,7 +1267,7 @@ int close(int fd) {
 
 int dup2(int oldfd, int newfd) {
   static int (*real)(int, int);
-  if (!real) real = (int (*)(int, int))dlsym(RTLD_NEXT, "dup2");
+  if (!real) real = (int (*)(int, int))bl_next("dup2");
   if (oldfd != newfd && newfd >= 0) bl_fsync_fds_closed((unsigned int)newfd, (unsigned int)newfd);
   uint64_t *t = __atomic_load_n(&ns_fdt, __ATOMIC_ACQUIRE);
   if (t && oldfd != newfd && newfd >= 0 && newfd < NS_FDS && __atomic_load_n(&t[newfd], __ATOMIC_ACQUIRE)) ns_forget(newfd);
@@ -1275,7 +1276,7 @@ int dup2(int oldfd, int newfd) {
 
 int dup3(int oldfd, int newfd, int flags) {
   static int (*real)(int, int, int);
-  if (!real) real = (int (*)(int, int, int))dlsym(RTLD_NEXT, "dup3");
+  if (!real) real = (int (*)(int, int, int))bl_next("dup3");
   if (oldfd != newfd && newfd >= 0) bl_fsync_fds_closed((unsigned int)newfd, (unsigned int)newfd);
   uint64_t *t = __atomic_load_n(&ns_fdt, __ATOMIC_ACQUIRE);
   if (t && oldfd != newfd && newfd >= 0 && newfd < NS_FDS && __atomic_load_n(&t[newfd], __ATOMIC_ACQUIRE)) ns_forget(newfd);
@@ -1291,7 +1292,7 @@ static void ns_forget_range(unsigned int first, unsigned int last) {
 
 int close_range(unsigned int first, unsigned int last, int flags) {
   static int (*real)(unsigned int, unsigned int, int);
-  if (!real) real = (int (*)(unsigned int, unsigned int, int))dlsym(RTLD_NEXT, "close_range");
+  if (!real) real = (int (*)(unsigned int, unsigned int, int))bl_next("close_range");
   if (!(flags & CLOSE_RANGE_CLOEXEC)) {
     bl_fsync_fds_closed(first, last);
     ns_forget_range(first, last);
@@ -1305,7 +1306,7 @@ int close_range(unsigned int first, unsigned int last, int flags) {
 
 void closefrom(int lowfd) {
   static void (*real)(int);
-  if (!real) real = (void (*)(int))dlsym(RTLD_NEXT, "closefrom");
+  if (!real) real = (void (*)(int))bl_next("closefrom");
   if (lowfd >= 0) {
     bl_fsync_fds_closed((unsigned int)lowfd, ~0u);
     ns_forget_range((unsigned int)lowfd, ~0u);

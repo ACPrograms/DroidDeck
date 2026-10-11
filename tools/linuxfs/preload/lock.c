@@ -20,13 +20,14 @@
  * answer is "nobody", so it is reported unlocked rather than granted.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <sys/file.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 /* The filesystem refuses the whole operation, rather than declining this particular lock. */
 static int unsupported(int error) {
@@ -37,7 +38,7 @@ int flock(int fd, int operation) {
   static int (*real_flock)(int, int);
   int result;
 
-  if (real_flock == NULL) real_flock = dlsym(RTLD_NEXT, "flock");
+  if (real_flock == NULL) real_flock = bl_next("flock");
   if (real_flock == NULL) return 0;
   result = real_flock(fd, operation);
   if (result < 0 && unsupported(errno)) return 0;
@@ -88,7 +89,7 @@ int fcntl(int fd, int cmd, ...) {
   arg = va_arg(ap, void *);
   va_end(ap);
 
-  if (real_fcntl == NULL) real_fcntl = dlsym(RTLD_NEXT, "fcntl");
+  if (real_fcntl == NULL) real_fcntl = bl_next("fcntl");
   if (real_fcntl == NULL) {
     errno = ENOSYS;
     return -1;

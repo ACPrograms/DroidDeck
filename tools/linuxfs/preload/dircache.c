@@ -7,7 +7,6 @@
  */
 #define _GNU_SOURCE
 #include <dirent.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -24,6 +23,8 @@
 #include <sys/statfs.h>
 #include <time.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 #define DIR_TTL_NS 5000000000LL
 #define MAX_LISTINGS 16
@@ -334,7 +335,7 @@ static struct handle *lookup(DIR *d) {
 
 #define REAL(name) static __typeof__(&name) next_##name
 #define NEXT(name) \
-  if (next_##name == NULL) next_##name = (__typeof__(&name))dlsym(RTLD_NEXT, #name)
+  if (next_##name == NULL) next_##name = (__typeof__(&name))bl_next(#name)
 
 REAL(opendir);
 REAL(readdir64);

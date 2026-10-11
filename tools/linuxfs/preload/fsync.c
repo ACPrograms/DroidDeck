@@ -2,7 +2,6 @@
  * Credit: fsync, the futex-based synchronization in Proton, by Elizabeth Figura and Paul Gofman;
  * futex_waitv(2) by André Almeida. */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/futex.h>
@@ -17,6 +16,8 @@
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 #ifndef SYS_futex_waitv
 #define SYS_futex_waitv 449
@@ -112,12 +113,12 @@ static int fs_on(void) {
 }
 
 static long fs_sys(long n, long a, long b, long c, long d, long e, long f) {
-  if (!fs_real_syscall) fs_real_syscall = (long (*)(long, ...))dlsym(RTLD_NEXT, "syscall");
+  if (!fs_real_syscall) fs_real_syscall = (long (*)(long, ...))bl_next("syscall");
   return fs_real_syscall(n, a, b, c, d, e, f);
 }
 
 static void *fs_anon(size_t size) {
-  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))dlsym(RTLD_NEXT, "mmap");
+  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))bl_next("mmap");
   return fs_real_mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 }
 
@@ -341,9 +342,9 @@ static void fs_child(void) {
 }
 
 __attribute__((constructor)) static void fs_init(void) {
-  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))dlsym(RTLD_NEXT, "mmap");
-  if (!fs_real_mmap64) fs_real_mmap64 = (void *(*)(void *, size_t, int, int, int, off64_t))dlsym(RTLD_NEXT, "mmap64");
-  if (!fs_real_munmap) fs_real_munmap = (int (*)(void *, size_t))dlsym(RTLD_NEXT, "munmap");
+  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))bl_next("mmap");
+  if (!fs_real_mmap64) fs_real_mmap64 = (void *(*)(void *, size_t, int, int, int, off64_t))bl_next("mmap64");
+  if (!fs_real_munmap) fs_real_munmap = (int (*)(void *, size_t))bl_next("munmap");
   if (fs_on()) pthread_atfork(fs_fork_prepare, fs_fork_parent, fs_child);
 }
 
@@ -571,7 +572,7 @@ static void fs_attach(const char *name, int fd, int create) {
     close(rfd);
     return;
   }
-  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))dlsym(RTLD_NEXT, "mmap");
+  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))bl_next("mmap");
   p = fs_real_mmap(NULL, FS_REGION, PROT_READ | PROT_WRITE, MAP_SHARED, rfd, 0);
   close(rfd);
   if (p == MAP_FAILED) {
@@ -588,8 +589,8 @@ static void fs_attach(const char *name, int fd, int create) {
 
 int shm_open(const char *name, int oflag, mode_t mode) {
   int fd, saved;
-  if (!fs_real_shm_open) fs_real_shm_open = (int (*)(const char *, int, mode_t))dlsym(RTLD_NEXT, "shm_open");
-  if (!fs_real_shm_unlink) fs_real_shm_unlink = (int (*)(const char *))dlsym(RTLD_NEXT, "shm_unlink");
+  if (!fs_real_shm_open) fs_real_shm_open = (int (*)(const char *, int, mode_t))bl_next("shm_open");
+  if (!fs_real_shm_unlink) fs_real_shm_unlink = (int (*)(const char *))bl_next("shm_unlink");
   if (!fs_real_shm_open) {
     errno = ENOSYS;
     return -1;
@@ -605,7 +606,7 @@ int shm_open(const char *name, int oflag, mode_t mode) {
 
 int shm_unlink(const char *name) {
   int r, saved;
-  if (!fs_real_shm_unlink) fs_real_shm_unlink = (int (*)(const char *))dlsym(RTLD_NEXT, "shm_unlink");
+  if (!fs_real_shm_unlink) fs_real_shm_unlink = (int (*)(const char *))bl_next("shm_unlink");
   if (!fs_real_shm_unlink) {
     errno = ENOSYS;
     return -1;
@@ -622,7 +623,7 @@ int shm_unlink(const char *name) {
 
 void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off) {
   void *p;
-  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))dlsym(RTLD_NEXT, "mmap");
+  if (!fs_real_mmap) fs_real_mmap = (void *(*)(void *, size_t, int, int, int, off_t))bl_next("mmap");
   p = fs_real_mmap(addr, len, prot, flags, fd, off);
   if (p == MAP_FAILED && bl_noexec_retry(prot, flags, fd)) p = fs_real_mmap(addr, len, prot & ~PROT_EXEC, flags, fd, off);
   if (p != MAP_FAILED && __builtin_expect(fs_fd >= 0, 0)) fs_track(p, len, flags, fd, off);
@@ -631,7 +632,7 @@ void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off) {
 
 void *mmap64(void *addr, size_t len, int prot, int flags, int fd, off64_t off) {
   void *p;
-  if (!fs_real_mmap64) fs_real_mmap64 = (void *(*)(void *, size_t, int, int, int, off64_t))dlsym(RTLD_NEXT, "mmap64");
+  if (!fs_real_mmap64) fs_real_mmap64 = (void *(*)(void *, size_t, int, int, int, off64_t))bl_next("mmap64");
   p = fs_real_mmap64(addr, len, prot, flags, fd, off);
   if (p == MAP_FAILED && bl_noexec_retry(prot, flags, fd)) p = fs_real_mmap64(addr, len, prot & ~PROT_EXEC, flags, fd, off);
   if (p != MAP_FAILED && __builtin_expect(fs_fd >= 0, 0)) fs_track(p, len, flags, fd, off);
@@ -642,7 +643,7 @@ int munmap(void *addr, size_t len) {
   uintptr_t lo = (uintptr_t)addr, hi = lo + len;
   sigset_t old;
   int r, saved;
-  if (!fs_real_munmap) fs_real_munmap = (int (*)(void *, size_t))dlsym(RTLD_NEXT, "munmap");
+  if (!fs_real_munmap) fs_real_munmap = (int (*)(void *, size_t))bl_next("munmap");
   if (__builtin_expect(fs_fd < 0, 1) || !fs_overlaps(lo, hi)) return fs_real_munmap(addr, len);
   fs_block(&old);
   pthread_mutex_lock(&fs_mx);

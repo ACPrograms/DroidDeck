@@ -9,7 +9,6 @@
  * missing entry therefore does not prove the operation did not happen.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -21,6 +20,8 @@
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 static int (*next_fstat)(int, struct stat *);
 static int (*next_fallocate)(int, int, off_t, off_t);
@@ -93,7 +94,7 @@ static int on_selected_device(int fd, const struct stat *known) {
   initialize();
   if (!enabled) return 0;
   if (known == NULL) {
-    if (next_fstat == NULL) next_fstat = dlsym(RTLD_NEXT, "fstat");
+    if (next_fstat == NULL) next_fstat = bl_next("fstat");
     if (next_fstat == NULL || next_fstat(fd, &local) != 0) return 0;
     known = &local;
   }
@@ -181,7 +182,7 @@ static int cannot_reserve(long long device) {
 
 static void note_cannot_reserve(int fd) {
   struct stat st;
-  if (next_fstat == NULL) next_fstat = dlsym(RTLD_NEXT, "fstat");
+  if (next_fstat == NULL) next_fstat = bl_next("fstat");
   if (next_fstat == NULL || next_fstat(fd, &st) != 0 || cannot_reserve((long long)st.st_dev)) return;
   unsigned int slot = __atomic_load_n(&unreserved_count, __ATOMIC_RELAXED);
   while (slot < 16 && !__atomic_compare_exchange_n(&unreserved_count, &slot, slot + 1, 0, __ATOMIC_ACQ_REL,
@@ -192,7 +193,7 @@ static void note_cannot_reserve(int fd) {
 
 int fallocate(int fd, int mode, off_t offset, off_t length) {
   int entry_errno = errno;
-  if (next_fallocate == NULL) next_fallocate = dlsym(RTLD_NEXT, "fallocate");
+  if (next_fallocate == NULL) next_fallocate = bl_next("fallocate");
   if (next_fallocate == NULL) { errno = ENOSYS; return -1; }
   int selected = on_selected_device(fd, NULL);
   errno = entry_errno;
@@ -208,7 +209,7 @@ int fallocate(int fd, int mode, off_t offset, off_t length) {
 
 int posix_fallocate(int fd, off_t offset, off_t length) {
   int entry_errno = errno;
-  if (next_posix_fallocate == NULL) next_posix_fallocate = dlsym(RTLD_NEXT, "posix_fallocate");
+  if (next_posix_fallocate == NULL) next_posix_fallocate = bl_next("posix_fallocate");
   if (next_posix_fallocate == NULL) { errno = entry_errno; return ENOSYS; }
   int selected = on_selected_device(fd, NULL);
   errno = entry_errno;
@@ -229,7 +230,7 @@ int posix_fallocate(int fd, off_t offset, off_t length) {
 
 ssize_t pwrite(int fd, const void *buffer, size_t count, off_t offset) {
   int entry_errno = errno;
-  if (next_pwrite == NULL) next_pwrite = dlsym(RTLD_NEXT, "pwrite");
+  if (next_pwrite == NULL) next_pwrite = bl_next("pwrite");
   if (next_pwrite == NULL) { errno = ENOSYS; return -1; }
   initialize();
   uint64_t sequence = enabled ? add(&pwrite_seen, 1) : 1;
@@ -254,14 +255,14 @@ ssize_t pwrite(int fd, const void *buffer, size_t count, off_t offset) {
 
 int ftruncate(int fd, off_t length) {
   int entry_errno = errno;
-  if (next_ftruncate == NULL) next_ftruncate = dlsym(RTLD_NEXT, "ftruncate");
+  if (next_ftruncate == NULL) next_ftruncate = bl_next("ftruncate");
   if (next_ftruncate == NULL) { errno = ENOSYS; return -1; }
   int selected = on_selected_device(fd, NULL);
   uint64_t start = selected ? now_ns() : 0;
   struct stat st;
   int known = 0;
   if (steam_client()) {
-    if (next_fstat == NULL) next_fstat = dlsym(RTLD_NEXT, "fstat");
+    if (next_fstat == NULL) next_fstat = bl_next("fstat");
     /* staging_file() reads /proc/self/fd, a round trip through proot: skip it for a shrink, which
      * is passed through untouched either way. */
     known = next_fstat != NULL && next_fstat(fd, &st) == 0 && S_ISREG(st.st_mode) &&
@@ -293,7 +294,7 @@ int ftruncate(int fd, off_t length) {
 
 int fstat(int fd, struct stat *out) {
   int entry_errno = errno;
-  if (next_fstat == NULL) next_fstat = dlsym(RTLD_NEXT, "fstat");
+  if (next_fstat == NULL) next_fstat = bl_next("fstat");
   if (next_fstat == NULL) { errno = ENOSYS; return -1; }
   initialize();
   errno = entry_errno;
@@ -314,7 +315,7 @@ int fstat(int fd, struct stat *out) {
 
 int fsync(int fd) {
   int entry_errno = errno;
-  if (next_fsync == NULL) next_fsync = dlsym(RTLD_NEXT, "fsync");
+  if (next_fsync == NULL) next_fsync = bl_next("fsync");
   if (next_fsync == NULL) { errno = ENOSYS; return -1; }
   int selected = on_selected_device(fd, NULL);
   errno = entry_errno;

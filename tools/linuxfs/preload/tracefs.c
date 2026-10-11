@@ -18,6 +18,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
+
 #define STANDIN_DIR "/tmp/droiddeck-tracefs"
 #define KGSL_TOTAL "/sys/class/kgsl/kgsl/page_alloc"
 
@@ -54,10 +56,10 @@ static const char gpu_mem_total_format[] =
 static struct tracefs_instance *standin;
 
 struct tracefs_instance *tracefs_instance_create(const char *name) {
-  struct tracefs_instance *(*real)(const char *) = dlsym(RTLD_NEXT, "tracefs_instance_create");
+  struct tracefs_instance *(*real)(const char *) = bl_next("tracefs_instance_create");
   struct tracefs_instance *instance = real ? real(name) : NULL;
   if (instance || !name) return instance;
-  struct tracefs_instance *(*alloc)(const char *, const char *) = dlsym(RTLD_NEXT, "tracefs_instance_alloc");
+  struct tracefs_instance *(*alloc)(const char *, const char *) = bl_next("tracefs_instance_alloc");
   if (!alloc) return NULL;
   char path[PATH_MAX];
   mkdir(STANDIN_DIR, 0700);
@@ -69,7 +71,7 @@ struct tracefs_instance *tracefs_instance_create(const char *name) {
 
 struct tep_handle *tracefs_local_events(const char *tracing_dir) {
   if (!tracing_dir || strncmp(tracing_dir, STANDIN_DIR "/", sizeof(STANDIN_DIR))) {
-    struct tep_handle *(*real)(const char *) = dlsym(RTLD_NEXT, "tracefs_local_events");
+    struct tep_handle *(*real)(const char *) = bl_next("tracefs_local_events");
     return real ? real(tracing_dir) : NULL;
   }
   struct tep_handle *(*tep_alloc)(void) = dlsym(RTLD_DEFAULT, "tep_alloc");
@@ -84,7 +86,7 @@ int tracefs_iterate_raw_events(struct tep_handle *tep, struct tracefs_instance *
   if (!standin || instance != standin) {
     int (*real)(struct tep_handle *, struct tracefs_instance *, void *, int,
                 int (*)(struct tep_event *, struct tep_record *, int, void *), void *) =
-        dlsym(RTLD_NEXT, "tracefs_iterate_raw_events");
+        bl_next("tracefs_iterate_raw_events");
     return real ? real(tep, instance, cpus, cpu_size, callback, context) : -1;
   }
   struct tep_event *(*find)(struct tep_handle *, int) = dlsym(RTLD_DEFAULT, "tep_find_event");

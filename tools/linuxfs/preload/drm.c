@@ -6,7 +6,6 @@
  * descriptors stands in for the kernel's, and every other device is left to libdrm.
  */
 #define _GNU_SOURCE
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -16,6 +15,8 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+
+__attribute__((visibility("hidden"))) void *bl_next(const char *name);
 
 #define MAX_HANDLES 4096
 
@@ -50,7 +51,7 @@ static int is_kgsl(int fd) {
 }
 
 static void *real(const char *name) {
-  void *fn = dlsym(RTLD_NEXT, name);
+  void *fn = bl_next(name);
   if (!fn) {
     errno = ENOSYS;
   }
