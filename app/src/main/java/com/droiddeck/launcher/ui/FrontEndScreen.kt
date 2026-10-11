@@ -443,17 +443,17 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
     }
     val density = androidx.compose.ui.platform.LocalDensity.current.density
     remember(density) { Hops.density = density; true }
-    // Back (and B) from a ROM, an emulator or an added app steps out one level, as its "‹" link
-    // does, instead of leaving the app: a ROM -> its emulator, the others -> Desktop.
+    // Back (and B) from a ROM, an emulator, an added app or Flathub steps out one level instead
+    // of leaving the app: a ROM -> its emulator, the others -> Desktop.
     BackHandler(
         enabled = !processSettingsPageVisible && (s.pageKey == null || page == null) &&
-            (selected.startsWith("emu:") || selected.startsWith("rom:") || selected.startsWith("user:")),
+            (selected.startsWith("emu:") || selected.startsWith("rom:") || selected.startsWith("user:") || selected == "store"),
     ) {
         selected = if (selected.startsWith("rom:")) "emu:" + selected.removePrefix("rom:").substringBefore(':') else "desktop"
     }
     LaunchedEffect(s.isHomeApp) { if (!s.isHomeApp && selected == "android-apps") selected = "steam" }
     // The Store turned off in Setup takes its page with it; so does Stores.
-    LaunchedEffect(s.storeEnabled) { if (!s.storeEnabled && selected == "store") selected = "steam" }
+    LaunchedEffect(s.storeEnabled) { if (!s.storeEnabled && selected == "store") selected = "desktop" }
     LaunchedEffect(s.gameStoresEnabled) { if (!s.gameStoresEnabled && selected == "stores") selected = "games" }
     // The last game uninstalled leaves the Games tab on its empty state.
     LaunchedEffect(s.steamGames.isEmpty()) {
@@ -468,7 +468,8 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
         s.pageKey == "performance" -> "steam"
         s.pageKey == "controller-mapping" -> "setup"
         selected.startsWith("app:") -> "games"
-        selected.startsWith("emu:") || selected.startsWith("rom:") || selected.startsWith("user:") -> "desktop"
+        // Flathub is a page of Desktop's, as an emulator's is.
+        selected.startsWith("emu:") || selected.startsWith("rom:") || selected.startsWith("user:") || selected == "store" -> "desktop"
         else -> s.pageKey ?: selected
     }
     // Bumped each time a rail item is picked, so a controller moves on into the new page.
@@ -482,6 +483,8 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
             // Another section: no way back to keep, and no sheet to put back.
             Hops.origin = null
             Hops.restore = null
+            // Picked from the rail, Desktop starts at its hero; back from one of its pages it is where it was.
+            if (key == "desktop" && selected != "desktop") DesktopMemory.scroll = 0
             selected = key
         }
     }
@@ -645,7 +648,7 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
         // A section reached by a hop goes back to where it came from, not to the rail.
         (s.pageKey == null && Hops.origin?.page == selected) ||
         ((s.pageKey == null || page == null) &&
-            (selected.startsWith("emu:") || selected.startsWith("rom:") || selected.startsWith("user:")))
+            (selected.startsWith("emu:") || selected.startsWith("rom:") || selected.startsWith("user:") || selected == "store"))
     // At the top of a section, Back goes to the rail - the launcher itself is never backed out of.
     BackHandler(enabled = !processSettingsPageVisible && !hasBackTarget) {
         if (inputModeManager.inputMode != InputMode.Keyboard) inputModeManager.requestInputMode(InputMode.Keyboard)

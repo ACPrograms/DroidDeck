@@ -97,6 +97,11 @@ import kotlinx.coroutines.withContext
 // Files). Under the hero the page scrolls to two shelves - the apps that run in the desktop, and
 // what can be added - and the hero folds into a slim header as it goes.
 
+/** What Desktop remembers between visits: how far down it was scrolled. */
+internal object DesktopMemory {
+    var scroll = 0
+}
+
 /** The desktop's own chips: its session settings, then Files. */
 private val DESKTOP_TABS = modeSheetTabs(steam = false) + SheetTab.FILES
 
@@ -108,12 +113,17 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     LaunchedEffect(Unit) { UserAppsState.refresh(ctx) }
+    // Flathub's installed apps sit with the others in Your apps.
+    LaunchedEffect(s.ready, s.storeEnabled) { if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.refresh(ctx) }
     val installed = s.emulators.filter { it.installed }
     val available = s.emulators.filter { !it.installed }
     val apps = UserAppsState.items
     var adding by rememberSaveable { mutableStateOf(false) }
     var sheetOpen by remember { mutableStateOf(false) }
-    val scroll = rememberScrollState()
+    // Where the page was scrolled, kept while one of its own pages (an emulator's, Flathub) is
+    // open: back on Desktop the page draws into its card where the card still is.
+    val scroll = rememberScrollState(DesktopMemory.scroll)
+    LaunchedEffect(scroll) { androidx.compose.runtime.snapshotFlow { scroll.value }.collect { DesktopMemory.scroll = it } }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // Where the Your apps shelf ends, for a new emulator's dot to land.
     var yourAppsAt by remember { mutableStateOf<Rect?>(null) }
@@ -171,7 +181,8 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth().onGloballyPositioned { yourAppsAt = it.boundsInRoot() }.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),
                 ) {
-                    val keys = installed.map { "emu:${it.id}" } + apps.map { "user:${it.key}" }
+                    val flatpaks = if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.installed else emptyList()
+                    val keys = installed.map { "emu:${it.id}" } + apps.map { "user:${it.key}" } + flatpaks.map { "flatpak:${it.id}" }
                     keys.forEachIndexed { i, k ->
                         key(k) {
                             // A card that arrives after the shelf is up (an emulator just installed) opens in.
@@ -181,6 +192,7 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
                                 val last = Modifier.then(if (i == keys.lastIndex) Modifier.onGloballyPositioned { lastCardAt = it.boundsInRoot() } else Modifier)
                                 Box(last) {
                                     val e = installed.firstOrNull { "emu:${it.id}" == k }
+                                    val flatpak = flatpaks.firstOrNull { "flatpak:${it.id}" == k }
                                     val app = apps.firstOrNull { "user:${it.key}" == k }
                                     if (e != null) {
                                         val system = if (e.systemRes != 0) stringResource(e.systemRes) else e.system.replaceFirstChar { c -> c.uppercase() }
@@ -189,6 +201,13 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
                                             if (e.id == "retroarch") system else "$system · " + pluralStringResource(R.plurals.mode_added_count, e.games.size, e.games.size),
                                             art = e.iconRes, first = i == 0,
                                         ) { at -> openFrom(k, at, e.iconRes, k) }
+                                    } else if (flatpak != null) DesktopCard(
+                                        k, flatpak.name, flatpak.summary ?: stringResource(R.string.flathub_name),
+                                        art = flatpak.icon ?: com.droiddeck.launcher.store.FlathubApi.iconUrl(flatpak.id), first = i == 0,
+                                    ) { at ->
+                                        // Its page on Flathub: open, update or remove it there.
+                                        com.droiddeck.launcher.store.StoreState.openRequest = flatpak.id
+                                        openFrom(k, at, flatpak.icon, "store")
                                     } else if (app != null) DesktopCard(k, app.name, stringResource(app.kind.label()), art = app.icon, fallback = if (app.kind == UserApps.Kind.SCRIPT) Icons.Outlined.Terminal else Icons.Outlined.Apps, first = i == 0) { at ->
                                         openFrom(k, at, app.icon, k)
                                     }
@@ -232,12 +251,10 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
                     }
                     DesktopCard("add", stringResource(R.string.user_apps_add), stringResource(R.string.user_apps_add_detail), art = null, fallback = Icons.Filled.Add, accent = true) { if (!s.busy) adding = true }
                     if (s.storeEnabled) {
-                        val back = stringResource(R.string.rail_desktop)
-                        val show = LocalShowSection.current
+                        // Flathub's apps run in the desktop: its storefront is a page of Desktop's,
+                        // flooding out of this card as an emulator's does.
                         DesktopCard("flathub", stringResource(R.string.flathub_name), stringResource(R.string.flathub_line), art = null, fallback = Icons.Outlined.Storefront, tint = FlathubTeal) { at ->
-                            // Flathub is its own section: the card hops there, and B on it comes back here.
-                            if (at == null) show("store")
-                            else Hops.go(HopOrigin("desktop", HOP_SURFACE_DESKTOP, null, "tile:desktop:flathub", at, back, dest = "store", page = "store")) { show("store") }
+                            openFrom("flathub", at, null, "store")
                         }
                     }
                 }

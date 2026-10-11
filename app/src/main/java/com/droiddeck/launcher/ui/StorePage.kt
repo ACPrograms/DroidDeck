@@ -319,6 +319,8 @@ private fun Storefront(s: FrontEndState, a: FrontEndActions) {
         ff.items["tile:store:$id"]?.let { req -> focusWithinFrames({ false }) { req } }
     }
     BackHandler(enabled = openApp != null) { openApp = null }
+    // An app's card on Desktop asked for its page.
+    LaunchedEffect(StoreState.openRequest) { StoreState.openRequest?.let { openApp = it; StoreState.openRequest = null } }
     val covering = detail != null && !leaving
     val sink by animateFloatAsState(if (covering) 0.95f else 1f, if (covering) Motion.tw(480) else Motion.tw(460, 40), label = "flathubSink")
     val fade by animateFloatAsState(if (covering) 0f else 1f, if (covering) Motion.tw(320, 80) else Motion.tw(300, 100), label = "flathubFade")
@@ -333,10 +335,10 @@ private fun Storefront(s: FrontEndState, a: FrontEndActions) {
     ) {
         Rise(0) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f)) { FlathubChips(mode, modes, StoreState.installed.size, updates.size) { mode = it } }
-                // Reached by a hop from Desktop: the way back.
+                // A page of Desktop's: the way back to it, for a finger (B does the same).
                 val show = LocalShowSection.current
-                HopBackChip { Hops.origin?.let { o -> Hops.back { show(o.rail) } } }
+                BackLink(stringResource(R.string.rail_desktop), compact = true) { show("desktop") }
+                Box(Modifier.weight(1f)) { FlathubChips(mode, modes, StoreState.installed.size, updates.size) { mode = it } }
             }
         }
         Spacer(Modifier.height(8.dp))

@@ -392,10 +392,11 @@ internal fun SetupPanel(
                         }
                         val rail: @Composable () -> Unit = {
                             SettingsGroup(stringResource(R.string.setup_group_rail)) {
-                                RailToggle(
-                                    "store", host, "store-enabled", stringResource(R.string.setup_store),
+                                // Flathub is a page of Desktop's, not a rail item: this shows its card there.
+                                ToggleRow(
+                                    host, "store-enabled", stringResource(R.string.setup_store),
                                     if (s.storeEnabled) stringResource(R.string.setup_store_on) else stringResource(R.string.setup_store_off),
-                                    s.storeEnabled, a.onStoreEnabled,
+                                    s.storeEnabled, onChange = a.onStoreEnabled,
                                 )
                                 RailToggle("stores", host, "stores-enabled", stringResource(R.string.setup_stores_show), null, s.gameStoresEnabled, a.onGameStoresEnabled)
                             }

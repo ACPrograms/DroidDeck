@@ -646,8 +646,8 @@
     <string name="setup_choose_home">Choose a Home app</string>
     <string name="setup_choose">Choose</string>
     <string name="setup_linux_apps">Linux apps (beta)</string>
-    <string name="setup_store">Flathub Store</string>
-    <string name="setup_store_on">In the menu. Some apps may not start; logs are in Download/DroidDeck.</string>
+    <string name="setup_store">Flathub on Desktop</string>
+    <string name="setup_store_on">Under Get more on Desktop. Some apps may not start; logs are in Download/DroidDeck.</string>
     <string name="setup_store_off">Install Linux apps and games from Flathub</string>
     <string name="setup_tool_files">Files</string>
     <string name="setup_tool_files_hint">Browse and manage files</string>
@@ -2207,7 +2207,7 @@
     <string name="setup_needs_you">When something needs you</string>
     <string name="setup_group_look">Look</string>
     <string name="setup_group_device">This device</string>
-    <string name="setup_group_rail">Sections on the rail</string>
+    <string name="setup_group_rail">Sections</string>
     <string name="setup_group_art">Library art</string>
     <!-- Flathub, in the stores' style. -->
     <string name="flathub_eyebrow">LINUX APPS</string>
