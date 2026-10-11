@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 BIN = Path(__file__).resolve().parents[1] / "linuxfs/overlay/usr/local/bin"
 MODULE = runpy.run_path(str(BIN / "droiddeck-game-env"))
@@ -23,6 +24,111 @@ def mapping_of(text):
 def config_text(entries):
     mapping = "".join('"%s" { "name" "%s" "config" "" "priority" "%s" }' % (app, name, "75" if app == "0" else "250") for app, name in entries)
     return '"InstallConfigStore" { "Software" { "Valve" { "Steam" { "CompatToolMapping" { %s } } } } }' % mapping
+
+
+class SystemGraphicsLaunchTest(unittest.TestCase):
+    def runtime(self, root):
+        runtime = root / "system_vulkan" / ("a" * 64)
+        files = ["run-proton.py", "lib/libVkLayer_hybris_compat.so",
+                 "wsi/libVkLayer_window_system_integration.so",
+                 "wsi/VkLayer_window_system_integration.json"]
+        files += ["dxvk/%s/%s.dll" % (arch, name) for arch in ("x32", "x64")
+                  for name in ("d3d8", "d3d9", "d3d10core", "d3d11", "dxgi")]
+        for name in files:
+            target = runtime / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"component")
+        (runtime / "run-proton.py").chmod(0o755)
+        return runtime, files
+
+    def test_other_gpus_and_non_game_calls_keep_the_original_launch(self):
+        command = ["/proton", "waitforexitandrun", "game.exe"]
+        base = {"STEAM_COMPAT_DATA_PATH": "/compatdata/42", "VK_LAYER_PATH": "original"}
+        selected = dict(base, DROIDDECK_POWERVR_RUNTIME="/not-installed")
+        cases = [(command, base), (command, dict(selected, STEAM_COMPAT_DATA_PATH="/compatdata/0")),
+                 (command, dict(selected, STEAM_COMPAT_DATA_PATH="/compatdata/invalid")),
+                 (["/proton", "run", "iscriptevaluator.exe"], selected),
+                 (["/proton", "getcompatpath", "x"], selected), (command[:2], selected)]
+        for args, env in cases:
+            with self.subTest(args=args, env=env):
+                actual, inherited = MODULE["system_graphics_launch"](args, env)
+                self.assertIs(actual, args)
+                self.assertIs(inherited, env)
+
+    def test_system_graphics_follow_game_configuration_and_preserve_other_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime, _ = self.runtime(Path(tmp))
+            base = {"DROIDDECK_POWERVR_RUNTIME": str(runtime), "STEAM_COMPAT_DATA_PATH": "/compatdata/42"}
+            config = {"version": 1, "games": {"42": {
+                "PROTON_USE_WINED3D": "1", "DISABLE_WSI_LAYER": "1",
+                "ENABLE_VK_LAYER_VALVE_steam_fossilize_1": "1", "HYBRIS_BC_TEXTURES": "0",
+                "VK_LAYER_PATH": "old", "VK_INSTANCE_LAYERS": "old", "ENABLE_GAMESCOPE_WSI": "1",
+                "FEX_TSOENABLED": "1", "WINESERVER": "/selected/wineserver", "CUSTOM": "literal $value",
+            }}}
+            env = MODULE["apply_config"](base, config, "42")
+            command = ["/selected/proton", "waitforexitandrun", "game with spaces.exe"]
+            launch, result = MODULE["system_graphics_launch"](command, env)
+            self.assertEqual(launch, [str(runtime / "run-proton.py"), *command])
+            self.assertEqual(result["HYBRIS_BC_TEXTURES"], "dxvk")
+            self.assertEqual(result["VK_LAYER_PATH"], f"{runtime}/wsi:{runtime}/lib")
+            self.assertEqual(result["VK_INSTANCE_LAYERS"], "VK_LAYER_window_system_integration:VK_LAYER_HYBRIS_compat")
+            self.assertEqual(result["VK_LOADER_LAYERS_DISABLE"], "*gamescope*")
+            self.assertEqual(result["ENABLE_GAMESCOPE_WSI"], "0")
+            self.assertEqual(result["DISABLE_VK_LAYER_VALVE_steam_fossilize_1"], "1")
+            for key in ("PROTON_USE_WINED3D", "DISABLE_WSI_LAYER", "ENABLE_VK_LAYER_VALVE_steam_fossilize_1"):
+                self.assertNotIn(key, result)
+                self.assertIn(key, env)
+            for key in ("FEX_TSOENABLED", "WINESERVER", "CUSTOM"):
+                self.assertEqual(result[key], env[key])
+
+    def test_incomplete_runtime_fails_before_any_proton_exec(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime, files = self.runtime(Path(tmp))
+            env = {"DROIDDECK_POWERVR_RUNTIME": str(runtime), "STEAM_COMPAT_DATA_PATH": "/compatdata/42"}
+            command = ["/proton", "waitforexitandrun", "game.exe"]
+            for name in files:
+                target = runtime / name
+                original = target.read_bytes()
+                for missing in (False, True):
+                    with self.subTest(name=name, missing=missing):
+                        target.unlink() if missing else target.write_bytes(b"")
+                        with patch.object(os, "execvpe") as execute:
+                            with self.assertRaises(MODULE["SystemGraphicsError"]):
+                                MODULE["exec_proton"](command, env)
+                            execute.assert_not_called()
+                        target.write_bytes(original)
+                        if name == "run-proton.py":
+                            target.chmod(0o755)
+            (runtime / "run-proton.py").chmod(0o644)
+            with self.assertRaises(MODULE["SystemGraphicsError"]):
+                MODULE["system_graphics_launch"](command, env)
+            with self.assertRaises(MODULE["SystemGraphicsError"]):
+                MODULE["system_graphics_launch"](command, dict(env, DROIDDECK_POWERVR_RUNTIME="relative"))
+
+    def test_wrapper_receives_the_sync_selected_proton(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime, _ = self.runtime(root)
+            env = {"HOME": tmp, "DROIDDECK_POWERVR_RUNTIME": str(runtime),
+                   "STEAM_COMPAT_DATA_PATH": "/compatdata/42"}
+            command = ["/stock/proton", "waitforexitandrun", "game.exe"]
+            selected = ["/sync-pack/proton", *command[1:]]
+            selected_env = dict(env, WINESERVER="/sync-pack/wineserver", BL_SYNC_PACK="selected")
+            main = MODULE["main"]
+            with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["game-env", *command]), \
+                    patch.dict(main.__globals__, {"load_sync": lambda: {},
+                                                  "select_sync": lambda *args: (selected, selected_env),
+                                                  "win_components": lambda *args: ""}), \
+                    patch.object(os, "execvpe", side_effect=SystemExit(23)) as execute:
+                with self.assertRaises(SystemExit) as stopped:
+                    main()
+            self.assertEqual(stopped.exception.code, 23)
+            execute.assert_called_once()
+            path, args, actual_env = execute.call_args.args
+            self.assertEqual(path, str(runtime / "run-proton.py"))
+            self.assertEqual(args, [path, *selected])
+            self.assertEqual(actual_env["WINESERVER"], "/sync-pack/wineserver")
+            self.assertEqual(actual_env["BL_SYNC_PACK"], "selected")
 
 
 class GameEnvironmentTest(unittest.TestCase):
