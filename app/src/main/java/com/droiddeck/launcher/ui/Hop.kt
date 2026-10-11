@@ -60,6 +60,9 @@ internal object Hops {
     /** The hop the page on screen was reached by, while B can still undo it. */
     var origin by mutableStateOf<HopOrigin?>(null)
 
+    /** The pane content a hop is leaving (a rail key): it sinks back as the dot leaves it. */
+    var sinking by mutableStateOf<String?>(null)
+
     /** Set while a hop's dot is flying: the rail item its selection has already glided to. */
     var railPreview by mutableStateOf<String?>(null)
 
@@ -100,6 +103,8 @@ internal object Hops {
             arrived++
         }
         if (railAt == null || Motion.scale == 0f) { finish(); return }
+        // The surface the control is on sinks as its dot leaves, and stays down as it goes.
+        sinking = origin.rail
         Flights.fly(Flight(
             origin.bounds, to = { railAt.center },
             onHalf = { railPreview = origin.dest },
@@ -114,6 +119,7 @@ internal object Hops {
     fun back(close: () -> Unit): Boolean {
         val o = origin ?: return false
         origin = null
+        sinking = null
         val railAt = railBounds[o.dest]
         railPreview = if (railAt != null && Motion.scale != 0f) o.dest else null
         restore = o
@@ -130,7 +136,7 @@ internal object Hops {
     /** The page the hop opened has gone some other way: there is no way back to keep. */
     fun forget(pageKey: String?) {
         val o = origin ?: return
-        if (pageKey != o.page) origin = null
+        if (pageKey != o.page) { origin = null; sinking = null }
     }
 
     /** Screen density, for the rail item's corner; set by the front end. */

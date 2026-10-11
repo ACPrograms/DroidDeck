@@ -221,6 +221,8 @@ internal fun LiftHero(
     var travel by remember { mutableStateOf(1) }
     // The control to focus once a sheet put back by a hop's B has lifted, instead of the first chip.
     var focusOnLift by remember { mutableStateOf<String?>(null) }
+    // Set as the sheet closes and Play lands: the lip may come back before the sheet has quite gone.
+    var lipBack by remember { mutableStateOf(false) }
     val pull = remember { Animatable(0f) }
     val sink = remember { Animatable(0f) }
     val lift = remember { Animatable(0f) }
@@ -268,6 +270,7 @@ internal fun LiftHero(
     }
     LaunchedEffect(open, launching) {
         if (open && !launching) {
+            lipBack = false
             shown = true
             onOpen()
             fold.snapTo(0f); foldTop.snapTo(0f)
@@ -284,7 +287,8 @@ internal fun LiftHero(
                     launch { ride.animateTo(1f, Motion.sp(0.7f, 380f)) }
                     launch { hot.snapTo(1f); delay(Motion.ms(100).toLong()); hot.animateTo(0f, Motion.tw(200)) }
                 }
-                pieces.forEachIndexed { i, p -> launch { delay(Motion.ms(260 + i * 55).toLong()); p.animateTo(1f, Motion.tw(220)) } }
+                // Each piece on its beat from the Lift, as the reel has it: 260ms + 55ms a piece after it starts.
+                pieces.forEachIndexed { i, p -> launch { delay(Motion.ms(120 + 260 + i * 55).toLong()); p.animateTo(1f, Motion.tw(220)) } }
                 if (inputMode.inputMode == InputMode.Keyboard) launch {
                     val control = focusOnLift
                     focusOnLift = null
@@ -313,8 +317,11 @@ internal fun LiftHero(
                 launch { delay(Motion.ms(60).toLong()); lift.animateTo(0f, Motion.sp(1f, 380f)) }
                 launch { delay(Motion.ms(100).toLong()); ride.animateTo(0f, Motion.sp(0.55f, 300f)) }
                 launch { sink.animateTo(0f, Motion.tw(300)) }
+                // The lip tucks back under Play as it lands, not once every spring has settled.
+                launch { delay(Motion.ms(420).toLong()); lipGone.snapTo(0f); lipBack = true }
             }
             shown = false
+            lipBack = false
             lipGone.snapTo(0f)
             hot.snapTo(1f)
         } else {
@@ -332,11 +339,12 @@ internal fun LiftHero(
     val touchOnly = inputMode.inputMode == InputMode.Touch
     val lipFocus = remember { FocusRequester() }
     var lipFocused by remember { mutableStateOf(false) }
-    val lipWanted = !open && !shown && (playFocused || playHovered || touchOnly || lipFocused)
+    val lipWanted = !open && (!shown || lipBack) && (playFocused || playHovered || touchOnly || lipFocused)
     val lipNow = rememberUpdatedState(lip)
     LaunchedEffect(lipWanted) {
         if (lipWanted) {
-            delay(Motion.ms(160).toLong())
+            // Back from the sheet it comes straight away; otherwise a beat after Play has focus.
+            if (!lipBack) delay(Motion.ms(160).toLong())
             val now = lipNow.value()
             lit = lipChanged(LipMemory.seen[key], now)
             LipMemory.seen[key] = now.toMap()

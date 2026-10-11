@@ -483,6 +483,7 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
             // Another section: no way back to keep, and no sheet to put back.
             Hops.origin = null
             Hops.restore = null
+            Hops.sinking = null
             // Picked from the rail, Desktop starts at its hero; back from one of its pages it is where it was.
             if (key == "desktop" && selected != "desktop") DesktopMemory.scroll = 0
             selected = key

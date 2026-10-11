@@ -138,12 +138,12 @@ internal fun Pane(
             pages[s.pageKey] = page
             if (s.pageKey !in origins) PageOrigin.take()?.let { o ->
                 // A hop's page came out of its own rail item, and is that item's content.
-                origins[s.pageKey] = o.translate(-paneAt[0]).let { if (it.owner == null) it.ownedBy(railContent) else it }
+                origins[s.pageKey] = inPane(o.translate(-paneAt[0])).let { if (it.owner == null) it.ownedBy(railContent) else it }
             }
         } else if (target != before[0] && target !in origins) {
             // A section's own page opened from a control in it (an emulator's card, a ROM's) floods
             // out of that control and belongs to what was showing; a hop's comes out of its rail item.
-            PageOrigin.take()?.let { o -> origins[target] = o.translate(-paneAt[0]).let { if (it.owner == null) it.ownedBy(before[0]) else it } }
+            PageOrigin.take()?.let { o -> origins[target] = inPane(o.translate(-paneAt[0])).let { if (it.owner == null) it.ownedBy(before[0]) else it } }
         }
         before[0] = target
         val targetNow by rememberUpdatedState(target)
@@ -175,8 +175,16 @@ internal fun Pane(
             },
             label = "pane",
         ) { key ->
-            val shown = (if (page != null && key == s.pageKey) page else pages[key])
+            val drawn = (if (page != null && key == s.pageKey) page else pages[key])
                 ?: { Content(s, if (key == "games") gameShown[0] else key, a, Modifier.fillMaxSize(), onSelect, onAndroidAppClick, onOpenDeveloperOptions, onRequestWirelessAdb) }
+            // A hop leaving this content: it sinks back as the dot leaves it (and comes forward
+            // again, freshly drawn, when the hop is undone).
+            val hopSink by androidx.compose.animation.core.animateFloatAsState(
+                if (Hops.sinking == key) 1f else 0f, Motion.tw(260), label = "hopSink",
+            )
+            val shown: @Composable () -> Unit = {
+                Box(Modifier.fillMaxSize().graphicsLayer { val k = 1f - 0.05f * hopSink; scaleX = k; scaleY = k; alpha = 1f - 0.35f * hopSink }) { drawn() }
+            }
             run {
                 DisposableEffect(key) { onDispose { if (key != livePage && key != targetNow) { pages.remove(key); origins.remove(key) } } }
                 val from = origins[key]
@@ -203,6 +211,14 @@ internal fun Pane(
       }
     }
 }
+
+/**
+ * An origin left of the pane (a rail item a hop flew to) starts half inside it, at the item's
+ * height: the page swells out of the pane's edge beside the item. Wholly outside, its tile was a
+ * bar that raced across from the far edge.
+ */
+internal fun inPane(o: Origin): Origin =
+    if (o.bounds.right > 0f) o else o.translate(Offset(-o.bounds.right + o.bounds.width / 2f, 0f))
 
 @Composable
 private fun Backdrop(art: File?) {
