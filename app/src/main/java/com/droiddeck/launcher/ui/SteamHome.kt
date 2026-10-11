@@ -113,7 +113,7 @@ internal fun SteamHome(s: FrontEndState, a: FrontEndActions, modifier: Modifier)
 
 /** The wall fades out behind the words, and toward the bottom where the buttons sit. */
 @Composable
-private fun WallFade() {
+internal fun WallFade() {
     val colors = MaterialTheme.colorScheme
     Box(
         Modifier.fillMaxSize().background(

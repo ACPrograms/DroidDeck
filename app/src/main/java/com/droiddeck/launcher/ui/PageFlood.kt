@@ -46,11 +46,12 @@ import kotlin.math.sin
 
 /**
  * Where a page opened from: the control's bounds and corner radius, in px, and the rail item that
- * was showing it ([owner]), so the page only draws back into it when that content returns.
+ * was showing it ([owner]), so the page only draws back into it when that content returns. [art]
+ * is the control's picture for the tile (a drawable id, or an image Coil loads), if it has one.
  */
-internal class Origin(val bounds: Rect, val corner: Float, val owner: String? = null) {
-    fun translate(by: Offset) = Origin(bounds.translate(by), corner, owner)
-    fun ownedBy(key: String) = Origin(bounds, corner, key)
+internal class Origin(val bounds: Rect, val corner: Float, val owner: String? = null, val art: Any? = null) {
+    fun translate(by: Offset) = Origin(bounds.translate(by), corner, owner, art)
+    fun ownedBy(key: String) = Origin(bounds, corner, key, art)
 }
 
 /** How a page that opened from a control leaves. */

@@ -331,7 +331,14 @@ private fun Storefront(s: FrontEndState, a: FrontEndActions) {
                 onNext = { if (openApp == null) mode = modes[(modes.indexOf(mode) + 1) % modes.size] },
             ),
     ) {
-        Rise(0) { FlathubChips(mode, modes, StoreState.installed.size, updates.size) { mode = it } }
+        Rise(0) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) { FlathubChips(mode, modes, StoreState.installed.size, updates.size) { mode = it } }
+                // Reached by a hop from Desktop: the way back.
+                val show = LocalShowSection.current
+                HopBackChip { Hops.origin?.let { o -> Hops.back { show(o.rail) } } }
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().onGloballyPositioned { viewportAt = it.positionInRoot() }) {
             Column(

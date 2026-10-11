@@ -193,6 +193,13 @@ internal fun LiftHero(
     button: @Composable (onClick: () -> Unit) -> Unit,
     rows: @Composable (tab: String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Down on the button lifts the sheet (Play). False: Down goes to the lip, which A lifts, and Down
+     * from the lip goes on past it to what is under the hero (Desktop's shelves).
+     */
+    downOpens: Boolean = true,
+    /** Told when the sheet starts to lift (true) and once it has gone (false). */
+    onOpenChange: (Boolean) -> Unit = {},
     start: Dp = 44.dp,
     bottom: Dp = 44.dp,
 ) {
@@ -313,10 +320,14 @@ internal fun LiftHero(
         }
     }
     BackHandler(enabled = open && !launching) { close() }
+    val openNow = open || shown
+    LaunchedEffect(openNow) { onOpenChange(openNow) }
 
     // The lip: there while Play has a pad or a pointer on it, or always with touch alone.
     val touchOnly = inputMode.inputMode == InputMode.Touch
-    val lipWanted = !open && !shown && (playFocused || playHovered || touchOnly)
+    val lipFocus = remember { FocusRequester() }
+    var lipFocused by remember { mutableStateOf(false) }
+    val lipWanted = !open && !shown && (playFocused || playHovered || touchOnly || lipFocused)
     val lipNow = rememberUpdatedState(lip)
     LaunchedEffect(lipWanted) {
         if (lipWanted) {
@@ -487,7 +498,9 @@ internal fun LiftHero(
                         if (k.keyCode != KeyEvent.KEYCODE_DPAD_DOWN) false
                         else {
                             if (k.action == KeyEvent.ACTION_DOWN && k.repeatCount == 0) {
-                                if (!open) open = true else runCatching { firstChip.requestFocus() }
+                                if (open) runCatching { firstChip.requestFocus() }
+                                else if (downOpens) open = true
+                                else runCatching { lipFocus.requestFocus() }
                             }
                             true
                         }
@@ -502,8 +515,10 @@ internal fun LiftHero(
 
         // The lip, under Play: stretched by the pull, gone as the sheet lifts.
         val r0 = restRect
-        if (r0 != null && (lipShow.value > 0.01f || pull.value > 0.5f)) {
+        // A lip a pad can reach stays composed (unseen at rest) so Down always has it to land on.
+        if (r0 != null && (lipShow.value > 0.01f || pull.value > 0.5f || (!downOpens && !open && !shown))) {
             val lipH = 26.dp + pull.value.dp
+            val lift = { if (!open) open = true }
             Box(
                 Modifier
                     .offset { IntOffset((r0.left + 16.dp.toPx()).roundToInt(), (r0.bottom + raise * ride.value + (lipShow.value - 1f) * 8.dp.toPx()).roundToInt()) }
@@ -517,10 +532,15 @@ internal fun LiftHero(
                             if (dy < -24.dp.toPx() && !open) { change.consume(); open = true; dy = 0f }
                         }
                     }
-                    .focusProperties { canFocus = false }
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button) { if (!open) open = true },
+                    .then(
+                        if (downOpens) Modifier.focusProperties { canFocus = false }
+                        else Modifier.focusRequester(lipFocus).onFocusChanged { lipFocused = it.isFocused }.controllerConfirm(onClick = lift),
+                    )
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = lift),
             ) {
-                Lip(lip(), lit, lipLit.value, lipH)
+                Box(Modifier.glideBorder(lipFocused, RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp), LocalPalette.current.signal)) {
+                    Lip(lip(), lit, lipLit.value, lipH)
+                }
             }
         }
     }

@@ -53,6 +53,7 @@ internal class HopOrigin(
 
 /** The surfaces a hop can start from and come back to. */
 internal const val HOP_SURFACE_GAMES = "games"
+internal const val HOP_SURFACE_DESKTOP = "desktop"
 internal const val HOP_SURFACE_SHEET = "sheet"
 
 internal object Hops {
@@ -135,6 +136,9 @@ internal object Hops {
     /** Screen density, for the rail item's corner; set by the front end. */
     var density = 1f
 }
+
+/** Shows a rail section directly (no page closing, nothing forgotten): what a hop's way back calls. */
+internal val LocalShowSection = androidx.compose.runtime.staticCompositionLocalOf<(String) -> Unit> { {} }
 
 /** Remembers where this control sits, so a hop from it can fly from it and back to it. */
 internal fun Modifier.hopSource(key: String): Modifier = onGloballyPositioned { Hops.sources[key] = it.boundsInRoot() }

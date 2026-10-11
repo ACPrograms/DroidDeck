@@ -435,7 +435,12 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
     val pageBack = { if (!Hops.back(a.onPageBack)) a.onPageBack() }
     BackHandler(enabled = !processSettingsPageVisible && s.pageKey != null && page != null) { pageBack() }
     // Left any other way, the hop's page has no way back to keep.
-    LaunchedEffect(s.pageKey) { Hops.forget(s.pageKey) }
+    LaunchedEffect(s.pageKey, selected) { Hops.forget(s.pageKey ?: selected) }
+    // A section reached by a hop (Desktop's Flathub card to the Store) goes back the way it came.
+    BackHandler(enabled = !processSettingsPageVisible && s.pageKey == null && Hops.origin?.page == selected) {
+        val rail = Hops.origin?.rail ?: return@BackHandler
+        Hops.back { selected = rail }
+    }
     val density = androidx.compose.ui.platform.LocalDensity.current.density
     remember(density) { Hops.density = density; true }
     // Back (and B) from a ROM, an emulator or an added app steps out one level, as its "‹" link
@@ -538,11 +543,12 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
         val railFocus = Modifier
             .focusProperties { enter = { frontFocus.railFor(railSelection) } }
             .focusGroup()
-        // Back from a hop onto a surface that is not a sheet (a game's Components card): focus
+        // Back from a hop onto a surface that is not a sheet (a game's Components card, Desktop's
+        // Flathub card): focus
         // goes back to the control that asked, once the page has gone.
         LaunchedEffect(Hops.restore) {
             val r = Hops.restore ?: return@LaunchedEffect
-            if (r.surface != HOP_SURFACE_GAMES) return@LaunchedEffect
+            if (r.surface == HOP_SURFACE_SHEET) return@LaunchedEffect
             Hops.restore = null
             if (r.rail != selected && !(r.rail == "games" && selected.startsWith("app:"))) selected = r.rail
             kotlinx.coroutines.delay(Motion.ms(PAGE_EXIT_MS).toLong())
@@ -551,6 +557,7 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
             focusWithinFrames({ frontFocus.last == r.control && anyFocused }) { frontFocus.items[r.control] ?: frontFocus.paneEntry() }
         }
         var screenAt by remember { mutableStateOf(Offset.Zero) }
+        CompositionLocalProvider(LocalShowSection provides { key -> selected = key }) {
         Row(modifier = Modifier.fillMaxSize().onGloballyPositioned { screenAt = it.positionInRoot() }) {
             SideRail(s, railSelection, onRailSelect, onRailFocus, a, railFocus.fillMaxHeight())
             Box(Modifier.width(1.dp).fillMaxHeight().background(pal.line))
@@ -567,6 +574,7 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
             }
         }
 
+        }
         // Dots on their way somewhere: a hop to another section and back, a swap flying home.
         FlightsLayer(screenAt)
         // A confirm stepping out of the control that asked for it.
@@ -634,6 +642,8 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
         }
     }
     val hasBackTarget = (s.pageKey != null && page != null) ||
+        // A section reached by a hop goes back to where it came from, not to the rail.
+        (s.pageKey == null && Hops.origin?.page == selected) ||
         ((s.pageKey == null || page == null) &&
             (selected.startsWith("emu:") || selected.startsWith("rom:") || selected.startsWith("user:")))
     // At the top of a section, Back goes to the rail - the launcher itself is never backed out of.
