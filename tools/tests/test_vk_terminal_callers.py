@@ -57,7 +57,7 @@ int __android_log_print(int, const char *, const char *, ...);
 ''')
         (tmp / 'wayland-server.h').write_text('#pragma once\nstruct wl_display; struct wl_resource; struct wl_client;\n')
         compositor = (SOURCE.parent / 'compositor.c').read_text()
-        callers = '\n'.join(function(compositor, n) for n in ('take_shm', 'take_pixel'))
+        callers = '\n'.join(function(compositor, n) for n in ('buffer_release_blocked', 'send_buffer_release', 'take_shm', 'take_pixel'))
         harness = (Path(__file__).with_name('vk_terminal_callers_test.c')).read_text()
         probe = tmp / 'probe.c'
         probe.write_text(harness.replace('/* COMPOSITOR_CALLERS */', callers))

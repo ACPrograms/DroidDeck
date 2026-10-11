@@ -108,6 +108,10 @@ static void wl_shm_buffer_end_access(struct wl_shm_buffer *b) {}
 static void wl_buffer_send_release(struct wl_resource *b) { ++releases; }
 static struct wl_client *wl_resource_get_client(struct wl_resource *r) { return NULL; }
 static struct client_info *client_info_of(struct wl_client *c) { return NULL; }
+/* This harness exercises copied SHM/pixel callers; DMA-BUF lifecycle paths are
+ * compiled separately by test_vk_dmabuf_quarantine.py. */
+struct dmabuf_buffer;
+static struct dmabuf_buffer *get_dmabuf(struct wl_resource *buffer) { return NULL; }
 /* COMPOSITOR_CALLERS */
 
 static void setup(int extra) {
@@ -174,7 +178,7 @@ static void acquire_failure(int later, VkResult result) {
     idle_answer = VK_ERROR_OUT_OF_HOST_MEMORY;
     VkImage *retained = g_images;
     assert(vkp_render(64, 64, NULL, 0) == -1);
-    assert(g_dev_state == -3 && !vkp_device_lost());
+    assert(g_dev_state == -3 && vkp_completion_unknown() && !vkp_device_lost());
     assert(acquires == fail_acquire_at && idle_calls == 1);
     assert(submits == (unsigned)later && markers == 0 && waits == 0);
     assert(destroys == 0 && g_images == retained && g_nimg == 1);
@@ -234,6 +238,7 @@ int main(int argc, char **argv) {
         if (!strcmp(name, "acquire-device-lost")) { fail_acquire_at = 2; acquire_answer = VK_ERROR_DEVICE_LOST; }
         else present_answer = VK_ERROR_DEVICE_LOST;
         assert(vkp_render(64, 64, NULL, 0) == -1 && vkp_device_lost());
+        assert(!vkp_completion_unknown());
         assert(g_dev_state == -2 && lost_notifications == 1 && markers == 0 && waits == 0);
         assert(!g_images && !g_swapchain && !g_surface && destroys == 2);
         assert_stopped();

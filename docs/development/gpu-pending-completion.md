@@ -28,6 +28,19 @@ without further Vulkan calls. Release fds are still consumed on rejected copies.
 The normal frame fence still has its existing infinite timeout; this change is
 not a general GPU hang watchdog.
 
+Externally owned DMA-BUF contents need the same protection. `vkp_completion_unknown()`
+exposes the terminal state to compositor-thread lifecycle paths. Replacement,
+surface/client destruction, cursor/idle-role releases, previously queued paced
+releases and SurfaceFlinger callbacks no longer return a DMA-BUF to its client
+after quarantine. The compositor retains DMA-BUF references/backing FDs and AHB
+references until app process exit. A display fence alone does not establish that
+the compositor's Vulkan reads completed. Queued releases detach destroyed surfaces
+and remain held without repeatedly arming an expired timer. New terminal releases
+require no allocation, so allocation failure cannot fall back to an unsafe release.
+Copied SHM releases and healthy/genuine-device-loss cleanup keep their existing
+behaviour. This intentionally prevents further client buffer reuse; restarting
+the Android app process, not just the guest session, is required.
+
 ## Regression coverage
 
 `python3 -m unittest discover -s tools/tests -p test_vk_pending_completion.py -v`
@@ -62,3 +75,14 @@ The change was also exercised in an independently integrated Pixel PowerVR Lab,
 but its short game observations do not establish the cause of the earlier GNOC
 reboot or sustained device stability. Main's native CI and APK build remain
 separate validation.
+
+`python3 -m unittest discover -s tools/tests -p test_vk_dmabuf_quarantine.py -v`
+compiles the production compositor/AHB release, reference and listener functions
+verbatim, using the real Wayland list layouts/macros with fake IPC/timer/AHB
+endpoints. It covers paced replacement, immediate surface cleanup, already queued
+releases, a mixed DMA-BUF/SHM queue, client destruction, a display-fence callback,
+healthy cleanup and genuine device loss. It checks withheld releases, retained
+FDs/references/AHB ownership, removal of surface listeners and disarmed timers.
+The same harness can test an old source directory via
+`DROIDDECK_DMABUF_TEST_SOURCE`; it does not inject a real driver fault or prove
+long-term device stability.
