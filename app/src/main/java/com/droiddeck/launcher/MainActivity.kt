@@ -893,11 +893,16 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) ui.post { startSteamAtStartupIfEnabled() }
 
         // The session's logs land in Downloads so a failed run can be handed over as a folder
-        // rather than dug out of app-private storage. targetSdk 28 means the old permission still
-        // grants exactly that.
+        // rather than dug out of app-private storage.
         val wanted = ArrayList<String>()
-        if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+            && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             wanted.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !SessionPrefs.bluetoothAsked(this)
+            && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            wanted.add(Manifest.permission.BLUETOOTH_CONNECT)
+            SessionPrefs.setBluetoothAsked(this)
         }
         // The microphone is off by default. Someone who turned it on before the permission was
         // granted is asked once here, with the storage prompt; a refusal is not asked again - the

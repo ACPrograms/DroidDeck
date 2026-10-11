@@ -2,14 +2,18 @@
  * noexec.c: FEX runs an x86 program and its libraries where they lie, on noexec shared storage too.
  * FEX maps them with the guest's PROT_EXEC, which the kernel refuses for a file on a noexec mount,
  * but it never runs those pages itself - it runs its own translation of them - so a mapping or an
- * mprotect refused for that alone is made without PROT_EXEC. Only in FEX's own processes.
+ * mprotect refused for that alone is made without PROT_EXEC.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <sys/statvfs.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 /* NOEXEC_TEST: tools/tests builds it for the host. */
@@ -45,11 +49,60 @@ __attribute__((constructor)) static void noexec_init(void) {
   real_mprotect = (int (*)(void *, size_t, int))dlsym(RTLD_NEXT, "mprotect");
 }
 
+static int private_file_mapping(uintptr_t start, uintptr_t end) {
+  int fd = (int)syscall(SYS_openat, AT_FDCWD, "/proc/self/maps", O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return 0;
+  char buf[4096], line[1024];
+  size_t used = 0;
+  int found = 0, done = 0;
+  ssize_t n;
+  while (!done && (n = syscall(SYS_read, fd, buf, sizeof buf)) > 0) {
+    for (ssize_t i = 0; i < n && !done; i++) {
+      if (buf[i] != '\n') {
+        if (used < sizeof line - 1) line[used++] = buf[i];
+        continue;
+      }
+      line[used] = 0;
+      used = 0;
+      char *p = line;
+      uintptr_t lo = strtoull(p, &p, 16), hi = strtoull(p + 1, &p, 16);
+      if (start < lo || start >= hi) continue;
+      done = 1;
+      char *perms = p + 1;
+      if (end > hi || perms[3] != 'p') break;
+      char *path = strchr(perms, '/');
+      struct statvfs vfs;
+      found = path && !(statvfs(path, &vfs) == 0 && (vfs.f_flag & ST_NOEXEC));
+    }
+  }
+  syscall(SYS_close, fd);
+  return found;
+}
+
+static int rebake(void *addr, size_t len, int prot) {
+  if (real_mprotect(addr, len, PROT_READ)) return -1;
+  void *copy = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (copy == MAP_FAILED) return -1;
+  memcpy(copy, addr, len);
+  if (mmap(addr, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED) {
+    munmap(copy, len);
+    return -1;
+  }
+  memcpy(addr, copy, len);
+  munmap(copy, len);
+  __builtin___clear_cache((char *)addr, (char *)addr + len);
+  return real_mprotect(addr, len, prot);
+}
+
 int mprotect(void *addr, size_t len, int prot) {
   if (!real_mprotect) noexec_init();
   int result = real_mprotect(addr, len, prot);
-  if (result && errno == EACCES && (prot & PROT_EXEC) && in_fex()) {
-    result = real_mprotect(addr, len, prot & ~PROT_EXEC);
+  if (result && errno == EACCES && (prot & PROT_EXEC)) {
+    if (in_fex()) {
+      result = real_mprotect(addr, len, prot & ~PROT_EXEC);
+    } else if (len && private_file_mapping((uintptr_t)addr, (uintptr_t)addr + len)) {
+      result = rebake(addr, len, prot);
+    }
     if (result) errno = EACCES;
   }
   return result;
