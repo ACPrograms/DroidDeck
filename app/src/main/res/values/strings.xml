@@ -2183,7 +2183,6 @@
     <string name="hop_back">B · Back to %1$s</string>
     <string name="hop_from_games">the game</string>
     <string name="hop_from_play">Play settings</string>
-    <string name="hop_from_desktop">Desktop settings</string>
     <!-- The lifted settings sheets under Play and Open desktop. -->
     <string name="sheet_graphics_drivers">Graphics drivers</string>
     <!-- Components as one stack of layers. -->
@@ -2223,8 +2222,6 @@
     <string name="flathub_remove_note">Its settings and files are kept.</string>
     <string name="flathub_keep">Keep</string>
     <!-- Desktop in the Steam tab's shape. -->
-    <string name="desktop_no_apps">Nothing yet. Get an emulator or add an app below.</string>
-    <string name="desktop_get_more">Get more</string>
     <string name="desktop_size">Size on disk</string>
     <string name="desktop_uninstall_title">Uninstall the desktop?</string>
     <string name="desktop_all_systems">All</string>
