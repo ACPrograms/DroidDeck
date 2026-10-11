@@ -259,6 +259,12 @@ object SessionPrefs {
         prefs(context).edit().putBoolean("micAsked", true).apply()
     }
 
+    fun allFilesAsked(context: Context): Boolean = prefs(context).getBoolean("allFilesAsked", false)
+
+    fun setAllFilesAsked(context: Context) {
+        prefs(context).edit().putBoolean("allFilesAsked", true).apply()
+    }
+
     fun bluetoothAsked(context: Context): Boolean = prefs(context).getBoolean("bluetoothAsked", false)
 
     fun setBluetoothAsked(context: Context) {
