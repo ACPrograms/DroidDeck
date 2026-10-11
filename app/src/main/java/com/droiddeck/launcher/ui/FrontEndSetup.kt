@@ -172,7 +172,7 @@ internal fun SetupPanel(
     // anywhere on the page. Build and credits are on the Updates page.
     val tabs = listOf(stringResource(R.string.setup_tab_overview), stringResource(R.string.setup_tab_controller), stringResource(R.string.setup_tab_launcher), stringResource(R.string.setup_tab_diagnostics))
     var tab by rememberSaveable { mutableStateOf(0) }
-    val firstChip = remember { FocusRequester() }
+    val chipFocus = remember { List(4) { FocusRequester() } }
     var tabTurned by remember { mutableStateOf(false) }
     val pick: (Int) -> Unit = { i -> tab = i; tabTurned = true }
     val inputModeManager = LocalInputModeManager.current
@@ -180,7 +180,7 @@ internal fun SetupPanel(
     LaunchedEffect(tab) {
         if (tabTurned && inputModeManager.inputMode == InputMode.Keyboard) {
             androidx.compose.runtime.withFrameNanos { }
-            runCatching { firstChip.requestFocus() }
+            runCatching { chipFocus[tab].requestFocus() }
         }
     }
     val wide = !LocalNarrowPane.current
@@ -196,7 +196,7 @@ internal fun SetupPanel(
             ),
         ) {
             PageHeader(stringResource(R.string.setup_title)) {
-                Box(Modifier.weight(1f)) { SheetChips(tabs, tab, firstChip, pick) }
+                Box(Modifier.weight(1f)) { SheetChips(tabs, tab, chipFocus, pick) }
             }
             Column(modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 when (tab) {

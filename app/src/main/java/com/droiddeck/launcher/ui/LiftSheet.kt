@@ -209,9 +209,12 @@ internal fun LiftHero(
     val pal = LocalPalette.current
     val ff = LocalFrontFocus.current
     val narrow = LocalNarrowPane.current
-    var open by remember { mutableStateOf(false) }
+    // Held as states too, so the sheet's focus rule reads what they are now, not at the last composition.
+    val openState = remember { mutableStateOf(false) }
+    var open by openState
     var shown by remember { mutableStateOf(false) }
-    var launching by remember { mutableStateOf(false) }
+    val launchingState = remember { mutableStateOf(false) }
+    var launching by launchingState
     var tab by remember { mutableStateOf(0) }
     var travel by remember { mutableStateOf(1) }
     // The control to focus once a sheet put back by a hop's B has lifted, instead of the first chip.
@@ -227,7 +230,7 @@ internal fun LiftHero(
     val fold = remember { Animatable(0f) }
     val foldTop = remember { Animatable(0f) }
     val pieces = remember { List(PIECES) { Animatable(0f) } }
-    val firstChip = remember { FocusRequester() }
+    val chipFocus = remember(tabs.size) { List(tabs.size) { FocusRequester() } }
     val playSrc = remember { MutableInteractionSource() }
     val playHovered by playSrc.collectIsHoveredAsState()
     var playFocused by remember { mutableStateOf(false) }
@@ -237,9 +240,9 @@ internal fun LiftHero(
     fun focusPlay() { if (ff != null && inputMode.inputMode == InputMode.Keyboard) runCatching { ff.primary.requestFocus() } }
     fun close() {
         if (!open) return
-        // Focus leaves the rows before they go.
-        focusPlay()
+        // Focus leaves the rows before they go; the sheet lets it go once it is closing.
         open = false
+        focusPlay()
     }
     // Back from a hop the sheet started (or a page it opened): put it back as it was.
     LaunchedEffect(Unit) {
@@ -285,7 +288,7 @@ internal fun LiftHero(
                     focusOnLift = null
                     delay(Motion.ms(if (control != null) 420 else 300).toLong())
                     withFrameNanos { }
-                    val target = control?.let { ff?.items?.get(it) } ?: firstChip
+                    val target = control?.let { ff?.items?.get(it) } ?: chipFocus[tab]
                     runCatching { target.requestFocus() }
                 }
             }
@@ -420,7 +423,7 @@ internal fun LiftHero(
                         onNext = { if (tab < tabs.lastIndex) { travel = 1; tab++ } },
                     )
                     // A pad stays in the sheet until it folds; Left from it reaches Play, the handle.
-                    .focusProperties { exit = { dir -> if (dir == FocusDirection.Left && ff != null) ff.primary else FocusRequester.Cancel } }
+                    .focusProperties { exit = { dir -> if (!openState.value || launchingState.value) FocusRequester.Default else if (dir == FocusDirection.Left && ff != null) ff.primary else FocusRequester.Cancel } }
                     .focusGroup(),
             ) {
                 Box(
@@ -441,7 +444,7 @@ internal fun LiftHero(
                             if (k.keyCode == KeyEvent.KEYCODE_DPAD_UP) { if (k.action == KeyEvent.ACTION_DOWN) close(); true } else false
                         },
                 ) {
-                    SheetChips(tabs.map { it.second }, tab, firstChip) { i -> travel = if (i > tab) 1 else -1; tab = i }
+                    SheetChips(tabs.map { it.second }, tab, chipFocus) { i -> travel = if (i > tab) 1 else -1; tab = i }
                 }
                 Box(
                     Modifier
@@ -464,8 +467,10 @@ internal fun LiftHero(
                         CompositionLocalProvider(LocalSheetBeat provides remember { SheetBeat(pieces) }) {
                             Column(
                                 Modifier.fillMaxSize()
-                                    // Focus never lands in rows on their way out.
-                                    .focusProperties { canFocus = !leavingNow.value }
+                                    // Focus never lands in rows on their way out. Same group always, only
+                                    // its rule changes (canFocus here made the scroll's own group a stop).
+                                    .focusProperties { enter = { if (leavingNow.value) FocusRequester.Cancel else FocusRequester.Default } }
+                                    .focusGroup()
                                     .verticalScroll(rememberScrollState())
                                     .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
                             ) { rows(tabs[t].first) }
@@ -498,7 +503,7 @@ internal fun LiftHero(
                         if (k.keyCode != KeyEvent.KEYCODE_DPAD_DOWN) false
                         else {
                             if (k.action == KeyEvent.ACTION_DOWN && k.repeatCount == 0) {
-                                if (open) runCatching { firstChip.requestFocus() }
+                                if (open) runCatching { chipFocus[tab].requestFocus() }
                                 else if (downOpens) open = true
                                 else runCatching { lipFocus.requestFocus() }
                             }
@@ -594,12 +599,16 @@ private fun Modifier.drawBorderSidesAndFoot(color: Color, corner: Dp): Modifier 
  * sheet opens. Too narrow for equal chips, the row scrolls.
  */
 @Composable
-internal fun SheetChips(labels: List<String>, selected: Int, first: FocusRequester? = null, onPick: (Int) -> Unit) {
+internal fun SheetChips(labels: List<String>, selected: Int, focus: List<FocusRequester>? = null, onPick: (Int) -> Unit) {
     val pal = LocalPalette.current
     val bounds = remember { mutableStateMapOf<Int, Rect>() }
     val tint = rememberUpdatedState(pal.signal)
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // Equal chips while every label fits one; otherwise each its own width, and the row scrolls.
+    // Each chip its own requester: one moved from chip to chip under a focused chip lost the ring.
+    val chips = focus ?: remember(labels.size) { List(labels.size) { FocusRequester() } }
+    var within by remember { mutableStateOf(false) }
+    // LB / RB with a pad on the chips: focus goes with the selection.
+    LaunchedEffect(selected) { if (within) runCatching { chips[selected].requestFocus() } }
+    BoxWithConstraints(Modifier.fillMaxWidth().onFocusChanged { within = it.hasFocus }) {
         val equal = maxWidth / labels.size.coerceAtLeast(1) >= 96.dp
         val scroll = rememberScrollState()
         Box(if (equal) Modifier.fillMaxWidth() else Modifier.horizontalScroll(scroll)) {
@@ -608,7 +617,7 @@ internal fun SheetChips(labels: List<String>, selected: Int, first: FocusRequest
                 labels.forEachIndexed { i, label ->
                     val m = (if (equal) Modifier.weight(1f) else Modifier.widthIn(min = 64.dp))
                         .onGloballyPositioned { bounds[i] = it.boundsInParent() }
-                        .then(if (i == selected && first != null) Modifier.focusRequester(first) else Modifier)
+                        .focusRequester(chips[i])
                     SheetChip(label, i == selected, m) { onPick(i) }
                 }
             }
