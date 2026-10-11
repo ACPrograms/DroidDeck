@@ -107,7 +107,15 @@ internal fun BoxScope.ChipGlide(
         val r = CornerRadius(corner?.let { lerp(minOf(with(density) { it.toPx() }, round), round, p) } ?: round)
         // A drop in flight is solid; on a chip it is the chip's tinted fill and outline.
         drawRoundRect(tint.value.copy(alpha = lerp(fill, 0.9f, p)), at0, size, r)
-        if (outline > 0f) drawRoundRect(tint.value.copy(alpha = outline * (1f - p)), at0, size, r, style = Stroke(with(density) { 1.dp.toPx() }))
+        if (outline > 0f) {
+            // Inside the chip's edge: a stroke on it would lose its outer half to a scrolling row's clip.
+            val w = with(density) { 1.dp.toPx() }
+            val inset = w / 2f
+            drawRoundRect(
+                tint.value.copy(alpha = outline * (1f - p)), at0 + Offset(inset, inset), Size(size.width - w, size.height - w),
+                CornerRadius((r.x - inset).coerceAtLeast(0f)), style = Stroke(w),
+            )
+        }
     }
 }
 

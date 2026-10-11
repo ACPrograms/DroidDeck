@@ -741,7 +741,8 @@ internal fun SheetChips(labels: List<String>, selected: Int, focus: List<FocusRe
     BoxWithConstraints(Modifier.fillMaxWidth().onFocusChanged { within = it.hasFocus }) {
         val equal = maxWidth / labels.size.coerceAtLeast(1) >= 96.dp
         val scroll = rememberScrollState()
-        Box(if (equal) Modifier.fillMaxWidth() else Modifier.edgeFade(scroll).horizontalScroll(scroll)) {
+        // Room inside the scroll for the focus ring, which the scroll's clip would otherwise cut.
+        Box(if (equal) Modifier.fillMaxWidth() else Modifier.edgeFade(scroll).horizontalScroll(scroll).padding(3.dp)) {
             ChipGlide(selected, bounds[selected], tint)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = if (equal) Modifier.fillMaxWidth() else Modifier) {
                 labels.forEachIndexed { i, label ->
