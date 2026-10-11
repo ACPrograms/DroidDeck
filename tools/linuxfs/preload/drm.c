@@ -73,8 +73,10 @@ struct bl_drm_version {
 static int is_powervr(int fd) {
   const char *enabled = getenv("BL_POWERVR_DRM_HANDLES");
   if (!enabled || strcmp(enabled, "1")) return 0;
+  const char *path = getenv("BL_POWERVR_RENDER_NODE");
+  if (!path || !*path) return 0;
   struct stat node, candidate;
-  if (stat("/dev/dri/renderD128", &node) || fstat(fd, &candidate) ||
+  if (stat(path, &node) || fstat(fd, &candidate) ||
       !S_ISCHR(candidate.st_mode) || !S_ISCHR(node.st_mode) ||
       candidate.st_rdev != node.st_rdev) return 0;
   char name[16] = {0};

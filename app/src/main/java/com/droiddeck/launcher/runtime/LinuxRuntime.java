@@ -307,19 +307,21 @@ public final class LinuxRuntime {
      */
     private static void bindPowerVrGpuNode(Context context, List<String> cmd) {
         if (new File("/dev/dri").list() != null) return;
-        String node = "/dev/dri/renderD128";
-        File dri = new File(context.getCacheDir(), "powervr-drm/dri");
+        String node = SystemVulkanDriver.renderNodePath();
+        if (node == null) return;
+        String name = new File(node).getName();
+        // Keep only this node listable even if a previous boot assigned a different minor.
+        File dri = new File(context.getCacheDir(), "powervr-drm/" + name + "/dri");
         try {
-            if (!SystemVulkanDriver.renderNodeAvailable()) return;
             if (!dri.isDirectory() && !dri.mkdirs()) return;
-            new File(dri, "renderD128").createNewFile();
+            new File(dri, name).createNewFile();
         } catch (IOException e) {
             android.util.Log.w("LinuxRuntime", "Cannot expose the PowerVR render node", e);
             return;
         }
         bind(cmd, dri.getPath() + ":/dev/dri");
         bind(cmd, node + ":" + node);
-        android.util.Log.i("LinuxRuntime", "PowerVR: exposing real renderD128 through a listable directory");
+        android.util.Log.i("LinuxRuntime", "PowerVR: exposing real " + name + " through a listable directory");
     }
 
     /**

@@ -14,7 +14,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.Predicate;
 import org.json.JSONObject;
 
 /** Isolated glibc-to-Android Vulkan bridge. It does not replace the rootfs's Mesa libraries. */
@@ -40,11 +42,56 @@ public final class SystemVulkanDriver {
     public static boolean isAvailable() { return isPowerVr() && renderNodeAvailable(); }
 
     public static boolean renderNodeAvailable() {
-        String node = "/dev/dri/renderD128";
+        return renderNodePath() != null;
+    }
+
+    /** Select the actual PowerVR node, including devices where another GPU owns renderD128. */
+    public static String renderNodePath() {
+        String[] nodes = new File("/dev/dri").list();
+        if (nodes == null) nodes = new File("/sys/class/drm").list();
+        return findRenderNode(nodes, SystemVulkanDriver::renderNodeAvailable);
+    }
+
+    static String findRenderNode(String[] nodes, Predicate<String> available) {
+        TreeSet<String> candidates = new TreeSet<>();
+        // Android can deny directory listing while allowing direct access. Probe the kernel's
+        // reserved render range too; directory entries also cover dynamically allocated minors.
+        for (int minor = 128; minor < 192; minor++) candidates.add("renderD" + minor);
+        if (nodes != null) for (String node : nodes)
+            if (node.matches("renderD[0-9]+")) candidates.add(node);
+        for (String node : candidates) {
+            String path = "/dev/dri/" + node;
+            if (available.test(path)) return path;
+        }
+        return null;
+    }
+
+    private static boolean renderNodeAvailable(String node) {
         try {
-            return renderNodeAvailable(OsConstants.S_ISCHR(Os.stat(node).st_mode),
-                    Os.access(node, OsConstants.R_OK), Os.access(node, OsConstants.W_OK));
+            if (!renderNodeAvailable(OsConstants.S_ISCHR(Os.stat(node).st_mode),
+                    Os.access(node, OsConstants.R_OK), Os.access(node, OsConstants.W_OK))) return false;
+            return powerVrDevice(new File("/sys/class/drm/" + new File(node).getName() + "/device"));
         } catch (ErrnoException error) {
+            return false;
+        }
+    }
+
+    static boolean powerVrDriver(String driver) {
+        return "pvrsrvkm".equals(driver) || "pvr".equals(driver) || "powervr".equals(driver);
+    }
+
+    static boolean powerVrDevice(File device) {
+        try {
+            return powerVrDriver(Files.readSymbolicLink(new File(device, "driver").toPath())
+                    .getFileName().toString());
+        } catch (IOException error) {
+            // Some Android policies expose uevent but deny reading the driver symlink.
+            try (BufferedReader input = Files.newBufferedReader(
+                    new File(device, "uevent").toPath(), StandardCharsets.US_ASCII)) {
+                String line;
+                while ((line = input.readLine()) != null)
+                    if (line.startsWith("DRIVER=")) return powerVrDriver(line.substring(7));
+            } catch (IOException ignored) { }
             return false;
         }
     }
@@ -65,7 +112,7 @@ public final class SystemVulkanDriver {
     public static synchronized File prepare(Context context) throws IOException {
         if (!isPowerVr()) throw new IOException("System PowerVR Vulkan driver is unavailable");
         if (!renderNodeAvailable()) throw new IOException(
-                "System PowerVR requires a readable and writable character device at /dev/dri/renderD128");
+                "System PowerVR requires an identifiable, readable and writable DRM render node");
         File target = runtimeDirectory(context);
         File base = target.getParentFile();
         if (complete(target)) return target;
@@ -128,6 +175,8 @@ public final class SystemVulkanDriver {
         File directory;
         try { directory = prepare(context); }
         catch (IOException error) { throw new IllegalStateException("System Vulkan runtime is unavailable", error); }
+        String node = renderNodePath();
+        if (node == null) throw new IllegalStateException("System PowerVR render node is unavailable");
         environment.add("HYBRIS_ANDROID_SDK_VERSION=" + Build.VERSION.SDK_INT);
         environment.add("HYBRIS_VULKAN_HAL=" + HAL);
         environment.add("HYBRIS_LINKER_DIR=" + new File(directory, "lib/libhybris/linker").getPath());
@@ -139,6 +188,7 @@ public final class SystemVulkanDriver {
         environment.add("BL_GAMESCOPE_BACKEND=sdl");
         // The Android pvr kernel accepts Vulkan DMA-BUF imports but rejects PRIME GEM handles.
         environment.add("BL_POWERVR_DRM_HANDLES=1");
+        environment.add("BL_POWERVR_RENDER_NODE=" + node);
         // Inner Gamescope/Xwayland lacks the bridge's Android-buffer WSI protocols.
         environment.add("BL_STEAM_GL_PRESENT=1");
         // Only actual Proton game launches use the bundled DXVK and X11 WSI layer.

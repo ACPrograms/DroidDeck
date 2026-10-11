@@ -25,6 +25,7 @@ static int identity_denied, kgsl_present;
 static int kernel_error = EINVAL;
 static int native_imports, native_exports, native_closes;
 static const char *driver_name = "pvr";
+static const char *pvr_node = "/dev/dri/renderD129";
 static int fixture_stat(const char *path, struct stat *st);
 static long fixture_syscall(long number, ...);
 static int fixture_fcntl(int fd, int op, int arg);
@@ -61,7 +62,9 @@ static int fixture_stat(const char *path, struct stat *st) {
     errno = ENOENT;
     return -1;
   }
-  if (!strcmp(path, "/dev/dri/renderD128")) return stat("/dev/null", st);
+  if (!strcmp(path, pvr_node)) return stat("/dev/null", st);
+  if (!strcmp(path, "/dev/dri/renderD128")) return stat("/dev/zero", st);
+  if (!strncmp(path, "/dev/dri/", 9)) { errno = ENOENT; return -1; }
   return stat(path, st);
 }
 
@@ -145,10 +148,22 @@ int main(void) {
   int drm = test_open("/dev/null"), dma = test_open("/dev/zero");
   uint32_t handle = 0;
   unsetenv("BL_POWERVR_DRM_HANDLES");
+  setenv("BL_POWERVR_RENDER_NODE", pvr_node, 1);
   assert(drmPrimeFDToHandle(drm, dma, &handle) != 0);
   setenv("BL_POWERVR_DRM_HANDLES", "yes", 1);
   assert(drmPrimeFDToHandle(drm, dma, &handle) != 0);
   setenv("BL_POWERVR_DRM_HANDLES", "1", 1);
+  unsetenv("BL_POWERVR_RENDER_NODE");
+  assert(drmPrimeFDToHandle(drm, dma, &handle) != 0); /* no selected node */
+  setenv("BL_POWERVR_RENDER_NODE", "", 1);
+  assert(drmPrimeFDToHandle(drm, dma, &handle) != 0);
+  setenv("BL_POWERVR_RENDER_NODE", "/dev/dri/renderD128", 1);
+  assert(drmPrimeFDToHandle(drm, dma, &handle) != 0); /* another GPU owns 128 */
+  setenv("BL_POWERVR_RENDER_NODE", "/dev/dri/renderD130", 1);
+  assert(drmPrimeFDToHandle(drm, dma, &handle) != 0); /* selected node is absent */
+  setenv("BL_POWERVR_RENDER_NODE", __FILE__, 1);
+  assert(drmPrimeFDToHandle(drm, dma, &handle) != 0); /* regular files are not DRM nodes */
+  setenv("BL_POWERVR_RENDER_NODE", pvr_node, 1);
   driver_name = "other";
   assert(drmPrimeFDToHandle(drm, dma, &handle) != 0);
   driver_name = "pvr";
@@ -236,6 +251,12 @@ int main(void) {
   assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
   assert(drmPrimeHandleToFD(drm, handle, O_CLOEXEC, &out) == 0);
   fixture_close(out);
+  assert(drmCloseBufferHandle(drm, handle) == 0);
+
+  /* Preserve the original device layout when PowerVR owns renderD128. */
+  pvr_node = "/dev/dri/renderD128";
+  setenv("BL_POWERVR_RENDER_NODE", pvr_node, 1);
+  assert(drmPrimeFDToHandle(drm, dma, &handle) == 0 && (handle & PVR_HANDLE_BIT));
   assert(drmCloseBufferHandle(drm, handle) == 0);
 
   /* Retain the old KGSL path with the PowerVR opt-in unset. */
