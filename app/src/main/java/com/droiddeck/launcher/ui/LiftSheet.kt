@@ -189,6 +189,8 @@ internal fun LiftHero(
     onOpen: () -> Unit,
     onPrimary: () -> Unit,
     background: @Composable () -> Unit,
+    /** Drawn over [background] at the pane's own size: the wall's fades, which must not sink with it. */
+    scrim: @Composable () -> Unit = {},
     words: @Composable () -> Unit,
     button: @Composable (onClick: () -> Unit) -> Unit,
     rows: @Composable (tab: String) -> Unit,
@@ -360,6 +362,9 @@ internal fun LiftHero(
 
         // The wall behind sinks back about the pane's centre.
         Box(Modifier.fillMaxSize().graphicsLayer { val k = 1f - 0.05f * sink.value; scaleX = k; scaleY = k }) { background() }
+        // The fades stay put: scaled with the wall they stopped short of the pane's edges and left
+        // a bright band of unfaded wall down the side and along the top.
+        scrim()
         // The dim; a tap on it (above the sheet) folds the sheet away.
         if (shown || open) Box(
             Modifier.fillMaxSize().graphicsLayer { alpha = sink.value }.background(Color.Black.copy(alpha = 0.42f))

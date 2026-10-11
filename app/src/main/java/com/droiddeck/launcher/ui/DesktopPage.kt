@@ -137,10 +137,8 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
                     onOpen = { scope.launch { scroll.animateScrollTo(0) }; a.onDesktopSettings() },
                     onPrimary = a.onDesktop, downOpens = false, onOpenChange = { sheetOpen = it },
                     start = if (narrow) 20.dp else 44.dp, bottom = if (narrow) 20.dp else 44.dp,
-                    background = {
-                        DesktopWall(installed.map { it.iconRes } + apps.mapNotNull { it.icon })
-                        WallFade()
-                    },
+                    background = { DesktopWall(installed.map { it.iconRes } + apps.mapNotNull { it.icon }) },
+                    scrim = { WallFade() },
                     words = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

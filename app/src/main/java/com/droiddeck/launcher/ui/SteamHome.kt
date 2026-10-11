@@ -85,14 +85,14 @@ internal fun SteamHome(s: FrontEndState, a: FrontEndActions, modifier: Modifier)
         start = if (narrow) 20.dp else 44.dp, bottom = if (narrow) 20.dp else 44.dp,
         background = {
             when {
-                games.isEmpty() -> EmptyLibrary(avoid = words) { WallFade() }
+                // The mark wanders over this fade, so it sinks with the wall: drawn a little oversized,
+                // it still reaches the pane's edges at the sink's 0.95.
+                games.isEmpty() -> EmptyLibrary(avoid = words) { Box(Modifier.fillMaxSize().graphicsLayer { scaleX = 1.06f; scaleY = 1.06f }) { WallFade() } }
                 games.size < WALL_MIN_GAMES -> CapsuleFan(games)
-                else -> {
-                    CapsuleWall(games)
-                    WallFade()
-                }
+                else -> CapsuleWall(games)
             }
         },
+        scrim = { if (games.size >= WALL_MIN_GAMES) WallFade() },
         words = {
             Row(
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
