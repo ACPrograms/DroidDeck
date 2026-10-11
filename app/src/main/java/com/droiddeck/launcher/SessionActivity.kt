@@ -250,6 +250,8 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var drawerPage by mutableStateOf(SessionDrawerPage.CONTROLLER)
     private var drawerControllerActive by mutableStateOf(false)
     private var backActionsInverted by mutableStateOf(false)
+    /** What the pad is to the Steam client (SessionPrefs.CONTROLLER_*), switched from the drawer. */
+    private var padType by mutableStateOf(SessionPrefs.CONTROLLER_DECK)
     /** The on-screen PC keyboard (ui/PcKeyboard): real key presses, Esc and F1 included. */
     private var pcKeyboardOpen by mutableStateOf(false)
     private var hudOn by mutableStateOf(true)
@@ -587,6 +589,14 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                     onKeyboardButton = { on -> updateControllerPrefs { ControllerPrefs.setKeyboardButton(this@SessionActivity, on) } },
                     onSteamMenu = if (SessionState.mode == SessionService.MODE_STEAM) ({ sendSteamGuide() }) else null,
                     onQam = if (SessionState.mode == SessionService.MODE_STEAM) ({ triggerSteamQam() }) else null,
+                    // Only where the session set the pad up to be switched (SessionService: deckPad).
+                    padType = if (SessionState.mode == SessionService.MODE_STEAM && SessionState.deckPad) padType else null,
+                    onPadType = { id ->
+                        SessionPrefs.setSteamController(this@SessionActivity, id)
+                        com.droiddeck.launcher.session.SteamDeckPad.showPad(SessionPrefs.padType(id))
+                        com.droiddeck.launcher.input.FakeInputWriter.setPadType(SessionPrefs.padType(id))
+                        padType = id
+                    },
                     backActionsInverted = backActionsInverted,
                     onBackActionsInverted = { inverted ->
                         SessionPrefs.setBackActionsInverted(this@SessionActivity, inverted)
@@ -847,6 +857,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         steamDownloadsInBackground = SessionPrefs.steamDownloadsInBackground(this)
         oscMode = SessionPrefs.oscMode(this)
         backActionsInverted = SessionPrefs.backActionsInverted(this)
+        padType = SessionPrefs.steamController(this)
     }
 
     // ── Compositor ──────────────────────────────────────────────────────────────────────────

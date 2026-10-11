@@ -88,12 +88,8 @@ class ModeSettings(
     /** Steam only: SessionPrefs.SYNC_* chosen for Proton games; null outside Steam. */
     val syncBackend: String? = null,
     val stretch16x9: Boolean? = null,
-    /** Steam only: the client branch forced on the command line. */
-    val steamChannel: String? = null,
-    /** Steam only: enable the SteamOS client interface and its performance controls. */
-    val steamDeckMode: Boolean = false,
     val steamRepairQueued: Boolean = false,
-    /** Steam, Deck mode: the QAM's performance overlay (mangoapp) is started. */
+    /** Steam: the QAM's performance overlay (mangoapp) is started. */
     val mangoapp: Boolean = true,
     /** Steam only: what the pad is to the client (SessionPrefs.CONTROLLER_*); null outside Steam. */
     val steamController: String? = null,
@@ -143,9 +139,7 @@ class ModeSettingsActions(
     val onForceSsbs: (Boolean) -> Unit = {},
     val onSyncBackend: (String) -> Unit = {},
     val onStretch16x9: (Boolean) -> Unit = {},
-    val onSteamChannel: (String) -> Unit = {},
     val onSteamRepair: () -> Unit = {},
-    val onSteamDeckMode: (Boolean) -> Unit = {},
     val onMangoapp: (Boolean) -> Unit = {},
     val onSteamController: (String) -> Unit = {},
     val onUnfoldedControls: (Boolean) -> Unit = {},
@@ -258,6 +252,9 @@ fun ModeSheetRows(s: ModeSettings, a: ModeSettingsActions, tab: String, extras: 
                 host, "controller", stringResource(R.string.mode_controller), stringResource(R.string.mode_controller_hint),
                 listOf(
                     SessionPrefs.CONTROLLER_DECK to stringResource(R.string.mode_controller_deck),
+                    SessionPrefs.CONTROLLER_STEAM to stringResource(R.string.mode_controller_steam),
+                    SessionPrefs.CONTROLLER_DS4 to stringResource(R.string.mode_controller_ds4),
+                    SessionPrefs.CONTROLLER_DUALSENSE to stringResource(R.string.mode_controller_dualsense),
                     SessionPrefs.CONTROLLER_XBOX360 to stringResource(R.string.mode_controller_x360),
                 ), s.steamController,
                 note = stringResource(R.string.mode_controller_note),
@@ -419,24 +416,11 @@ fun ModeSheetRows(s: ModeSettings, a: ModeSettingsActions, tab: String, extras: 
                 )
             }
         }
-        if (s.steamChannel != null) SettingsGroup(stringResource(R.string.mode_client)) {
+        SettingsGroup(stringResource(R.string.mode_client)) {
             ToggleRow(
-                host, "steamdeck", stringResource(R.string.mode_deck_mode),
-                stringResource(R.string.mode_deck_mode_hint),
-                s.steamDeckMode, onChange = a.onSteamDeckMode,
-            )
-            if (s.steamDeckMode) ToggleRow(
                 host, "mangoapp", stringResource(R.string.mode_mangoapp),
                 stringResource(R.string.mode_mangoapp_hint),
                 s.mangoapp, onChange = a.onMangoapp,
-            )
-            // Deck mode fixes the branch (SessionPrefs.steamChannel); the choice is for Deck mode off.
-            if (s.steamDeckMode) SettingsRow(stringResource(R.string.mode_branch), stringResource(R.string.mode_branch_deck)) {}
-            else ChoiceRow(
-                host, "channel", stringResource(R.string.mode_branch), stringResource(R.string.mode_branch_hint),
-                listOf("publicbeta" to stringResource(R.string.mode_branch_public), "steamdeck_publicbeta" to stringResource(R.string.mode_branch_deck_beta)), s.steamChannel,
-                note = stringResource(R.string.mode_branch_note),
-                onPick = a.onSteamChannel,
             )
             SettingsRow(
                 stringResource(R.string.mode_steam_repair),

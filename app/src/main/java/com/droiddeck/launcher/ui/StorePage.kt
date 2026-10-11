@@ -167,17 +167,15 @@ private fun FlathubHero(s: FrontEndState, ring: Int) {
         StoreState.sections.values.flatten().mapNotNull { it.icon }.distinct().take(48).takeIf { it.size >= 8 }.orEmpty()
     }
     val busy = StoreState.busy == "setup"
-    val tile = RoundedCornerShape(17.dp)
-    val ground = Color(0xFF0B2E2B)
     BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = if (narrow) 14.dp else 22.dp, vertical = if (narrow) 10.dp else 14.dp)) {
         val shape = RoundedCornerShape(20.dp)
         Box(Modifier.fillMaxWidth().height(maxHeight.coerceAtLeast(320.dp)).clip(shape).background(colors.background).border(1.dp, pal.line, shape)) {
             // Slower while it sets up, as the empty wall drifts.
             androidx.compose.animation.Crossfade(icons, animationSpec = Motion.tw(600), label = "flathubWall") { tiles ->
-                TiltedWall(tiles.size, if (tiles.isEmpty() || busy) 75_000 else 50_000, capW = 68.dp, capH = 68.dp, gap = 14.dp) { i, m ->
-                    Box(m.clip(tile).background(ground).border(1.dp, FlathubTeal.copy(alpha = 0.18f), tile), contentAlignment = Alignment.Center) {
-                        if (tiles.isNotEmpty()) AsyncImage(model = tiles[i], contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(42.dp))
-                    }
+                val ground = Brush.linearGradient(listOf(Color(0xFF0B2E2B), Color(0xFF0B2E2B)))
+                val edge = FlathubTeal.copy(alpha = 0.18f)
+                TiltedWall(tiles.size, if (tiles.isEmpty() || busy) 75_000 else 50_000, capW = 68.dp, capH = 68.dp, gap = 14.dp, corner = 17.dp) { i ->
+                    WallCapsule(ground, edge = edge, icon = tiles.getOrNull(i))
                 }
             }
             Box(

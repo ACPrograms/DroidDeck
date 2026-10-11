@@ -297,19 +297,9 @@ private fun ShelfTitle(title: String, count: String?) {
 @Composable
 private fun DesktopWall(icons: List<Any>) {
     val pal = LocalPalette.current
-    val shape = RoundedCornerShape(8.dp)
-    TiltedWall(icons.size, if (icons.isEmpty()) 75_000 else 50_000, capW = 132.dp, capH = 84.dp, gap = 14.dp) { i, m ->
-        Box(m.clip(shape).background(Brush.linearGradient(listOf(pal.surfaceVariant, pal.surface))).border(1.dp, pal.line2, shape)) {
-            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(12.dp).background(pal.background.copy(alpha = 0.7f)))
-            val icon = icons.getOrNull(i)
-            Box(Modifier.fillMaxSize().padding(bottom = 12.dp), contentAlignment = Alignment.Center) {
-                when (icon) {
-                    is Int -> Image(painterResource(icon), null, modifier = Modifier.size(34.dp))
-                    null -> {}
-                    else -> AsyncImage(model = icon, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(34.dp))
-                }
-            }
-        }
+    val ground = remember(pal) { Brush.linearGradient(listOf(pal.surfaceVariant, pal.surface)) }
+    TiltedWall(icons.size, if (icons.isEmpty()) 75_000 else 50_000, capW = 132.dp, capH = 84.dp, gap = 14.dp, corner = 8.dp) { i ->
+        WallCapsule(ground, edge = pal.line2, icon = icons.getOrNull(i), bar = pal.background.copy(alpha = 0.7f))
     }
 }
 
