@@ -336,6 +336,7 @@ class SessionService : Service() {
         try {
             if (SystemVulkanDriver.usesDefault(SessionPrefs.linuxDriver(this))) {
                 SystemVulkanDriver.prepare(this)
+                pruneSystemVulkanRuntime()
             }
             SessionFiles.stage(this, root)
         } catch (error: Exception) {
@@ -1484,6 +1485,12 @@ class SessionService : Service() {
         }.onFailure { Log.w(TAG, "could not request Steam wake", it) }
     }
 
+    /** Background-only: preserve old runtimes until all earlier guest processes are gone. */
+    private fun pruneSystemVulkanRuntime() {
+        runCatching { SystemVulkanDriver.pruneUnused(this, !OrphanReaper.hasOtherProcesses()) }
+            .onFailure { Log.w(TAG, "could not prune unused system Vulkan runtimes", it) }
+    }
+
     private fun finishSessionStop(status: Int, stoppedGen: Int) {
         mainHandler.post {
             if (stoppedGen != sessionGen || SessionState.running) {
@@ -1599,9 +1606,11 @@ class SessionService : Service() {
                     auxiliary.forEach { (pid, started) -> teardown(pid, started) }
                     if (prootPid > 1) teardown(prootPid)
                     killGuestLeftovers()
+                    pruneSystemVulkanRuntime()
                     finishSessionStop(status, stoppedGen)
                 }, "session-teardown").start()
             } else {
+                Thread({ pruneSystemVulkanRuntime() }, "system-vulkan-prune").start()
                 finishSessionStop(status, stoppedGen)
             }
         }

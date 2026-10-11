@@ -152,6 +152,28 @@ public final class SystemVulkanDriver {
         return new File(new File(context.getFilesDir(), "system_vulkan"), version);
     }
 
+    /** Collect abandoned stages, and obsolete versions once older guests can no longer load them. */
+    public static synchronized void pruneUnused(Context context, boolean guestsStopped) throws IOException {
+        pruneUnused(runtimeDirectory(context), guestsStopped);
+    }
+
+    static synchronized void pruneUnused(File current, boolean guestsStopped) {
+        File base = current.getParentFile();
+        if (base == null || Files.isSymbolicLink(base.toPath()) || Files.isSymbolicLink(current.toPath())) return;
+        File[] entries = base.listFiles();
+        if (entries == null) return;
+        // Retain the previous good version if publishing the replacement failed.
+        boolean pruneVersions = guestsStopped && complete(current);
+        for (File entry : entries) {
+            if (entry.equals(current)) continue;
+            String name = entry.getName();
+            boolean oldVersion = pruneVersions && name.matches("[0-9a-f]{64}");
+            boolean abandonedStage = name.matches("\\.stage-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+            // The prepare monitor excludes any extraction still writing a .stage directory.
+            if (oldVersion || abandonedStage) FileUtils.delete(entry);
+        }
+    }
+
     private static boolean complete(File directory) {
         if (!new File(directory, "icd.json").isFile()) return false;
         for (String name : REQUIRED) if (!present(directory, name)) return false;
