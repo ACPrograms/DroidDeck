@@ -123,6 +123,7 @@ fun ComponentsPage(
     // The GPU drivers tab's Advanced pages: one driver list on its own, full page.
     var driverPage by remember { mutableStateOf<String?>(null) }
     val gpuTab = comp == GPU_TAB
+    val managedDxvk = ComponentsManager.runtimeManaged(comp, gpu.systemPowerVr)
     when (driverPage) {
         "rt" -> {
             DriverPage(
@@ -216,16 +217,22 @@ fun ComponentsPage(
             ) {
                 Box(Modifier.size(8.dp).background(if (st.queued != null) Color(0xFFFFB86B) else pal.good, CircleShape))
                 Text(
-                    (if (st.queued != null) stringResource(R.string.comp_next_queued, st.queued) else stringResource(R.string.comp_in_use, label, st.inUse))
-                        .let { if (reappliedAt != null) stringResource(R.string.comp_reapplied, it, reappliedAt) else it },
-                    fontSize = 14.sp, color = colors.onBackground, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                    (if (managedDxvk) stringResource(R.string.comp_in_use, label, stringResource(R.string.gpu_system_powervr)) +
+                            (st.queued?.let { "\n" + stringResource(R.string.cmgr_powervr_dxvk_queued, it) } ?: "")
+                        else if (st.queued != null) stringResource(R.string.comp_next_queued, st.queued) else stringResource(R.string.comp_in_use, label, st.inUse))
+                        .let { if (reappliedAt != null && !managedDxvk) stringResource(R.string.comp_reapplied, it, reappliedAt) else it },
+                    fontSize = 14.sp, color = colors.onBackground, maxLines = if (managedDxvk && st.queued != null) 3 else 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
                 if (st.queued != null) FocusText(stringResource(R.string.common_cancel), pal.signal, onClick = onCancelQueued)
-                else if (!narrow) Text(
+                else if (!narrow && !managedDxvk) Text(
                     if (view.inUseByGame) stringResource(R.string.comp_waits) else stringResource(R.string.comp_applies_next_game),
                     fontSize = 13.sp, color = colors.onSurfaceVariant, maxLines = 1,
                 )
             }
+            if (managedDxvk) Text(
+                stringResource(R.string.cmgr_powervr_dxvk_managed),
+                fontSize = 13.sp, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp),
+            )
         }
 
         // ---- the lists ------------------------------------------------------------------------------
@@ -251,7 +258,7 @@ fun ComponentsPage(
                 val build = ComponentsManager.safeName(p.version)
                 val originals = view.originals.filter { it.comp == comp }
                 val stored = snapshot.packages.filter { it.comp == comp }
-                val activeIsOriginal = st.activeFile == null
+                val activeIsOriginal = !managedDxvk && st.activeFile == null
                 val rows = originals.map { o ->
                     val isCurrent = o.protonVersion == build
                     InstalledItem(
@@ -260,7 +267,7 @@ fun ComponentsPage(
                         "ORIGINAL", activeIsOriginal && isCurrent, !isCurrent, null, o.protonVersion,
                     )
                 } + stored.map { s ->
-                    InstalledItem(s.version, stringResource(R.string.common_size_mb, s.size / 1048576.0), "STORED", s.file == st.activeFile, true, s.file, null)
+                    InstalledItem(s.version, stringResource(R.string.common_size_mb, s.size / 1048576.0), "STORED", !managedDxvk && s.file == st.activeFile, true, s.file, null)
                 }
                 val storedNames = snapshot.packages.map { it.file }.toSet()
                 val available = catalog.filter { it.comp == comp && ComponentsManager.safeName(it.file) !in storedNames }
@@ -277,9 +284,9 @@ fun ComponentsPage(
                         )
                         rows.forEachIndexed { i, item ->
                             InstalledLine(
-                                item, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                                item, enabled = !managedDxvk, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
                                 onSelect = {
-                                    if (item.selected) return@InstalledLine
+                                    if (managedDxvk || item.selected) return@InstalledLine
                                     val waits = if (view.inUseByGame) ctx.getString(R.string.comp_waits_long) else ctx.getString(R.string.comp_applies_long)
                                     if (item.file != null) ask(ctx.getString(R.string.comp_swap_title, label), ctx.getString(R.string.comp_swap_body, item.name, p.name, waits), R.string.comp_swap) { onSwap(item.file) }
                                     else ask(ctx.getString(R.string.comp_restore_title, label), ctx.getString(R.string.comp_restore_body, item.protonVersion, p.name, waits), R.string.common_restore) { onRestore(item.protonVersion!!) }
@@ -309,8 +316,11 @@ fun ComponentsPage(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 14.dp)) {
                         SmallButton(stringResource(R.string.comp_import_wcp), onClick = onImport)
-                        if (!activeIsOriginal && originals.any { it.protonVersion == build }) FocusText(stringResource(R.string.comp_restore_original), pal.signal) {
-                            ask(ctx.getString(R.string.comp_restore_title, label), ctx.getString(R.string.comp_restore_original_body, p.name, label), R.string.common_restore) { onRestore(build) }
+                        if (!activeIsOriginal && originals.any { it.protonVersion == build }) {
+                            if (managedDxvk) SmallButton(stringResource(R.string.comp_restore_original), enabled = false) {}
+                            else FocusText(stringResource(R.string.comp_restore_original), pal.signal) {
+                                ask(ctx.getString(R.string.comp_restore_title, label), ctx.getString(R.string.comp_restore_original_body, p.name, label), R.string.common_restore) { onRestore(build) }
+                            }
                         }
                     }
                 }
@@ -416,11 +426,11 @@ private fun Tag(text: String) {
 }
 
 @Composable
-private fun InstalledLine(item: InstalledItem, modifier: Modifier = Modifier, onSelect: () -> Unit, onDelete: () -> Unit) {
+private fun InstalledLine(item: InstalledItem, enabled: Boolean = true, modifier: Modifier = Modifier, onSelect: () -> Unit, onDelete: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     val src = remember { MutableInteractionSource() }
-    val hot = src.collectIsFocusedAsState().value || src.collectIsHoveredAsState().value
+    val hot = enabled && (src.collectIsFocusedAsState().value || src.collectIsHoveredAsState().value)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
@@ -430,8 +440,8 @@ private fun InstalledLine(item: InstalledItem, modifier: Modifier = Modifier, on
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.weight(1f).heightIn(min = 56.dp).then(modifier)
                 .glideBorder(hot, ROW_SHAPE, pal.signal)
-                .hoverable(src).clickable(interactionSource = src, indication = null, onClick = onSelect)
-                .controllerConfirm(onClick = onSelect)
+                .hoverable(src).clickable(interactionSource = src, indication = null, enabled = enabled, onClick = onSelect)
+                .controllerConfirm(enabled = enabled, onClick = onSelect)
                 .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(20.dp).border(2.dp, if (item.selected) pal.signal else colors.onSurfaceVariant, CircleShape)) {
@@ -441,7 +451,7 @@ private fun InstalledLine(item: InstalledItem, modifier: Modifier = Modifier, on
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         item.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        color = if (item.selected) pal.signal else colors.onBackground, modifier = Modifier.weight(1f, fill = false),
+                        color = if (!enabled) colors.onSurfaceVariant else if (item.selected) pal.signal else colors.onBackground, modifier = Modifier.weight(1f, fill = false),
                     )
                     Tag(item.tag)
                 }

@@ -80,6 +80,9 @@ class GpuDriversState(
     val supported: Boolean = true,
     val unsupported: Boolean = false,
     val auto: Boolean = true,
+    val powerVr: Boolean = false,
+    /** The selected runtime supplies DXVK for PowerVR game launches. */
+    val systemPowerVr: Boolean = false,
     val pairs: List<PairRow> = emptyList(),
     /** The pair key being installed, and how far along (-1 = unknown). */
     val busy: String? = null,
@@ -133,7 +136,7 @@ internal fun GpuDriversPanel(s: GpuDriversState, a: GpuDriversActions, onAdvance
         DeviceCard(s)
         if (!s.unsupported) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ModeCard(Icons.Outlined.AutoAwesome, stringResource(R.string.common_auto), stringResource(R.string.gpu_auto_hint), s.auto, Modifier.weight(1f)) { a.onAuto(true) }
+                ModeCard(Icons.Outlined.AutoAwesome, stringResource(R.string.common_auto), stringResource(if (s.powerVr) R.string.gpu_auto_system_hint else R.string.gpu_auto_hint), s.auto, Modifier.weight(1f)) { a.onAuto(true) }
                 ModeCard(Icons.Outlined.Tune, stringResource(R.string.mode_suspend_manual), stringResource(R.string.gpu_manual_hint), !s.auto, Modifier.weight(1f)) { a.onAuto(false) }
             }
             if (s.auto) AutoCard(s)
@@ -208,9 +211,9 @@ private fun DeviceCard(s: GpuDriversState) {
         else -> AttentionAmber
     }
     var open by rememberSaveable { mutableStateOf(false) }
-    var details by remember { mutableStateOf<List<DeviceInfo.Section>?>(null) }
-    var copied by remember { mutableStateOf(false) }
-    LaunchedEffect(open) {
+    var details by remember(s.linuxSelected, s.androidSelected, s.auto) { mutableStateOf<List<DeviceInfo.Section>?>(null) }
+    var copied by remember(s.linuxSelected, s.androidSelected, s.auto) { mutableStateOf(false) }
+    LaunchedEffect(open, s.linuxSelected, s.androidSelected, s.auto) {
         if (open && details == null) details = withContext(Dispatchers.IO) { DeviceInfo.collect(context) }
     }
     val src = remember { MutableInteractionSource() }
@@ -308,11 +311,12 @@ private fun AutoCard(s: GpuDriversState) {
     ) {
         Text(stringResource(R.string.gpu_in_use_caps), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, color = colors.onSurfaceVariant)
         Text(
-            active?.let { "${it.name} ${it.version}" } ?: s.activeBundle ?: stringResource(R.string.gpu_builtin),
+            active?.let { "${it.name} ${it.version}" } ?: s.activeBundle ?: stringResource(if (s.systemPowerVr) R.string.gpu_system_powervr else R.string.gpu_builtin),
             fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground,
         )
         Text(
-            if (active != null || s.activeBundle != null) stringResource(R.string.gpu_matched_pair)
+            if (s.systemPowerVr) stringResource(R.string.gpu_auto_system_hint)
+            else if (active != null || s.activeBundle != null) stringResource(R.string.gpu_matched_pair)
             else recommended?.let { stringResource(R.string.gpu_recommended_for, it.name) } ?: stringResource(R.string.gpu_refresh_hint),
             fontSize = 13.sp, color = colors.onSurfaceVariant,
         )
