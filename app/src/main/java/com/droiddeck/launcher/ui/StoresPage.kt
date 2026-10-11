@@ -887,7 +887,7 @@ private fun Storefront(
  * search field across the row, and [trailing] (the account) at the right, over a rule.
  */
 @Composable
-private fun ModeHeader(title: String, query: String, onQuery: (String) -> Unit, placeholder: String, trailing: @Composable () -> Unit) {
+internal fun ModeHeader(title: String, query: String, onQuery: (String) -> Unit, placeholder: String, trailing: @Composable () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     // Open while it holds a query; an empty field closes again once focus leaves it.
@@ -941,6 +941,22 @@ internal fun storePalette(base: Palette, store: Store?): Palette {
         base.onBackground, base.onSurfaceVariant, primary = accent, primary2 = deep, onPrimary = on, signal = accent,
         good = base.good, error = base.error,
     )
+}
+
+/** The Store section's accent: Flathub's teal, with its dark ink on it. */
+internal fun flathubPalette(base: Palette): Palette = Palette(
+    base.id, base.label, base.detail, base.background, base.surface, base.surfaceVariant, base.line, base.line2,
+    base.onBackground, base.onSurfaceVariant, primary = FlathubTeal, primary2 = Color(0xFF2E958D), onPrimary = FlathubInk, signal = FlathubTeal,
+    good = base.good, error = base.error,
+)
+
+/** [content] with the focus ring, buttons, step-outs and the chip glide in Flathub's teal. */
+@Composable
+internal fun FlathubTheme(content: @Composable () -> Unit) {
+    val base = LocalPalette.current
+    val p = remember(base) { flathubPalette(base) }
+    val scheme = MaterialTheme.colorScheme.copy(primary = p.primary, onPrimary = p.onPrimary)
+    CompositionLocalProvider(LocalPalette provides p) { MaterialTheme(colorScheme = scheme, typography = MaterialTheme.typography, content = content) }
 }
 
 /** [content] with the focus ring, buttons and step-outs in [store]'s colour. */
@@ -1002,7 +1018,7 @@ private fun SignOutButton(store: Store, name: String) {
 
 /** The header's magnifier: a round button the search field opens out of. */
 @Composable
-private fun SearchIcon(description: String, onClick: () -> Unit) {
+internal fun SearchIcon(description: String, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     val src = remember { MutableInteractionSource() }

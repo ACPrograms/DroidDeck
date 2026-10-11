@@ -151,19 +151,28 @@ internal fun TiltedWall(
     count: Int,
     driftMs: Int,
     modifier: Modifier = Modifier,
+    /** One tile's size, and the gap between tiles: portrait capsules unless a wall says otherwise. */
+    capW: androidx.compose.ui.unit.Dp = 112.dp,
+    capH: androidx.compose.ui.unit.Dp = 168.dp,
+    gap: androidx.compose.ui.unit.Dp = 14.dp,
     capsule: @Composable (index: Int, modifier: Modifier) -> Unit,
 ) {
-    val capW = 112.dp
-    val capH = 168.dp
-    val gap = 14.dp
-    val transition = rememberInfiniteTransition(label = "wall")
-    val drift = transition.animateFloat(
-        0f, 1f,
-        infiniteRepeatable(tween(driftMs, easing = LinearEasing)),
-        label = "drift",
-    )
+    // The drift's phase, advanced each frame by the time since the last over the period now: the
+    // period can change (a wall slowing while something works) without the wall jumping.
+    val drift = remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val period = androidx.compose.runtime.rememberUpdatedState(driftMs)
     // Animations off in the system settings: a still wall.
     val still = Motion.scale == 0f
+    androidx.compose.runtime.LaunchedEffect(still) {
+        if (still) return@LaunchedEffect
+        var last = 0L
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { t ->
+                if (last != 0L) drift.floatValue = (drift.floatValue + (t - last) / 1e6f / (period.value * Motion.scale)) % 1f
+                last = t
+            }
+        }
+    }
     BoxWithConstraints(modifier.fillMaxSize()) {
         // Centred on the page and big enough that, once tilted, it still covers every corner.
         val tilt = Math.toRadians(13.0)
@@ -186,7 +195,7 @@ internal fun TiltedWall(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(gap),
                     modifier = Modifier.wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer {
-                        val shift = if (still) 0f else run.toPx() * drift.value
+                        val shift = if (still) 0f else run.toPx() * drift.floatValue
                         translationY = if (c % 2 == 0) -shift else shift - run.toPx()
                     },
                 ) {

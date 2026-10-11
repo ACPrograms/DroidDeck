@@ -123,18 +123,20 @@ internal fun SideRail(
         // Where each item sits in the column, for the selection that glides between them.
         val bounds = remember { androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
         val tint = androidx.compose.runtime.rememberUpdatedState(LocalPalette.current.signal)
-        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        var railAt by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).onGloballyPositioned { railAt = it.boundsInRoot().topLeft }) {
         // One selection for the whole rail, under the items: it glides from item to item as the
         // chips' does, its leading edge first, and a jump of more than one item goes as a drop.
-        if (shown in keys) ChipGlide(keys.indexOf(shown), bounds[shown], tint, GlideAxis.Vertical, corner = 14.dp, fill = 0.14f, outline = 0f)
+        if (shown in keys) ChipGlide(keys.indexOf(shown), bounds[shown]?.translate(-railAt), tint, GlideAxis.Vertical, corner = 14.dp, fill = 0.14f, outline = 0f)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
             val place: (String) -> Modifier = { key ->
+                // In root px: an item that comes and goes sits in its own wrapper, not the column.
                 Modifier.onGloballyPositioned {
-                    bounds[key] = it.boundsInParent()
+                    bounds[key] = it.boundsInRoot()
                     Hops.railBounds[key] = it.boundsInRoot()
                 }
             }
