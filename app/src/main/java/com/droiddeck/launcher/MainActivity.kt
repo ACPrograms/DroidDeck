@@ -163,8 +163,6 @@ class MainActivity : ComponentActivity() {
     private var orientation by mutableStateOf(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
     private var launcherFullscreen by mutableStateOf(true)
     private var animationsEnabled by mutableStateOf(true)
-    private var storeEnabled by mutableStateOf(false)
-    private var gameStoresEnabled by mutableStateOf(false)
     private var gameStoresSpeedTier by mutableStateOf("fast")
     private var storesOpenTab by mutableStateOf(SessionPrefs.STORES_OPEN_LIBRARY)
     /** A page a notification asked for ("stores:downloads", "app:<id>"), until the front end has gone there. */
@@ -536,8 +534,6 @@ class MainActivity : ComponentActivity() {
         requestedOrientation = orientation
         launcherFullscreen = SessionPrefs.launcherFullscreen(this)
         animationsEnabled = SessionPrefs.animationsEnabled(this)
-        storeEnabled = SessionPrefs.storeEnabled(this)
-        gameStoresEnabled = SessionPrefs.gameStoresEnabled(this)
         gameStoresSpeedTier = SessionPrefs.gameStoresSpeedTier(this)
         storesOpenTab = SessionPrefs.storesOpenTab(this)
         storesShowMature = SessionPrefs.storesShowMature(this)
@@ -591,8 +587,6 @@ class MainActivity : ComponentActivity() {
                         orientation = orientation,
                         launcherFullscreen = launcherFullscreen,
                         animationsEnabled = animationsEnabled,
-                        storeEnabled = storeEnabled,
-                        gameStoresEnabled = gameStoresEnabled,
                         gameStoresSpeedTier = gameStoresSpeedTier,
                         storesOpenTab = storesOpenTab,
                         navigate = navRequest,
@@ -755,8 +749,6 @@ class MainActivity : ComponentActivity() {
                             launcherFullscreen = on
                             applyLauncherFullscreen()
                         },
-                        onStoreEnabled = { on -> SessionPrefs.setStoreEnabled(this, on); storeEnabled = on },
-                        onGameStoresEnabled = { on -> SessionPrefs.setGameStoresEnabled(this, on); gameStoresEnabled = on; if (on) com.droiddeck.launcher.stores.StoresState.refresh(this) },
                         onGameStoresSpeedTier = { tier -> SessionPrefs.setGameStoresSpeedTier(this, tier); gameStoresSpeedTier = tier },
                         onStoresOpenTab = { tab -> SessionPrefs.setStoresOpenTab(this, tab); storesOpenTab = tab },
                         onNavigated = { navRequest = null },
@@ -989,7 +981,7 @@ class MainActivity : ComponentActivity() {
         refreshWifiDiscovery()
         // Back from a store's sign-in page: the Stores chips show the account at once. A store
         // install finishing while this screen is up rebuilds the Games list through the listener.
-        if (gameStoresEnabled) com.droiddeck.launcher.stores.StoresState.refresh(this)
+        com.droiddeck.launcher.stores.StoresState.refresh(this)
         com.droiddeck.launcher.stores.StoresState.libraryListener = { refreshAddedGames(); refresh() }
         com.droiddeck.launcher.ui.Motion.refresh(this)
         // Back from a session stopped behind a flood: open on its blue, before the first frame.

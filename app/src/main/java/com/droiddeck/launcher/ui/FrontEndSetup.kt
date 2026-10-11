@@ -390,17 +390,6 @@ internal fun SetupPanel(
                                 ) { a.onLauncherFullscreen(it) }
                             }
                         }
-                        val rail: @Composable () -> Unit = {
-                            SettingsGroup(stringResource(R.string.setup_group_rail)) {
-                                // Flathub is a page of Desktop's, not a rail item: this shows its card there.
-                                ToggleRow(
-                                    host, "store-enabled", stringResource(R.string.setup_store),
-                                    if (s.storeEnabled) stringResource(R.string.setup_store_on) else stringResource(R.string.setup_store_off),
-                                    s.storeEnabled, onChange = a.onStoreEnabled,
-                                )
-                                RailToggle("stores", host, "stores-enabled", stringResource(R.string.setup_stores_show), null, s.gameStoresEnabled, a.onGameStoresEnabled)
-                            }
-                        }
                         val art: @Composable () -> Unit = {
                             SettingsGroup(stringResource(R.string.setup_group_art)) {
                                 ToggleRow(host, "added-art", stringResource(R.string.mode_added_art), stringResource(R.string.mode_added_art_hint), s.addedGamesArt) { a.onAddedGamesArt(it) }
@@ -410,11 +399,11 @@ internal fun SetupPanel(
                                 )
                             }
                         }
-                        // Two columns on a wide page: how it looks and this device; then the rail and the art.
+                        // Two columns on a wide page: how it looks; this device and the library's art.
                         if (wide) Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-                            Column(Modifier.weight(1f)) { look(); rail() }
+                            Column(Modifier.weight(1f)) { look() }
                             Column(Modifier.weight(1f)) { device(); art() }
-                        } else { look(); device(); rail(); art() }
+                        } else { look(); device(); art() }
                     }
                     3 -> {
                         SettingsGroup(stringResource(R.string.setup_tab_diagnostics)) {
@@ -467,23 +456,6 @@ private fun ReadinessCard(passing: Int, total: Int, line: String, open: Boolean,
                 Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
                 checks()
             }
-        }
-    }
-}
-
-/**
- * A rail section's switch. On, its rail item comes in with the rail's own entrance; off, a dot
- * flies from this row to the item as it folds away.
- */
-@Composable
-private fun RailToggle(rail: String, host: MenuHost, key: String, label: String, hint: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    var at by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    Box(Modifier.onGloballyPositioned { at = it.boundsInRoot() }) {
-        ToggleRow(host, key, label, hint, checked) { on ->
-            val from = at
-            val to = Hops.railBounds[rail]
-            if (!on && from != null && to != null) Flights.fly(Flight(from, to = { to.center }))
-            onChange(on)
         }
     }
 }

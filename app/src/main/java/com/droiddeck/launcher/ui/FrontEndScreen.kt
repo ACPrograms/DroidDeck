@@ -134,10 +134,6 @@ class FrontEndState(
     val orientation: Int = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
     val launcherFullscreen: Boolean = true,
     val animationsEnabled: Boolean = true,
-    /** The Flathub Store, a beta the user turns on in Setup. */
-    val storeEnabled: Boolean = false,
-    /** The Stores section (GOG, Epic Games, Amazon Games), turned on in Setup. */
-    val gameStoresEnabled: Boolean = false,
     /** Setup › Stores: the download engine's speed tier (stores/download/StoreDownloadTier ids). */
     val gameStoresSpeedTier: String = "fast",
     /** Setup › Stores: the tab a signed-in store opens on (SessionPrefs.STORES_OPEN_LIBRARY / STORE). */
@@ -216,8 +212,6 @@ class FrontEndActions(
     val onOrientation: (Int) -> Unit = {},
     val onLauncherFullscreen: (Boolean) -> Unit = {},
     val onAnimationsEnabled: (Boolean) -> Unit = {},
-    val onStoreEnabled: (Boolean) -> Unit = {},
-    val onGameStoresEnabled: (Boolean) -> Unit = {},
     val onGameStoresSpeedTier: (String) -> Unit = {},
     val onStoresOpenTab: (String) -> Unit = {},
     val onNavigated: () -> Unit = {},
@@ -464,9 +458,6 @@ private fun FrontEndScreenBody(s: FrontEndState, a: FrontEndActions, page: (@Com
         selected = if (selected.startsWith("rom:")) "emu:" + selected.removePrefix("rom:").substringBefore(':') else "desktop"
     }
     LaunchedEffect(s.isHomeApp) { if (!s.isHomeApp && selected == "android-apps") selected = "steam" }
-    // The Store turned off in Setup takes its page with it; so does Stores.
-    LaunchedEffect(s.storeEnabled) { if (!s.storeEnabled && selected == "store") selected = "desktop" }
-    LaunchedEffect(s.gameStoresEnabled) { if (!s.gameStoresEnabled && selected == "stores") selected = "games" }
     // The last game uninstalled leaves the Games tab on its empty state.
     LaunchedEffect(s.steamGames.isEmpty()) {
         if (s.steamGames.isEmpty() && selected.startsWith("app:")) selected = "games"

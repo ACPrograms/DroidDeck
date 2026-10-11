@@ -189,6 +189,11 @@ internal fun LiftHero(
      */
     scrim: @Composable (lifted: () -> Float) -> Unit = {},
     words: @Composable () -> Unit,
+    /**
+     * Buttons beside the big one (Desktop's Flathub and +). They stay where they are and fade as
+     * the sheet lifts: only the big button rides it.
+     */
+    beside: @Composable () -> Unit = {},
     button: @Composable (onClick: () -> Unit) -> Unit,
     rows: @Composable (tab: String) -> Unit,
     modifier: Modifier = Modifier,
@@ -598,6 +603,7 @@ internal fun LiftHero(
         Column(Modifier.align(Alignment.BottomStart).padding(start = start, bottom = bottom, end = 20.dp)) {
             Box(Modifier.graphicsLayer { alpha = 1f - sink.value }) { words() }
             Spacer(Modifier.height(18.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
                 Modifier
                     .onGloballyPositioned { rest = it.boundsInRoot() }
@@ -621,6 +627,14 @@ internal fun LiftHero(
                     if (launching) return@button
                     if (open || shown) { launching = true; open = false } else onPrimary()
                 }
+            }
+            // Gone with the words while the sheet is up; nothing a pad or a finger can reach then.
+            val besideShown = !(open || shown)
+            Row(
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.graphicsLayer { alpha = 1f - sink.value }
+                    .focusProperties { canFocus = besideShown },
+            ) { if (besideShown || sink.value < 0.99f) beside() }
             }
         }
 

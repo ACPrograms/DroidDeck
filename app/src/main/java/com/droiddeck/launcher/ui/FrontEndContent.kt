@@ -274,12 +274,12 @@ private fun Content(
         return
     }
     // The Store scrolls and navigates inside itself (its tabs and an app's page).
-    if (selected == "store" && s.storeEnabled) {
+    if (selected == "store") {
         StorePage(s, a, modifier)
         return
     }
     // Stores (GOG, Epic, Amazon) takes the whole pane: chips, shelves and a game's page inside it.
-    if (selected == "stores" && s.gameStoresEnabled) {
+    if (selected == "stores") {
         StoresPage(s, a, modifier)
         return
     }

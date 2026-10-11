@@ -109,7 +109,7 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
     val colors = MaterialTheme.colorScheme
     LaunchedEffect(Unit) { UserAppsState.refresh(ctx) }
     // Flathub's installed apps sit with the others on the dock.
-    LaunchedEffect(s.ready, s.storeEnabled) { if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.refresh(ctx) }
+    LaunchedEffect(s.ready) { com.droiddeck.launcher.store.StoreState.refresh(ctx) }
     val installed = s.emulators.filter { it.installed }
     val apps = UserAppsState.items
     var adding by rememberSaveable { mutableStateOf(false) }
@@ -137,7 +137,7 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
             // Over the fades, so the cards read at full strength; gone as the sheet lifts, so
             // nothing but the wall is behind it.
             Box(Modifier.graphicsLayer { val v = lifted(); alpha = 1f - v; translationY = -12.dp.toPx() * v }) {
-                DesktopDock(s, a, installed, apps, onAdd = { if (!s.busy) adding = true }, openFrom = ::openFrom)
+                DesktopDock(s, a, installed, apps, openFrom = ::openFrom)
             }
         },
         words = {
@@ -157,6 +157,12 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
             // Enabled without a runtime or the desktop: the session's loading screen installs them first.
             PrimaryButton(open, enabled = !s.busy, main = true, large = true, icon = Icons.Outlined.DesktopWindows, onClick = click)
         },
+        beside = {
+            // Flathub, whose apps run in the desktop: its storefront floods out of this button.
+            HeroIconButton(Icons.Outlined.Storefront, stringResource(R.string.flathub_name), FlathubTeal, "desktop:flathub") { at -> openFrom(at, null, "store") }
+            // Add your own app or game.
+            HeroIconButton(Icons.Filled.Add, stringResource(R.string.user_apps_add), null, "desktop:add") { if (!s.busy) adding = true }
+        },
         rows = { tab ->
             if (tab == SheetTab.FILES) DesktopFiles(s, a)
             else a.modeSheet(mode, tab, SheetExtras())
@@ -167,19 +173,19 @@ internal fun DesktopPage(s: FrontEndState, a: FrontEndActions, modifier: Modifie
 
 /**
  * The dock along the top of the Desktop hero: what runs in the desktop (emulators installed, apps
- * added, Flathub's installed apps), then what can be added (emulators to get, Add, Flathub) - one
+ * added, Flathub's installed apps), then the emulators that can be added - one
  * row of cards that scrolls sideways, over the wall. It sinks back with the wall as the sheet lifts.
  */
 @Composable
 private fun DesktopDock(
     s: FrontEndState, a: FrontEndActions, installed: List<Library.Emulator>, apps: List<UserApps.App>,
-    onAdd: () -> Unit, openFrom: (Rect?, Any?, String) -> Unit,
+    openFrom: (Rect?, Any?, String) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     val narrow = LocalNarrowPane.current
     val available = s.emulators.filter { !it.installed }
-    val flatpaks = if (s.storeEnabled) com.droiddeck.launcher.store.StoreState.installed else emptyList()
+    val flatpaks = com.droiddeck.launcher.store.StoreState.installed
     val keys = installed.map { "emu:${it.id}" } + apps.map { "user:${it.key}" } + flatpaks.map { "flatpak:${it.id}" }
     // Where the last of your apps sits, for a new emulator's dot to land after it.
     var lastAt by remember { mutableStateOf<Rect?>(null) }
@@ -188,6 +194,8 @@ private fun DesktopDock(
     val mounted = remember { booleanArrayOf(false) }
     LaunchedEffect(Unit) { mounted[0] = true }
     val scroll = rememberScrollState()
+    // Nothing yet (the emulators' catalog still on its way): no heading over an empty row.
+    if (keys.isEmpty() && available.isEmpty() && UserAppsState.working == null && UserAppsState.lastError == null) return
     Column(Modifier.fillMaxWidth().padding(top = if (narrow) 14.dp else 22.dp)) {
         Text(
             stringResource(R.string.user_apps_section).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp,
@@ -256,19 +264,38 @@ private fun DesktopDock(
                     }
                 }
             }
-            DesktopCard("add", stringResource(R.string.user_apps_add), stringResource(R.string.user_apps_add_detail), art = null, fallback = Icons.Filled.Add, accent = true) { onAdd() }
-            if (s.storeEnabled) {
-                // Flathub's apps run in the desktop: its storefront is a page of Desktop's,
-                // flooding out of this card as an emulator's does.
-                DesktopCard("flathub", stringResource(R.string.flathub_name), stringResource(R.string.flathub_line), art = null, fallback = Icons.Outlined.Storefront, tint = FlathubTeal) { at ->
-                    openFrom(at, null, "store")
-                }
-            }
         }
         if (UserAppsState.working != null || UserAppsState.lastError != null) {
             Box(Modifier.padding(start = if (narrow) 20.dp else 44.dp, end = 20.dp, top = 6.dp)) { UserAppsProgressLine() }
         }
     }
+}
+
+/**
+ * A square button the big one's height beside it on the hero: an icon in [tint] (the palette's
+ * signal when null). [onClick] gets its bounds, for a page to flood out of.
+ */
+@Composable
+private fun HeroIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, tint: Color?, id: String, onClick: (Rect?) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val pal = LocalPalette.current
+    val src = remember { MutableInteractionSource() }
+    val hot = rememberHot(src)
+    val pressed by src.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else if (hot) 1.04f else 1f, Motion.sp(0.5f, Spring.StiffnessMedium), label = "heroIcon")
+    val shape = RoundedCornerShape(12.dp)
+    val accent = tint ?: pal.signal
+    var at by remember { mutableStateOf<Rect?>(null) }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(56.dp).paneItem("btn:$id").onGloballyPositioned { at = it.boundsInRoot() }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(shape).background(if (hot) accent.copy(alpha = 0.18f) else colors.surface.copy(alpha = 0.92f))
+            .glideBorder(hot, shape, accent, pal.line2)
+            .hoverable(src).clickable(interactionSource = src, indication = LocalIndication.current, role = Role.Button) { onClick(at) }
+            .controllerConfirm { onClick(at) }
+            .semantics { contentDescription = description },
+    ) { Icon(icon, null, tint = accent, modifier = Modifier.size(26.dp)) }
 }
 
 /**
