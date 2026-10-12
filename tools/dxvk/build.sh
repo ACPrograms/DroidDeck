@@ -5,6 +5,15 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/tools/dxvk/source.env"
 mkdir -p "${1:?output directory required}"
 out=$(cd "$1" && pwd)
+# Refuse to mix a pinned build with prior DLLs or an incomplete previous build.
+# Include dotfiles in the check and leave all existing contents untouched.
+shopt -s nullglob dotglob
+existing=("$out"/*)
+if ((${#existing[@]})); then
+  printf '%s\n' 'output directory must be empty; use a fresh build directory' >&2
+  exit 1
+fi
+shopt -u nullglob dotglob
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 git init -q "$work/source"
@@ -17,6 +26,8 @@ for patch in "$root"/tools/dxvk/patches/*.patch; do
   git -C "$work/source" apply "$patch"
 done
 python3 "$root/tools/dxvk/check_present_sync.py" "$work/source/src/dxvk/dxvk_presenter.cpp"
+python3 "$root/tools/dxvk/check_hud_storage_format.py" "$work/source/src/dxvk/hud/shaders/hud_frame_time_eval.comp"
+python3 "$root/tools/dxvk/check_d3d9_single_sample.py" "$work/source"
 for arch in 32 64; do
   meson setup "$work/build$arch" "$work/source" --cross-file "$work/source/build-win$arch.txt" \
     --buildtype release --prefix "$out" --bindir "x$arch" --libdir "x$arch" -Db_ndebug=if-release --strip

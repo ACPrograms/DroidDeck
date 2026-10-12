@@ -49,7 +49,23 @@ int32_t ANativeWindow_getWidth(ANativeWindow *);
 int32_t ANativeWindow_getHeight(ANativeWindow *);
 void ANativeWindow_release(ANativeWindow *);
 ''')
-        (tmp / 'android/hardware_buffer.h').write_text('#pragma once\ntypedef struct AHardwareBuffer AHardwareBuffer;\n')
+        (tmp / 'android/hardware_buffer.h').write_text('''
+#pragma once
+#include <stdint.h>
+typedef struct AHardwareBuffer AHardwareBuffer;
+typedef struct AHardwareBuffer_Desc {
+    uint32_t width, height, layers, format;
+    uint64_t usage;
+    uint32_t stride, rfu0;
+    uint64_t rfu1;
+} AHardwareBuffer_Desc;
+#define AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE (1ULL << 8)
+#define AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT (1ULL << 14)
+#define AHARDWAREBUFFER_USAGE_GPU_MIPMAP_COMPLETE (1ULL << 26)
+static inline void AHardwareBuffer_describe(const AHardwareBuffer *b, AHardwareBuffer_Desc *d) { (void)b; *d = (AHardwareBuffer_Desc){0}; }
+static inline void AHardwareBuffer_acquire(AHardwareBuffer *b) { (void)b; }
+static inline void AHardwareBuffer_release(AHardwareBuffer *b) { (void)b; }
+''')
         (tmp / 'android/log.h').write_text('''
 #pragma once
 #define ANDROID_LOG_INFO 4

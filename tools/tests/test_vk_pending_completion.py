@@ -62,7 +62,10 @@ static struct {
     void (*DestroyImage)(uintptr_t, uintptr_t, void *);
     void (*FreeMemory)(uintptr_t, uintptr_t, void *);
 } g_vk = {wait_fn, unmap_fn, destroy_fn, free_fn};
-struct vkp_image { uintptr_t image, mem; void *map; };
+typedef struct AHardwareBuffer AHardwareBuffer;
+static int released_buffers;
+static void AHardwareBuffer_release(AHardwareBuffer *b) { (void)b; ++released_buffers; }
+struct vkp_image { uintptr_t image, mem; void *map; AHardwareBuffer *android_buffer; };
 static void blendp_forget_image(uintptr_t image) { (void)image; ++forgotten; }
 /* PRODUCTION_FUNCTIONS */
 static struct vkp_image *image(void) {

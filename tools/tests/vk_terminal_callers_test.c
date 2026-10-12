@@ -83,6 +83,7 @@ void hdrc_forget_image(VkImage i) {}
 int hdrc_encode(VkCommandBuffer c, VkImage a, VkImage b, VkFormat f, int w, int h, const struct hdrc_params *p) { return -1; }
 void blendp_bind_device(VkDevice d) {}
 void blendp_forget_image(VkImage i) {}
+void vkp_effects_forget_image(VkImage i) {}
 void blendp_begin_frame(void) {}
 int blendp_draw(VkCommandBuffer c, VkImage s, VkFormat sf, int sw, int sh, int sg,
                 VkImage d, VkFormat df, int dw, int dh, const VkImageBlit *b) { return -1; }

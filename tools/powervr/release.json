@@ -133,7 +133,7 @@
         "repository_commit": "aee0ebd43557ef9964ba7f6a11d7d30efaf983ac"
       },
       "recipe_inputs": {
-        "tools/dxvk/build.sh": "f37efdc1dbcc511b0399e1027d582dfd09f689bddb434eed31c33d88867460ad",
+        "tools/dxvk/build.sh": "88b656292a6a8c92974f1c014dd685e104818ef45af5fa4e62b729452c969d6e",
         "tools/dxvk/check_present_sync.py": "42e2a590e17c1f53e5cd4100ef3d19a5bdcce31a6d7a18fbf9961f4ef27d5063",
         "tools/dxvk/patches/0001-check-direct3d-bc-formats.patch": "d38fc4d773b7974498dcb377dbaa883c9bba36aefa3235b39bca69d6dd220c77",
         "tools/dxvk/patches/0002-present-semaphore-per-swapchain-image.patch": "c802789a33099d3efc3413a297e2b752f8eb84c18cbfbdfc04e188f4090410d0",

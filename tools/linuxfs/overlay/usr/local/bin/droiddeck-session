@@ -869,6 +869,8 @@ BUSCONF
       bl_steam_presentation=(-cef-disable-gpu-compositing)
       echo "== steam: system PowerVR uses OpenGL/DRI3 through Zink with software CEF compositing"
     fi
+    # The client's CEF flags for this presentation; the UI choice below may replace them.
+    _bl_cef=(-cef-force-gpu "${bl_steam_presentation[@]}" -cef-use-gl=angle "-cef-use-angle=$bl_steam_angle")
     # Decky is optional and session scoped: the app's marker opts in, and this supervisor is
     # reaped with the client session. Native ARM64 runs directly. A legacy x86_64 asset is used
     # only when its recorded architecture says so and droiddeck-fex has FEX and its runtime ready.
@@ -926,9 +928,9 @@ BUSCONF
     # desktop's launchers ask for. KDE owns its windows when BL_DESKTOP=1.
     _bl_ui=(-gamepadui)
     [ "${BL_STEAM_UI:-}" = desktop ] && _bl_ui=()
-    # bl_steam_angle / bl_steam_presentation default to the Adreno values (vulkan, none); only
-    # the system-PowerVR path (BL_STEAM_GL_PRESENT=1) changes them.
-    _bl_cef=(-cef-force-gpu "${bl_steam_presentation[@]}" -cef-use-gl=angle "-cef-use-angle=$bl_steam_angle")
+    # bl_steam_angle / bl_steam_presentation (set above) default to the Adreno values (vulkan,
+    # none); only the system-PowerVR path (BL_STEAM_GL_PRESENT=1) changes them.
+    _bl_cef=(-cef-force-gpu "${bl_steam_presentation[@]}" -cef-use-gl=angle "-cef-use-angle=${bl_steam_angle:-vulkan}")
     if [ "${BL_DESKTOP:-}" = 1 ] && [ "${BL_STEAM_UI:-}" = desktop ]; then
       # KDE uses QPainter/shm on Android. CEF's Vulkan buffers cannot be
       # presented there; its software path keeps the library and dialogs on KDE.
