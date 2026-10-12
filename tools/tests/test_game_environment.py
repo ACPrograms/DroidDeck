@@ -373,6 +373,26 @@ class GameEnvironmentTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             MODULE["apply_config"]({}, {**config, "dxvkConfigGames": []}, "42")
 
+    def test_game_logs_only_when_asked_and_only_for_game_launches(self):
+        game_logs = MODULE["game_logs"]
+        with tempfile.TemporaryDirectory() as tmp:
+            command = ["/proton", "waitforexitandrun", "/games/Hades/Hades.exe"]
+            env = {"BL_DEBUG_DIR": tmp, "VK_DRIVER_FILES": "/icd.json"}
+            self.assertEqual(game_logs(command, env, "1145360", now=0), env)
+            on = dict(env, BL_GAME_LOGS="1")
+            self.assertEqual(game_logs(["/proton", "run", "x.exe"], on, "1145360", now=0), on)
+            result = game_logs(command, on, "1145360", now=0)
+            folder = Path(result["PROTON_LOG_DIR"])
+            self.assertEqual(folder.parent, Path(tmp) / "games")
+            self.assertTrue(folder.name.endswith("-1145360"))
+            self.assertEqual(result["DXVK_LOG_PATH"], str(folder))
+            self.assertEqual(result["PROTON_LOG"], "1")
+            launch = (folder / "launch.txt").read_text()
+            self.assertIn("VK_DRIVER_FILES=/icd.json", launch)
+            self.assertNotIn("PROTON_LOG", env)
+            named = game_logs(command, on, None, now=0)
+            self.assertTrue(Path(named["PROTON_LOG_DIR"]).name.endswith("-Hades"))
+
     def test_game_ids_and_probes(self):
         for prefix in ("", "/compatdata/0", "/compatdata/0-123", "/compatdata/nope", "/compatdata/4294967296"):
             self.assertIsNone(MODULE["game_id"]({"STEAM_COMPAT_DATA_PATH": prefix}))

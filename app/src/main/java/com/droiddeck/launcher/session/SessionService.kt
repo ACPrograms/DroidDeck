@@ -284,6 +284,7 @@ class SessionService : Service() {
      */
     private fun collectSessionArtifacts(dir: File) {
         try {
+            GraphicsReport.finish(dir)
             SessionArtifacts.collect(this, dir, "session stopped")
         } finally {
             // Last, so everything above is in the file it is about - and only this session's:
@@ -418,6 +419,10 @@ class SessionService : Service() {
         // The second library's name, for droiddeck-steam-library; the bind itself is made below.
         GameStorage.effective(this)?.let { guest.add("BL_LIBRARY_LABEL=" + it.label.replace('"', ' ')) }
         if (SessionState.mode == MODE_STEAM && SessionState.steamUi == "desktop") guest.add("BL_STEAM_UI=desktop")
+        // Detailed graphics logs: per-game logs and the guest's Vulkan summary (a GPU that is not
+        // an Adreno, or Setup's switch), and graphics-report.txt for every session.
+        if (GraphicsReport.detailed(this)) guest.add("BL_GAME_LOGS=1")
+        GraphicsReport.begin(this, sessionDir, guest)
         val shellGuest = ArrayList(guest).apply {
             add("SHELL=/bin/bash")
             add("TERM=xterm-256color")

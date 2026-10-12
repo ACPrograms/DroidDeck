@@ -679,6 +679,8 @@
     <string name="setup_logs">Session logs</string>
     <string name="setup_logs_hint">Saved after each session</string>
     <string name="setup_agent_commands">Debugging tools</string>
+    <string name="setup_graphics_logs">Detailed graphics logs</string>
+    <string name="setup_graphics_logs_hint">Each game\'s Proton, DXVK and driver logs in the session\'s logs. Always on when the GPU is not an Adreno.</string>
     <string name="setup_latest_logs">Latest session logs</string>
     <string name="setup_saved_logs">Saved session logs</string>
     <string name="setup_saved_logs_hint">Keeps the newest %1$d</string>

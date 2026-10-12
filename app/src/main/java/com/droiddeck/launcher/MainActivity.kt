@@ -368,6 +368,7 @@ class MainActivity : ComponentActivity() {
     private var runningLabel by mutableStateOf<String?>(null)
     private var logsEnabled by mutableStateOf(true)
     private var agentCommands by mutableStateOf(false)
+    private var graphicsLogs by mutableStateOf(false)
     private var showRoms by mutableStateOf(false)
     private var homeAppSelected by mutableStateOf(false)
     private var homeScreenEnabled by mutableStateOf(false)
@@ -563,7 +564,7 @@ class MainActivity : ComponentActivity() {
                         busy = busy, stage = stage, percent = percent,
                         desktopInstalled = desktopInstalled, desktopPresent = desktopPresent,
                         offlineAccount = offlineAccount, offline = offline,
-                        frameGenLabel = frameGenLabel, romsDir = romsDir, logsEnabled = logsEnabled, agentCommands = agentCommands,
+                        frameGenLabel = frameGenLabel, romsDir = romsDir, logsEnabled = logsEnabled, agentCommands = agentCommands, graphicsLogs = graphicsLogs,
                         steamGames = steamGames, emulators = emulatorList, running = runningLabel,
                         frameGen = FrameGen.mode(this),
                         lossless = lossless,
@@ -708,6 +709,10 @@ class MainActivity : ComponentActivity() {
                         onLogs = {
                             SessionPrefs.setLogsEnabled(this, !SessionPrefs.logsEnabled(this))
                             logsEnabled = SessionPrefs.logsEnabled(this)
+                        },
+                        onGraphicsLogs = {
+                            SessionPrefs.setDetailedGraphicsLogs(this, !SessionPrefs.detailedGraphicsLogs(this))
+                            graphicsLogs = SessionPrefs.detailedGraphicsLogs(this)
                         },
                         onAgentCommands = {
                             com.droiddeck.launcher.agent.AgentAccess.setCommandsEnabled(this, !com.droiddeck.launcher.agent.AgentAccess.commandsEnabled(this))
@@ -1606,6 +1611,7 @@ class MainActivity : ComponentActivity() {
         romsDir = SessionPrefs.romsDir(this).takeIf { it.isNotEmpty() }
         logsEnabled = SessionPrefs.logsEnabled(this)
         agentCommands = com.droiddeck.launcher.agent.AgentAccess.commandsEnabled(this)
+        graphicsLogs = SessionPrefs.detailedGraphicsLogs(this)
         runningLabel = if (SessionState.running) when (SessionState.mode) {
             SessionService.MODE_DESKTOP -> getString(R.string.rail_desktop)
             SessionService.MODE_RUN -> Library.nameForProgram(SessionState.program)

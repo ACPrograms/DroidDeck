@@ -547,6 +547,17 @@ object SessionPrefs {
         prefs(context).edit().putBoolean("logs", on).apply()
     }
 
+    /**
+     * Detailed graphics logs: per-game Proton, DXVK, vkd3d-proton and driver logs in the session's
+     * folder. Always on for a GPU that is not an Adreno (test drivers); opt-in on an Adreno.
+     */
+    fun detailedGraphicsLogs(context: Context): Boolean =
+        prefs(context).getBoolean("detailedGraphicsLogs", false)
+
+    fun setDetailedGraphicsLogs(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("detailedGraphicsLogs", on).apply()
+    }
+
     /** Steam storage-call diagnostics are opt-in because they add timing work to file operations. */
     fun storageDiagnosticsEnabled(context: Context): Boolean =
         prefs(context).getBoolean("storageDiagnostics", false)
