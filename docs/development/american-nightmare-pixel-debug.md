@@ -65,6 +65,26 @@ unknown. The run is **incomplete**, not an eight-minute pass or a demonstrated
 game crash. Controls, focus ownership and sustained stability still need broader
 coverage beyond these short tests.
 
+### Final production configuration and user confirmation
+
+The clean production configuration was persisted only for game 202750 through
+the application's per-game environment UI. It selects the tested DXVK component
+and sets `d3d9.forceSingleSample = True`, retaining the existing low32, BC,
+presentation-sync and `dxvk.tilerMode = False` workarounds. Shared configuration
+and other games were unchanged. Shader audit layers, validation and the
+frametimes HUD are not enabled in this production configuration.
+
+A final automated production trial loaded the existing saved game, verified
+turning/movement with five paired non-black screenshots, and observed 115 seconds
+without the bright triangle edges or another phone reset. It then quit normally;
+the saved per-game environment remained unchanged. This is bounded observation,
+not a long-duration stability or controlled performance benchmark.
+
+On 2026-10-11 (America/Toronto), the device owner separately confirmed that this
+stage worked and authorized publication. No duration, frame rate or full-game
+completion was supplied with that confirmation. It is additional user validation
+of the stage, not a claim that all Pixel devices or the GNOC resets are fixed.
+
 ## Native guards, resets and diagnostic controls
 
 The Pixel base is e589e3ae21959c9c74c490d917cebf256acc8ac8. PR561's 9e6fe314 and
@@ -106,3 +126,18 @@ baseline/current hashes and unchanged shared/other-game settings; it never rolls
 back saved game progress. Persistent selection must affect only 202750 and leave
 private shader audit layers, validation settings and frametimes HUD disabled.
 Routine Heartbeat must not launch games or automatically resume this engineering.
+
+## Submission scope
+
+These runtime tools are submitted against the experimental PowerVR `dev` branch,
+following its merged presentation-semaphore PR
+<https://github.com/wallentx/DroidDeck/pull/3>. They do not change the managed pack
+manifest/checksums or enable the opt-in overrides globally. Shipping the built
+runtime still needs maintainer review and a new managed-pack release.
+
+The compositor ownership safeguards are independently proposed in
+<https://github.com/Droid-Deck/DroidDeck/pull/561>. Those native changes were present
+in the integrated Pixel Lab APK used for the game experiments, but are not part
+of this runtime PR's diff. The original BC emulation is a prerequisite supplied by
+the PowerVR branch. This submission supplies source and reproducibility tools,
+not an APK, proprietary driver, game data or private diagnostic archive.
