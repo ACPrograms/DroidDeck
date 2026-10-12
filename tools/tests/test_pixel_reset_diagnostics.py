@@ -28,6 +28,36 @@ class ResetProjectionTest(unittest.TestCase):
         self.assertEqual(result['status'], 'stale_entry_not_attributed_to_current_trial')
         self.assertNotIn('categories', result)
 
+    def test_repeated_dst_hour_is_ambiguous_before_freshness(self):
+        raw = '2026-11-01 01:30:00 SYSTEM_LAST_KMSG\nGNOC error type 0x2000'
+        for after in (None, datetime(2026, 11, 1, 6, tzinfo=timezone.utc)):
+            with self.subTest(after=after):
+                result = module.kernel_projection(raw, 'America/Toronto', after)
+                self.assertEqual(result['status'], 'ambiguous_device_local_time')
+                self.assertNotIn('entry_date_utc', result)
+                self.assertNotIn('categories', result)
+                self.assertNotIn('hardware_fields', result)
+
+    def test_skipped_dst_hour_is_not_a_real_instant(self):
+        raw = '2026-03-08 02:30:00 SYSTEM_LAST_KMSG\nGNOC error type 0x2000'
+        result = module.kernel_projection(raw, 'America/Toronto')
+        self.assertEqual(result['status'], 'nonexistent_device_local_time')
+        self.assertNotIn('entry_date_utc', result)
+        self.assertNotIn('categories', result)
+
+    def test_unambiguous_times_keep_correct_offsets_and_cutoff(self):
+        for stamp, expected in (('2026-11-01 00:30:00', '2026-11-01T04:30:00+00:00'),
+                                ('2026-11-01 02:30:00', '2026-11-01T07:30:00+00:00'),
+                                ('2026-03-08 03:30:00', '2026-03-08T07:30:00+00:00')):
+            with self.subTest(stamp=stamp):
+                raw = stamp + ' SYSTEM_LAST_KMSG\nGNOC'
+                result = module.kernel_projection(raw, 'America/Toronto')
+                self.assertEqual(result['entry_date_utc'], expected)
+                self.assertEqual(result['status'], 'projected_entry_not_a_root_cause')
+                cutoff = datetime.fromisoformat(expected)
+                self.assertEqual(module.kernel_projection(raw, 'America/Toronto', cutoff)['status'],
+                                 'projected_entry_not_a_root_cause')
+
     def test_latest_entry_and_no_arbitrary_body(self):
         raw = ('2026-10-10 20:10:09 SYSTEM_LAST_KMSG (text)\nGNOC error type 0x1111\n'
                '2026-10-11 17:35:01 SYSTEM_LAST_KMSG (text)\n'

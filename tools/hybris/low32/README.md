@@ -13,7 +13,8 @@ address space with `MAP_FIXED_NOREPLACE`. It never truncates a pointer, copies
 into shadow storage, replaces existing mappings, or disables Wine's guard.
 Caller-specified/fixed mappings, regular files, private/anonymous memory and
 other devices retain their original behavior. Failure to find a suitable low
-hole fails with ENOMEM. Existing preload hooks are called through RTLD_NEXT;
+hole fails with ENOMEM. The mmap and mmap64 preload chains are independently
+resolved and called through their respective RTLD_NEXT symbols;
 only resolver bootstrap uses the raw syscall. A compact atomic cursor avoids
 wasting large address slots on thousands of small driver control allocations.
 If the compact probe collides, a bounded address-range walk of
@@ -32,7 +33,9 @@ tools/hybris/low32/build.sh /absolute/build-dir /path/to/Vulkan-Headers/include
 ```
 
 The native library and unit test are always built. GPU probes are optional when
-headers are provided; the Windows x86 probe also needs i686-w64-mingw32-gcc.
+headers are provided; `gpu-copy-native` uses the selected native host compiler
+and has the host's architecture, while the Windows x86 probe also needs
+i686-w64-mingw32-gcc. Copy a native probe to a device only when their architectures match.
 The unit test uses /dev/zero and proves CPU data integrity, collision handling,
 concurrency, 2000 simultaneous small mappings, invalid offsets, forwarding and
 opt-out. A fragmented-address-space regression reserves the low region, opens
@@ -42,6 +45,9 @@ additional density regression fills 64 existing page holes while preserving a
 separate contiguous 16 MiB interval for a later complete data-readback map; the
 prior gap-after-coarse implementation fails and the gap-first strategy passes. These
 CPU tests do not by themselves prove GPU correctness.
+The build also tests both preload orders with a second library that hooks mmap
+and mmap64 independently. Opt-out, tracing and adaptation must each preserve
+the selected symbol's chain, invalid-offset errno and file offsets above 4 GiB.
 
 `gpu-copy.c` tests actual Vulkan transfer operations on vendor 0x1010. It maps
 two 32 MiB device allocations, runs four copies of full deterministic patterns,
@@ -49,7 +55,7 @@ including offset/unmap/remap, uses flush/invalidate and barriers/fences, and
 compares every word. It can require each full CPU range to fit below 4 GiB:
 
 ```sh
-./gpu-copy-arm64 32 --require-low32
+./gpu-copy-native 32 --require-low32
 # Through a separate Proton ARM64/WoW64 test prefix:
 proton run gpu-copy-x86.exe 32 --require-low32 'Z:\path\probe-output.txt'
 ```

@@ -107,6 +107,10 @@ Primary-user states are likewise limited to recognized lifecycle categories.
 Output files are created exclusively with mode `0600` before any bytes are
 written (POSIX), and existing files/symlinks are refused. Host regressions cover
 these boundaries as well as freshness, unlock gating and narrow output.
+Dropbox's offset-free local timestamp is not assigned a guessed instant during
+a DST transition: repeated hours report `ambiguous_device_local_time`, skipped
+hours report `nonexistent_device_local_time`. Neither is attributed to the trial
+or used to project kernel-body categories until its time can be established.
 
 Private opt-in diagnostics captured maintenance5 inline modules, which the older
 shim path missed. Materialization passed nine actual-C ASan/UBSan cases; benign
@@ -155,11 +159,19 @@ For standalone verification, run
 `python3 -m unittest discover -s tools/tests -p test_pixel_reset_diagnostics.py`
 on the host. On native 64-bit Linux/glibc,
 `tools/hybris/low32/build.sh /absolute/output-dir` builds and runs the CPU integrity
-regressions. The DXVK component recipe is `tools/dxvk/build.sh /absolute/output-dir`;
+and independent mmap/mmap64 preload-chain regressions (both library orders in
+off, trace and low32 modes). Optional Vulkan headers produce `gpu-copy-native`
+for the selected native host architecture, not a hardcoded ARM64 filename.
+`python3 -m unittest discover -s tools/tests -p test_dxvk_build.py` verifies output
+isolation with a synthetic toolchain, without fetching or compiling DXVK.
+The DXVK component recipe is `tools/dxvk/build.sh /absolute/output-dir`;
 it requires the pinned DXVK build prerequisites, including Meson/Ninja, MinGW
 cross compilers, glslangValidator and SPIR-V Tools. It retains both architectures,
 source/license provenance and downstream patches, without editing an installed
-runtime or APK.
+runtime or APK. Its output directory must be new or empty (including hidden
+entries). Prior or partially built outputs are refused before fetching sources,
+left untouched and never included in a new DLL manifest. Use a fresh directory
+after a failed build.
 
 The compositor ownership safeguards are independently proposed in
 <https://github.com/Droid-Deck/DroidDeck/pull/561>. Those native changes were present

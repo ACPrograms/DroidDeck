@@ -25,7 +25,11 @@
 static _Atomic uint64_t cursor;
 static _Atomic unsigned logged;
 typedef void *(*map_function)(void *,size_t,int,int,int,off_t);
+typedef void *(*map64_function)(void *,size_t,int,int,int,off64_t);
 static _Atomic(map_function) next_map;
+static _Atomic(map64_function) next_map64;
+_Static_assert(sizeof(off_t) == sizeof(off64_t) && sizeof(off_t) == 8,
+               "64-bit host required");
 static __thread int resolving __attribute__((tls_model("initial-exec")));
 static __thread int active __attribute__((tls_model("initial-exec")));
 static void *native_map(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
@@ -39,6 +43,19 @@ static void *native_map(void *addr, size_t length, int prot, int flags, int fd, 
     }
     /* Bootstrap only while resolving; otherwise preserve existing preload hooks. */
     if (next) return next(addr,length,prot,flags,fd,offset);
+    return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+}
+
+static void *native_map64(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    map64_function next=atomic_load(&next_map64);
+    if (!next && !resolving) {
+        resolving=1;
+        next=(map64_function)dlsym(RTLD_NEXT,"mmap64");
+        atomic_store(&next_map64,next);
+        resolving=0;
+    }
+    if (next) return next(addr,length,prot,flags,fd,(off64_t)offset);
     return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
 }
 
@@ -77,12 +94,13 @@ static int target_device(int fd, struct stat *st)
     return valid;
 }
 
-static void *adapted_map(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+static void *adapted_map(map_function forward, void *addr, size_t length, int prot,
+                         int flags, int fd, off_t offset)
 {
     const char *mode = getenv("DROIDDECK_LOW32_MODE");
     struct stat st = {0};
     if (mode && !strcmp(mode, "trace")) {
-        void *p = native_map(addr, length, prot, flags, fd, offset);
+        void *p = forward(addr, length, prot, flags, fd, offset);
         if (fd >= 0 && (prot & PROT_WRITE) && !(prot & PROT_EXEC) &&
             (flags & MAP_TYPE) == MAP_SHARED) {
             int saved=errno;
@@ -97,7 +115,7 @@ static void *adapted_map(void *addr, size_t length, int prot, int flags, int fd,
         (flags & (MAP_ANONYMOUS | MAP_FIXED | MAP_FIXED_NOREPLACE)) ||
         (prot & PROT_EXEC) || (flags & MAP_TYPE) != MAP_SHARED ||
         !target_device(fd, &st))
-        return native_map(addr, length, prot, flags, fd, offset);
+        return forward(addr, length, prot, flags, fd, offset);
 
     const uintptr_t lower = 0x10000000u, upper = 0xffff0000u;
     const uintptr_t step = 0x00400000u;
@@ -119,7 +137,7 @@ static void *adapted_map(void *addr, size_t length, int prot, int flags, int fd,
         /* Compact first: hundreds of small driver mappings must not waste a
          * 4MiB address slot each. Coarse search is only for existing Wine holes. */
         uintptr_t hint = lower + (i==0?compact:(uintptr_t)((start+i-1)%slots)*step);
-        void *p = native_map((void *)hint, length, prot,
+        void *p = forward((void *)hint, length, prot,
                              flags|MAP_FIXED_NOREPLACE, fd, offset);
         if (p != MAP_FAILED) {
             uintptr_t first = (uintptr_t)p;
@@ -153,7 +171,7 @@ static void *adapted_map(void *addr, size_t length, int prot, int flags, int fd,
             if (last <= gap_start) continue;
             uintptr_t gap_end = first < upper ? first : upper;
             if (gap_end > gap_start && rounded <= gap_end - gap_start) {
-                void *p = native_map((void *)gap_start, length, prot,
+                void *p = forward((void *)gap_start, length, prot,
                     flags | MAP_FIXED_NOREPLACE, fd, offset);
                 if (p != MAP_FAILED) {
                     uintptr_t address = (uintptr_t)p;
@@ -176,7 +194,7 @@ static void *adapted_map(void *addr, size_t length, int prot, int flags, int fd,
             if (gap_start >= upper) break;
         }
         if (gap_start < upper && rounded <= upper - gap_start) {
-            void *p = native_map((void *)gap_start, length, prot,
+            void *p = forward((void *)gap_start, length, prot,
                 flags | MAP_FIXED_NOREPLACE, fd, offset);
             if (p != MAP_FAILED) {
                 uintptr_t address = (uintptr_t)p;
@@ -194,7 +212,7 @@ static void *adapted_map(void *addr, size_t length, int prot, int flags, int fd,
     for (unsigned i = 1; i <= slots; i++) {
         /* Last resort if address walking was unavailable or raced. */
         uintptr_t hint = lower + (i==0?compact:(uintptr_t)((start+i-1)%slots)*step);
-        void *p = native_map((void *)hint, length, prot,
+        void *p = forward((void *)hint, length, prot,
                              flags|MAP_FIXED_NOREPLACE, fd, offset);
         if (p != MAP_FAILED) {
             uintptr_t first = (uintptr_t)p;
@@ -217,17 +235,22 @@ static void *adapted_map(void *addr, size_t length, int prot, int flags, int fd,
     return MAP_FAILED;
 }
 
-void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+static void *intercept_map(map_function forward, void *addr, size_t length,
+                           int prot, int flags, int fd, off_t offset)
 {
-    if (active) return native_map(addr,length,prot,flags,fd,offset);
+    if (active) return forward(addr,length,prot,flags,fd,offset);
     active=1;
-    void *p=adapted_map(addr,length,prot,flags,fd,offset);
+    void *p=adapted_map(forward,addr,length,prot,flags,fd,offset);
     active=0;
     return p;
 }
 
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    return intercept_map(native_map,addr,length,prot,flags,fd,offset);
+}
+
 void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off64_t offset)
 {
-    _Static_assert(sizeof(off_t) == sizeof(off64_t), "64-bit host required");
-    return mmap(addr, length, prot, flags, fd, (off_t)offset);
+    return intercept_map(native_map64,addr,length,prot,flags,fd,(off_t)offset);
 }

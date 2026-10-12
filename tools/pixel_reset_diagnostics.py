@@ -46,11 +46,23 @@ def kernel_projection(text, device_timezone, after=None):
     body = text[match.end():entries[index + 1].start() if index + 1 < len(entries) else len(text)]
     result['entry_date_device_local'] = match.group(1)
     try:
-        local = datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo(device_timezone))
-        result['entry_date_utc'] = local.astimezone(timezone.utc).isoformat()
+        naive = datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S')
+        zone = ZoneInfo(device_timezone)
     except (ValueError, ZoneInfoNotFoundError):
         result['status'] = 'unknown_device_timezone'
         return result
+    # Dropbox supplies a local wall clock without an offset. Round-trip both
+    # folds: a repeated hour has two possible instants; a skipped hour has none.
+    instants = {local.astimezone(timezone.utc)
+                for fold in (0, 1)
+                for local in (naive.replace(tzinfo=zone, fold=fold),)
+                if local.astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None) == naive}
+    if len(instants) != 1:
+        result['status'] = ('ambiguous_device_local_time' if instants
+                            else 'nonexistent_device_local_time')
+        return result
+    local = instants.pop()
+    result['entry_date_utc'] = local.isoformat()
     if after is not None and local < after:
         result['status'] = 'stale_entry_not_attributed_to_current_trial'
         return result
