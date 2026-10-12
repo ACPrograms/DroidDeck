@@ -64,3 +64,23 @@ index e69a39a..4478420 100644
      /// Allow D3DLOCK_DISCARD
      bool allowDiscard;
  
+diff --git a/src/d3d9/d3d9_swapchain.cpp b/src/d3d9/d3d9_swapchain.cpp
+--- a/src/d3d9/d3d9_swapchain.cpp
++++ b/src/d3d9/d3d9_swapchain.cpp
+@@ -1055,1 +1055,16 @@ namespace dxvk {
++    if (m_parent->GetOptions()->forceSingleSample) {
++      // Backbuffers bypass the normal surface-creation entry points. Validate
++      // the application's request, then apply the same effective sample count.
++      // IsLockable above is an internal GDI fallback requirement, not the
++      // application's lockability request used by MSAA validation.
++      auto requestedDesc = desc;
++      requestedDesc.IsLockable = (Flags & D3DPRESENTFLAG_LOCKABLE_BACKBUFFER) != 0;
++      HRESULT hr = D3D9CommonTexture::NormalizeTextureProperties(
++        m_parent, D3DRTYPE_SURFACE, &requestedDesc);
++      if (FAILED(hr))
++        return hr;
++      desc.MultiSample = requestedDesc.MultiSample;
++      desc.MultisampleQuality = requestedDesc.MultisampleQuality;
++    }
++
+     const bool isExtended = m_parent->IsD3DCompatibile(D3DCompatibility::D3D9Ex);

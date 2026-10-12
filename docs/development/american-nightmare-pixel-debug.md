@@ -29,6 +29,19 @@ alpha-to-coverage. It is a compatibility override, not transparent MSAA emulatio
 or a universal PowerVR default. Existing low32, BC-format, present synchronization
 and tiler workarounds must remain intact.
 
+Swapchain backbuffers have a separate creation path. With the override enabled,
+that path now validates a copy of the original requested descriptor and transfers
+the effective sample type/quality before allocation, so automatic depth surfaces
+and backbuffers agree. Validation uses the application's lockable-backbuffer flag;
+the internal lockability required for GDI fallback is retained on the allocated
+backbuffer. With the override disabled the original backbuffer path is unchanged.
+This correction addresses official PR602 review 5486295088. Its CPU harness
+compiles the actual DXVK sample decoder, surface normalizer and backbuffer method,
+plus the automatic-depth descriptor and framebuffer depth-binding excerpts.
+Fifteen cases cover on/off, NONMASKABLE quality, matching depth, no-depth operation,
+unsupported/invalid/lockable requests, allocation cleanup and recreation. Backend
+images and adapter capabilities are mocked; these are not GPU or gameplay tests.
+
 ## Independent HUD correction
 
 The diagnostic frametimes HUD bound an R8_UINT storage texel buffer to a shader
@@ -172,6 +185,9 @@ runtime or APK. Its output directory must be new or empty (including hidden
 entries). Prior or partially built outputs are refused before fetching sources,
 left untouched and never included in a new DLL manifest. Use a fresh directory
 after a failed build.
+The recipe also requires a native C++17 compiler for
+`python3 tools/dxvk/check_d3d9_single_sample.py /path/to/patched-dxvk` before DLL
+compilation. Add `--sanitize` on supported hosts to run its ASan/UBSan controls.
 
 The compositor ownership safeguards are independently proposed in
 <https://github.com/Droid-Deck/DroidDeck/pull/561>. Those native changes were present
