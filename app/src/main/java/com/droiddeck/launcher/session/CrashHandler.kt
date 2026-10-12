@@ -39,20 +39,7 @@ object CrashHandler {
             } catch (e: Throwable) {
                 // Nothing more to do for a crash inside the crash handler.
             } finally {
-                if (previous != null) {
-                    previous.uncaughtException(thread, error)
-                } else {
-                    // Temporary: bypass captured System.err when diagnosing the test worker's exit 2.
-                    try {
-                        val raw = java.io.PrintStream(java.io.FileOutputStream(java.io.FileDescriptor.err), true)
-                        raw.println("DroidDeck CrashHandler: uncaught on ${thread.name}")
-                        error.printStackTrace(raw)
-                        raw.flush()
-                    } catch (_: Throwable) {
-                    } finally {
-                        Runtime.getRuntime().halt(2)
-                    }
-                }
+                previous?.uncaughtException(thread, error) ?: Runtime.getRuntime().halt(2)
             }
         }
     }
