@@ -22,7 +22,7 @@ import org.json.JSONObject;
 /** Isolated glibc-to-Android Vulkan bridge. It does not replace the rootfs's Mesa libraries. */
 public final class SystemVulkanDriver {
     private static final String ASSET = "hybris/runtime.tzst";
-    private static final String HAL = "/vendor/lib64/hw/vulkan.powervr.so";
+    private static final String PVR_HAL = "/vendor/lib64/hw/vulkan.powervr.so";
     private static final String[] REQUIRED = {
         "lib/libhybris-vulkan-icd.so.0", "lib/libhybris-common.so.1",
         "lib/libhybris/linker/q.so", "lib/libVkLayer_hybris_compat.so",
@@ -36,7 +36,7 @@ public final class SystemVulkanDriver {
 
     private SystemVulkanDriver() {}
 
-    public static boolean isPowerVr() { return new File(HAL).isFile(); }
+    public static boolean isPowerVr() { return new File(PVR_HAL).isFile(); }
 
     /** HAL detection names the GPU; launching also needs the real DRM render node. */
     public static boolean isAvailable() { return isPowerVr() && renderNodeAvailable(); }
@@ -200,7 +200,7 @@ public final class SystemVulkanDriver {
         String node = renderNodePath();
         if (node == null) throw new IllegalStateException("System PowerVR render node is unavailable");
         environment.add("HYBRIS_ANDROID_SDK_VERSION=" + Build.VERSION.SDK_INT);
-        environment.add("HYBRIS_VULKAN_HAL=" + HAL);
+        environment.add("HYBRIS_VULKAN_HAL=" + PVR_HAL);
         environment.add("HYBRIS_LINKER_DIR=" + new File(directory, "lib/libhybris/linker").getPath());
         environment.add("HYBRIS_LD_LIBRARY_PATH=/vendor/lib64/egl:/vendor/lib64/hw:/vendor/lib64:/system/lib64:/system_ext/lib64");
         environment.add("VK_LAYER_PATH=" + new File(directory, "lib").getPath());
