@@ -202,7 +202,8 @@ public final class SystemVulkanDriver {
         environment.add("HYBRIS_ANDROID_SDK_VERSION=" + Build.VERSION.SDK_INT);
         environment.add("HYBRIS_VULKAN_HAL=" + PVR_HAL);
         environment.add("HYBRIS_LINKER_DIR=" + new File(directory, "lib/libhybris/linker").getPath());
-        environment.add("HYBRIS_LD_LIBRARY_PATH=/vendor/lib64/egl:/vendor/lib64/hw:/vendor/lib64:/system/lib64:/system_ext/lib64");
+        // Prefer framework dependencies for the system Vulkan loader, including libbase.so.
+        environment.add("HYBRIS_LD_LIBRARY_PATH=/system/lib64:/system_ext/lib64:/vendor/lib64/egl:/vendor/lib64/hw:/vendor/lib64");
         environment.add("VK_LAYER_PATH=" + new File(directory, "lib").getPath());
         environment.add("VK_INSTANCE_LAYERS=VK_LAYER_HYBRIS_compat");
         // The Android driver has a render node, but no KMS primary node. SDL presents
