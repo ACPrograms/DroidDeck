@@ -135,15 +135,35 @@ Routine Heartbeat must not launch games or automatically resume this engineering
 
 ## Submission scope
 
-These runtime tools are submitted against the experimental PowerVR `dev` branch,
-following its merged presentation-semaphore PR
-<https://github.com/wallentx/DroidDeck/pull/3>. They do not change the managed pack
-manifest/checksums or enable the opt-in overrides globally. Shipping the built
-runtime still needs maintainer review and a new managed-pack release.
+These opt-in runtime tools are submitted directly against official DroidDeck
+`main`. The standalone DXVK build recipe, source pin, BC-format prerequisite and
+presentation-semaphore patch/check are imported verbatim from the PowerVR proposal
+<https://github.com/Droid-Deck/DroidDeck/pull/570> at
+`d0f7264ea8e402d30c868779198dc2fd74e7431c`. That proposal's attribution and existing
+source/license provenance are retained. The semaphore correction originated in
+<https://github.com/wallentx/DroidDeck/pull/3>. No Android app changes, managed pack
+or the experimental fork's development history are imported with those recipes.
+
+The source tools can be reviewed and built independently. Automatic PowerVR
+integration and delivery in DroidDeck require the separately reviewed #570
+foundation and a new managed-runtime release. This submission does not change
+managed-pack manifests/checksums or globally enable any override. The earlier
+fork-only stage <https://github.com/wallentx/DroidDeck/pull/4> is superseded by the
+official submission; its review history is preserved.
+
+For standalone verification, run
+`python3 -m unittest discover -s tools/tests -p test_pixel_reset_diagnostics.py`
+on the host. On native 64-bit Linux/glibc,
+`tools/hybris/low32/build.sh /absolute/output-dir` builds and runs the CPU integrity
+regressions. The DXVK component recipe is `tools/dxvk/build.sh /absolute/output-dir`;
+it requires the pinned DXVK build prerequisites, including Meson/Ninja, MinGW
+cross compilers, glslangValidator and SPIR-V Tools. It retains both architectures,
+source/license provenance and downstream patches, without editing an installed
+runtime or APK.
 
 The compositor ownership safeguards are independently proposed in
 <https://github.com/Droid-Deck/DroidDeck/pull/561>. Those native changes were present
 in the integrated Pixel Lab APK used for the game experiments, but are not part
 of this runtime PR's diff. The original BC emulation is a prerequisite supplied by
-the PowerVR branch. This submission supplies source and reproducibility tools,
+the separately proposed PowerVR runtime. This submission supplies source and reproducibility tools,
 not an APK, proprietary driver, game data or private diagnostic archive.
