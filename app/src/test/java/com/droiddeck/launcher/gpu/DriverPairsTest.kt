@@ -149,12 +149,32 @@ class DriverPairsTest {
     @Test
     fun autoPicksTheOpenDriverForEachMaliAndNothingForTheRest() {
         fun mali(name: String) = GpuInfo(name, 0, GpuInfo.familyOf(false, 0, mali = name), "", false)
-        assertEquals(DriverPairs.NAD_MALI_JM, DriverPairs.recommendedKey(mali("Mali-G57"), emptyList()))
-        assertEquals(DriverPairs.NAD_MALI_G710, DriverPairs.recommendedKey(mali("Mali-G710"), emptyList()))
-        assertEquals(DriverPairs.NAD_MALI_G615, DriverPairs.recommendedKey(mali("Mali-G615"), emptyList()))
-        assertEquals(DriverPairs.NAD_MALI_G720, DriverPairs.recommendedKey(mali("Mali-G720"), emptyList()))
-        assertNull("a Mali no build covers uses the bridge", DriverPairs.recommendedKey(mali("Mali-G925"), emptyList()))
+        // Android 14: the per-generation builds; the newest Malis have none and use the bridge.
+        assertEquals(DriverPairs.NAD_MALI_JM, DriverPairs.recommendedKey(mali("Mali-G57"), emptyList(), sdk = 34))
+        assertEquals(DriverPairs.NAD_MALI_G710, DriverPairs.recommendedKey(mali("Mali-G710"), emptyList(), sdk = 34))
+        assertEquals(DriverPairs.NAD_MALI_G615, DriverPairs.recommendedKey(mali("Mali-G615"), emptyList(), sdk = 34))
+        assertEquals(DriverPairs.NAD_MALI_G720, DriverPairs.recommendedKey(mali("Mali-G720"), emptyList(), sdk = 34))
+        assertNull(DriverPairs.recommendedKey(mali("Mali-G925-Immortalis MC12"), emptyList(), sdk = 34))
+        // Android 15+: the one-binary kbase build for every Mali it covers, not the Bifrost G52/G76.
+        assertEquals(DriverPairs.NAD_MALI_KBASE, DriverPairs.recommendedKey(mali("Mali-G57"), emptyList(), sdk = 35))
+        assertEquals(DriverPairs.NAD_MALI_KBASE, DriverPairs.recommendedKey(mali("Mali-G720"), emptyList(), sdk = 36))
+        assertEquals(DriverPairs.NAD_MALI_KBASE, DriverPairs.recommendedKey(mali("Mali-G925-Immortalis MC12"), emptyList(), sdk = 36))
+        assertEquals(DriverPairs.NAD_MALI_JM, DriverPairs.recommendedKey(mali("Mali-G52 MC2"), emptyList(), sdk = 36))
+        assertNull("a Mali no build covers uses the bridge", DriverPairs.recommendedKey(mali("Mali-T880"), emptyList(), sdk = 36))
         assertEquals(DriverPairs.BANNER, DriverPairs.recommendedKey(gpu(740), emptyList()))
+    }
+
+    @Test
+    fun aMissingKbaseReleaseFallsBackToTheGenerationsPair() {
+        val g720 = GpuInfo("Mali-G720", 0, Family.MALI_G720, "", false)
+        fun bundle(id: String) = TurnipReleases.Asset("Non-Adreno", id.lowercase(), "$id-Pair.zip", "https://example/$id", 9_000_000,
+            false, "label", "0".repeat(64), DriverPairs.nonAdreno(id), bundle = true)
+        val onlyG720 = DriverPairs.from(TurnipReleases.Check(listOf(bundle("PanVK-Mali-G720")), emptyList(), emptyList(), 0L))
+        assertEquals(DriverPairs.NAD_MALI_G720, DriverPairs.recommendedKey(g720, onlyG720, sdk = 36))
+        val both = DriverPairs.from(TurnipReleases.Check(listOf(bundle("PanVK-Mali-G720"), bundle("PanVK-Mali-kbase")), emptyList(), emptyList(), 0L))
+        assertEquals(DriverPairs.NAD_MALI_KBASE, DriverPairs.recommendedKey(g720, both, sdk = 36))
+        assertTrue(both.single { it.key == DriverPairs.NAD_MALI_KBASE }.suits(g720))
+        assertFalse(both.single { it.key == DriverPairs.NAD_MALI_KBASE }.suits(GpuInfo("Mali-G52", 0, Family.MALI_JM, "", false)))
     }
 
     @Test

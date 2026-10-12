@@ -165,7 +165,7 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         }
         if (!force && autoCheckedThisProcess) return
         autoCheckedThisProcess = true
-        if (gpu.family == GpuInfo.Family.MALI_OTHER) {
+        if (gpu.family.mali && DriverPairs.recommendedKey(gpu, emptyList()) == null) {
             useMaliBridge()
             autoStatus = activity.getString(R.string.drivers_mali_bridge_auto)
             refreshDrivers()

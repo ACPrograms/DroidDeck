@@ -41,7 +41,9 @@ data class GpuInfo(
         MALI_G610_G710("Mali-G610/G710"),
         MALI_G615("Mali-G615"),
         MALI_G720("Mali-G720"),
-        /** A Mali no open driver build covers yet (G925...): the Vulkan bridge is its only path. */
+        /** Mali-G715/G725/G925: only the one-binary PanVK kbase build covers them (Android 15+). */
+        MALI_LATEST("Mali-G715/G725/G925"),
+        /** A Mali no open driver build covers: the Vulkan bridge is its only path. */
         MALI_OTHER("Mali"),
         NOT_ADRENO("Not an Adreno GPU");
 
@@ -69,7 +71,7 @@ data class GpuInfo(
             Support.UNTESTED -> when (family) {
                 Family.POWERVR -> "System PowerVR driver: compatibility varies by device"
                 Family.MALI_OTHER -> "Experimental: Mali through the Vulkan bridge"
-                Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720 -> "Experimental: open Mali driver (test builds)"
+                Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST -> "Experimental: open Mali driver (test builds)"
                 Family.A7XX_LOW -> "Experimental: its drivers are test builds"
                 else -> "Outside tested hardware (Adreno 650, 725 and newer): it may not run"
             }
@@ -82,7 +84,7 @@ data class GpuInfo(
         Support.UNTESTED -> when (family) {
             Family.POWERVR -> R.string.gpuinfo_powervr
             Family.A7XX_LOW -> R.string.gpuinfo_experimental
-            Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_OTHER -> R.string.gpuinfo_experimental
+            Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST, Family.MALI_OTHER -> R.string.gpuinfo_experimental
             else -> R.string.gpuinfo_below_tested
         }
         Support.UNSUPPORTED -> R.string.gpuinfo_unsupported
@@ -159,15 +161,25 @@ data class GpuInfo(
                     ?.substringBefore(" ")
                 ?: ""
 
+        private fun maliNumber(name: String): Int? =
+            Regex("""G(\d{2,3})""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
+
+        /**
+         * The Malis the one-binary PanVK kbase build covers (arch v9-v13): G57/G68/G77/G78,
+         * G610/G710, G615/G715, G720/G725 and G925. Not the older Bifrost G52/G76.
+         */
+        fun maliKbaseCovered(name: String): Boolean =
+            maliNumber(name) in setOf(57, 68, 77, 78, 610, 710, 615, 715, 720, 725, 925)
+
         /** The PanVK generation a Mali name belongs to; MALI_OTHER when none of the builds covers it. */
         internal fun maliFamily(name: String): Family {
-            val number = Regex("""G(\d{2,3})""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
-                ?: return Family.MALI_OTHER
+            val number = maliNumber(name) ?: return Family.MALI_OTHER
             return when (number) {
                 31, 51, 52, 57, 68, 71, 72, 76, 77, 78 -> Family.MALI_JM
                 610, 710 -> Family.MALI_G610_G710
                 615 -> Family.MALI_G615
                 720 -> Family.MALI_G720
+                715, 725, 925 -> Family.MALI_LATEST
                 else -> Family.MALI_OTHER
             }
         }

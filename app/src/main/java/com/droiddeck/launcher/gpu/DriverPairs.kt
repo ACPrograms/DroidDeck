@@ -34,6 +34,9 @@ object DriverPairs {
     const val NAD_MALI_G710 = "nad:panvk-mali-g710"
     const val NAD_MALI_G615 = "nad:panvk-mali-g615"
     const val NAD_MALI_G720 = "nad:panvk-mali-g720"
+    /** One PanVK kbase binary for Mali v9-v13; its display half needs Android 15. */
+    const val NAD_MALI_KBASE = "nad:panvk-mali-kbase"
+    const val MALI_KBASE_MIN_SDK = 35
     /** "PanVK-Mali-G720" (the release asset's id) to its pair key, "nad:panvk-mali-g720". */
     fun nonAdreno(id: String) = "$NON_ADRENO:" + id.lowercase()
     /** True for a non-Adreno pair's key, or a bundle installed from one ("PanVK-Mali-G720"). */
@@ -48,6 +51,8 @@ object DriverPairs {
         NAD_MALI_G710 -> "PanVK · Mali-G610/G710" to setOf(Family.MALI_G610_G710)
         NAD_MALI_G615 -> "PanVK · Mali-G615" to setOf(Family.MALI_G615)
         NAD_MALI_G720 -> "PanVK · Mali-G720" to setOf(Family.MALI_G720)
+        NAD_MALI_KBASE -> "PanVK kbase · Mali G57-G925" to
+            setOf(Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST)
         else -> key.removePrefix("$NON_ADRENO:") to emptySet<Family>()
     }
 
@@ -71,6 +76,8 @@ object DriverPairs {
         fun suits(gpu: GpuInfo) = when {
             // The system-driver family covers PowerVR and Xclipse; RADV is only for the Xclipse.
             key == NAD_RADV_XCLIPSE -> gpu.family == Family.POWERVR && gpu.name.contains("Xclipse", ignoreCase = true)
+            // One binary for Mali v9-v13, not the older G52/G76 in the Job Manager family.
+            key == NAD_MALI_KBASE -> gpu.family.mali && GpuInfo.maliKbaseCovered(gpu.name)
             else -> gpu.family in families ||
                 (gpu.family == Family.ADRENO_UNKNOWN && (Family.A7XX in families || Family.A8XX in families))
         }
@@ -121,20 +128,36 @@ object DriverPairs {
      * release is listed, the OneUI build for an 8 Gen 2 under One UI, the patched test builds for
      * the 710/720/722, and upstream Banners-Turnip for the rest. Null when nothing fits (not Adreno).
      */
-    fun recommendedKey(gpu: GpuInfo, pairs: List<DriverPair>): String? = when (gpu.family) {
+    fun recommendedKey(gpu: GpuInfo, pairs: List<DriverPair>, sdk: Int = android.os.Build.VERSION.SDK_INT): String? = when (gpu.family) {
         // PowerVR and Xclipse keep the system driver (RADV stays a manual choice); a Mali no open
         // build covers draws through the Vulkan bridge instead (DriverMenus.ensureAuto).
         Family.NOT_ADRENO, Family.POWERVR, Family.MALI_OTHER -> null
-        Family.MALI_JM -> NAD_MALI_JM
-        Family.MALI_G610_G710 -> NAD_MALI_G710
-        Family.MALI_G615 -> NAD_MALI_G615
-        Family.MALI_G720 -> NAD_MALI_G720
+        Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST -> maliKey(gpu, pairs, sdk)
         Family.A8XX -> if (gpu.model == 840) newestDdTurnip(pairs) ?: WN_BALANCED else WN_BALANCED
         Family.A7XX_LOW -> BANNER_710
         Family.A7XX -> if (gpu.oneUi8Gen2) BANNER_ONEUI else BANNER
         Family.A6XX -> BANNER
         // KGSL gave no model: Android 16 arrived with the 8xx, so a device that new is taken as one.
         Family.ADRENO_UNKNOWN -> if (android.os.Build.VERSION.SDK_INT >= 36) WN_BALANCED else BANNER
+    }
+
+    /**
+     * A Mali's pair: the one-binary kbase build on Android 15+ for every Mali it covers, else the
+     * build for the GPU's generation. A preferred pair the check did not find falls back to the
+     * generation's own, and a G715/G725/G925 without the kbase build gets none (the bridge).
+     */
+    private fun maliKey(gpu: GpuInfo, pairs: List<DriverPair>, sdk: Int): String? {
+        val family = when (gpu.family) {
+            Family.MALI_JM -> NAD_MALI_JM
+            Family.MALI_G610_G710 -> NAD_MALI_G710
+            Family.MALI_G615 -> NAD_MALI_G615
+            Family.MALI_G720 -> NAD_MALI_G720
+            else -> null
+        }
+        val kbase = NAD_MALI_KBASE.takeIf { sdk >= MALI_KBASE_MIN_SDK && GpuInfo.maliKbaseCovered(gpu.name) }
+        if (pairs.isEmpty()) return kbase ?: family
+        fun listed(key: String?) = key?.takeIf { k -> pairs.any { it.key == k && it.complete } }
+        return listed(kbase) ?: listed(family) ?: kbase ?: family
     }
 
     /** The complete DD-Turnip pair with the highest version, or null when none is listed. */
