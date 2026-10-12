@@ -36,7 +36,16 @@ data class GpuInfo(
         /** An Adreno whose model KGSL does not give: treated as the newest family it could be. */
         ADRENO_UNKNOWN("Adreno"),
         POWERVR("PowerVR"),
+        /** Mali on Arm's kbase driver, by the open PanVK build each generation needs. */
+        MALI_JM("Mali (G52-G78)"),
+        MALI_G610_G710("Mali-G610/G710"),
+        MALI_G615("Mali-G615"),
+        MALI_G720("Mali-G720"),
+        /** A Mali no open driver build covers yet (G925...): the Vulkan bridge is its only path. */
+        MALI_OTHER("Mali"),
         NOT_ADRENO("Not an Adreno GPU");
+
+        val mali: Boolean get() = name.startsWith("MALI_")
 
         /** [label] in the app's language: the Adreno families are names, the rest is words. */
         fun label(context: Context): String = if (this == NOT_ADRENO) context.getString(R.string.gpuinfo_not_adreno) else label
@@ -59,6 +68,8 @@ data class GpuInfo(
             Support.TESTED -> "Supported"
             Support.UNTESTED -> when (family) {
                 Family.POWERVR -> "System PowerVR driver: compatibility varies by device"
+                Family.MALI_OTHER -> "Experimental: Mali through the Vulkan bridge"
+                Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720 -> "Experimental: open Mali driver (test builds)"
                 Family.A7XX_LOW -> "Experimental: its drivers are test builds"
                 else -> "Outside tested hardware (Adreno 650, 725 and newer): it may not run"
             }
@@ -71,6 +82,7 @@ data class GpuInfo(
         Support.UNTESTED -> when (family) {
             Family.POWERVR -> R.string.gpuinfo_powervr
             Family.A7XX_LOW -> R.string.gpuinfo_experimental
+            Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_OTHER -> R.string.gpuinfo_experimental
             else -> R.string.gpuinfo_below_tested
         }
         Support.UNSUPPORTED -> R.string.gpuinfo_unsupported
@@ -102,13 +114,16 @@ data class GpuInfo(
                 fromPlatform > 0 -> "platform"
                 else -> ""
             }
-            val family = familyOf(adreno, model, SystemVulkanDriver.isPowerVr())
+            // Mali, named by the vendor's Vulkan driver ("Mali-G720-Immortalis MC12") or by kbase.
+            val mali = if (adreno || !File("/dev/mali0").exists()) null else maliName()
+            val family = familyOf(adreno, model, SystemVulkanDriver.isPowerVr(), mali)
             val samsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             return GpuInfo(
                 name = when {
                     family == Family.POWERVR -> SystemVulkanDriver.gpuName().let { gpu ->
                         VulkanInfo.cachedOrNull()?.get("device")?.takeIf { it.contains(gpu, ignoreCase = true) } ?: gpu
                     }
+                    mali != null && mali.isNotEmpty() -> mali
                     !adreno -> Build.HARDWARE.ifBlank { UNNAMED }
                     model > 0 -> "Adreno $model"
                     else -> "Adreno"
@@ -137,8 +152,29 @@ data class GpuInfo(
             ""
         }
 
-        internal fun familyOf(adreno: Boolean, model: Int, powerVr: Boolean = false): Family = when {
+        /** The Mali's name, "" when the device has a kbase node but names no GPU. */
+        private fun maliName(): String =
+            VulkanInfo.cachedOrNull()?.get("device")?.takeIf { it.contains("Mali", ignoreCase = true) }
+                ?: FileUtils.readString(File("/sys/class/misc/mali0/device/gpuinfo"))?.trim()?.takeIf { it.contains("Mali", ignoreCase = true) }
+                    ?.substringBefore(" ")
+                ?: ""
+
+        /** The PanVK generation a Mali name belongs to; MALI_OTHER when none of the builds covers it. */
+        internal fun maliFamily(name: String): Family {
+            val number = Regex("""G(\d{2,3})""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
+                ?: return Family.MALI_OTHER
+            return when (number) {
+                31, 51, 52, 57, 68, 71, 72, 76, 77, 78 -> Family.MALI_JM
+                610, 710 -> Family.MALI_G610_G710
+                615 -> Family.MALI_G615
+                720 -> Family.MALI_G720
+                else -> Family.MALI_OTHER
+            }
+        }
+
+        internal fun familyOf(adreno: Boolean, model: Int, powerVr: Boolean = false, mali: String? = null): Family = when {
             !adreno && powerVr -> Family.POWERVR
+            !adreno && mali != null -> maliFamily(mali)
             !adreno -> Family.NOT_ADRENO
             model == 0 -> Family.ADRENO_UNKNOWN
             model >= 800 -> Family.A8XX

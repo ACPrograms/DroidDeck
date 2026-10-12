@@ -307,6 +307,8 @@ class SessionService : Service() {
     }
 
     private fun tuDebug(linuxDriverId: String): String? {
+        // Turnip's switch; a non-Adreno GPU runs another driver (PanVK, RADV, the bridge).
+        if (!com.droiddeck.launcher.core.DeviceSupport.adreno()) return null
         val override = File(Environment.getExternalStorageDirectory(), TU_DEBUG_SWITCH)
             .takeIf { it.isFile }?.let { FileUtils.readString(it)?.trim() }
         if (!override.isNullOrEmpty()) return override

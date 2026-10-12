@@ -131,4 +131,53 @@ class DriverPairsTest {
         assertEquals(DriverPairs.WN_BALANCED, DriverPairs.recommendedKey(gpu(825), pairs))
         assertEquals(DriverPairs.BANNER, DriverPairs.recommendedKey(gpu(740), pairs))
     }
+
+    @Test
+    fun maliFamiliesFollowTheOpenDriverBuilds() {
+        assertEquals(Family.MALI_JM, GpuInfo.familyOf(false, 0, mali = "Mali-G57 MC2"))
+        assertEquals(Family.MALI_JM, GpuInfo.familyOf(false, 0, mali = "Mali-G77"))
+        assertEquals(Family.MALI_G610_G710, GpuInfo.familyOf(false, 0, mali = "Mali-G710"))
+        assertEquals(Family.MALI_G615, GpuInfo.familyOf(false, 0, mali = "Mali-G615 MC6"))
+        assertEquals(Family.MALI_G720, GpuInfo.familyOf(false, 0, mali = "Mali-G720-Immortalis MC12"))
+        assertEquals(Family.MALI_OTHER, GpuInfo.familyOf(false, 0, mali = "Mali-G925-Immortalis MC12"))
+        assertEquals(Family.MALI_OTHER, GpuInfo.familyOf(false, 0, mali = ""))
+        // An Adreno is an Adreno whatever else the device reports, and the system HAL keeps priority.
+        assertEquals(Family.A7XX, GpuInfo.familyOf(true, 740, mali = "Mali-G720"))
+        assertEquals(Family.POWERVR, GpuInfo.familyOf(false, 0, powerVr = true, mali = "Mali-G720"))
+    }
+
+    @Test
+    fun autoPicksTheOpenDriverForEachMaliAndNothingForTheRest() {
+        fun mali(name: String) = GpuInfo(name, 0, GpuInfo.familyOf(false, 0, mali = name), "", false)
+        assertEquals(DriverPairs.NAD_MALI_JM, DriverPairs.recommendedKey(mali("Mali-G57"), emptyList()))
+        assertEquals(DriverPairs.NAD_MALI_G710, DriverPairs.recommendedKey(mali("Mali-G710"), emptyList()))
+        assertEquals(DriverPairs.NAD_MALI_G615, DriverPairs.recommendedKey(mali("Mali-G615"), emptyList()))
+        assertEquals(DriverPairs.NAD_MALI_G720, DriverPairs.recommendedKey(mali("Mali-G720"), emptyList()))
+        assertNull("a Mali no build covers uses the bridge", DriverPairs.recommendedKey(mali("Mali-G925"), emptyList()))
+        assertEquals(DriverPairs.BANNER, DriverPairs.recommendedKey(gpu(740), emptyList()))
+    }
+
+    @Test
+    fun nonAdrenoPairsComeFromTheirBundlesAndSuitOnlyTheirGpu() {
+        val pairs = DriverPairs.from(TurnipReleases.Check(
+            listOf(
+                TurnipReleases.Asset("Non-Adreno", "panvk-mali-g720", "PanVK-Mali-G720-Pair.zip", "https://example/a", 9_000_000,
+                    false, "label", "0".repeat(64), DriverPairs.nonAdreno("PanVK-Mali-G720"), bundle = true),
+                TurnipReleases.Asset("Non-Adreno", "radv-xclipse", "RADV-Xclipse-Pair.zip", "https://example/b", 9_000_000,
+                    false, "label", "0".repeat(64), DriverPairs.nonAdreno("RADV-Xclipse"), bundle = true),
+            ),
+            emptyList(), emptyList(), 0L,
+        ))
+        val g720 = pairs.single { it.key == DriverPairs.NAD_MALI_G720 }
+        val radv = pairs.single { it.key == DriverPairs.NAD_RADV_XCLIPSE }
+        assertTrue(g720.complete)
+        assertTrue(g720.suits(GpuInfo("Mali-G720", 0, Family.MALI_G720, "", false)))
+        assertFalse(g720.suits(gpu(740)))
+        assertTrue(radv.suits(GpuInfo("Xclipse", 0, Family.POWERVR, "", false)))
+        assertFalse("RADV is not for a PowerVR Pixel", radv.suits(GpuInfo("PowerVR", 0, Family.POWERVR, "", false)))
+        assertTrue(DriverPairs.isNonAdreno("PanVK-Mali-G720"))
+        assertTrue(DriverPairs.isNonAdreno("RADV-Xclipse-2"))
+        assertFalse(DriverPairs.isNonAdreno("DD-Turnip-v0.1.0"))
+        assertFalse(DriverPairs.isNonAdreno(null))
+    }
 }

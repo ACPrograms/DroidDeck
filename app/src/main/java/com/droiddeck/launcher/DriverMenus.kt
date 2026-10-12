@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import com.droiddeck.launcher.gpu.DriverBundle
+import com.droiddeck.launcher.core.DeviceSupport
 import com.droiddeck.launcher.gpu.DriverPairs
 import com.droiddeck.launcher.gpu.GpuInfo
 import com.droiddeck.launcher.gpu.LinuxVulkanDriver
@@ -164,6 +165,12 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         }
         if (!force && autoCheckedThisProcess) return
         autoCheckedThisProcess = true
+        if (gpu.family == GpuInfo.Family.MALI_OTHER) {
+            useMaliBridge()
+            autoStatus = activity.getString(R.string.drivers_mali_bridge_auto)
+            refreshDrivers()
+            return
+        }
         if (DriverPairs.recommendedKey(gpu, emptyList()) == null) {
             autoStatus = activity.getString(R.string.drivers_none_to_set, gpu.supportText(activity).lowercase())
             return
@@ -186,12 +193,30 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                 when {
                     row?.active == true -> autoStatus = problem?.let { activity.getString(R.string.drivers_up_to_date_check_failed, it) }
                         ?: activity.getString(R.string.upd_current_status)
+                    gpu.family.mali && (pair == null || !pair.complete) -> {
+                        // No open driver for this Mali published yet: draw through the bridge.
+                        useMaliBridge()
+                        autoStatus = activity.getString(R.string.drivers_mali_bridge_fallback, key?.let { DriverPairs.nonAdrenoName(it) } ?: gpu.name)
+                        refreshDrivers()
+                    }
                     pair == null || !pair.complete ->
                         autoStatus = problem?.let { activity.getString(R.string.upd_couldnt_check, it) } ?: activity.getString(R.string.drivers_recommended_unpublished)
                     else -> installPair(pair, auto = true)
                 }
             }
         }, "gpu-driver-auto").start()
+    }
+
+    /**
+     * Auto on a Mali without an open driver pair: the Vulkan bridge draws instead, on the phone's
+     * own driver, so a pair Auto set earlier is unset rather than left half-working.
+     */
+    private fun useMaliBridge() {
+        if (DeviceSupport.openDriverActive(activity)) {
+            SessionPrefs.setAndroidDriver(activity, TurnipDriver.AUTO)
+            SessionPrefs.setLinuxDriver(activity, "")
+        }
+        SessionPrefs.setVkBridge(activity, true)
     }
 
     /** Manual: install (if need be) and set both halves of a pair. */
@@ -230,6 +255,8 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                     val displayChanged = SessionPrefs.androidDriver(activity) != displayId
                     SessionPrefs.setAndroidDriver(activity, displayId)
                     SessionPrefs.setLinuxDriver(activity, linuxId)
+                    // An open Mali/Xclipse driver and the Mali bridge are alternatives: the pair wins.
+                    if (DriverPairs.isNonAdreno(pair.key)) SessionPrefs.setVkBridge(activity, false)
                     val restart = displayChanged && CompositorHost.isStarted
                     if (auto) {
                         val previous = SessionPrefs.gpuAutoInstalled(activity)

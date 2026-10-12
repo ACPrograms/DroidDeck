@@ -43,7 +43,8 @@ object TurnipReleases {
     /** What an asset is: a Linux build or not, the menu label, and the pair it belongs to. */
     private class Kind(val linux: Boolean, val label: String, val pair: String, val bundle: Boolean = false)
 
-    private class Source(val label: String, val repo: String, val classify: (name: String, tag: String) -> Kind?)
+    /** [prerelease]: a source whose bundles are all test builds offers them from pre-releases too. */
+    private class Source(val label: String, val repo: String, val prerelease: Boolean = false, val classify: (name: String, tag: String) -> Kind?)
 
     private val SOURCES = listOf(
         // Turnip-<tag>[-variant][-Linux|-Wayland].zip; -Wayland is for a path this app does not have.
@@ -77,7 +78,21 @@ object TurnipReleases {
             if (!Regex("""^DD-Turnip-v\d+\.\d+\.\d+\.zip$""").matches(name)) return@Source null
             Kind(false, "Android + Linux · all Adreno", DriverPairs.ddTurnip(tag), bundle = true)
         },
+        // <Id>-Pair.zip: open drivers for GPUs that are not Adreno (PanVK for Mali, RADV for
+        // Xclipse), both halves in one zip. One release per driver, replaced in place on each
+        // rebuild; every one is a test build, published as a pre-release.
+        Source("Non-Adreno", NON_ADRENO_REPO, prerelease = true) { name, _ ->
+            val m = Regex("""^((?:RADV-Xclipse|PanVK-Mali-[A-Za-z0-9]+))-Pair\.zip$""").find(name) ?: return@Source null
+            val key = DriverPairs.nonAdreno(m.groupValues[1])
+            Kind(false, "Android + Linux · " + DriverPairs.nonAdrenoName(key), key, bundle = true)
+        },
     )
+
+    private const val NON_ADRENO_REPO = "The412Banner/droiddeck-nonadreno-drivers"
+
+    /** The sources this device reads: an Adreno never asks the non-Adreno repo, so its list is as before. */
+    private fun sources(): List<Source> =
+        if (com.droiddeck.launcher.core.DeviceSupport.adreno()) SOURCES.filter { it.repo != NON_ADRENO_REPO } else SOURCES
 
     /** The result of the last check, or null when the user has never checked. */
     fun cached(context: Context): Check? {
@@ -94,7 +109,8 @@ object TurnipReleases {
         val latest = JSONArray()
         val failed = ArrayList<String>()
         var lastError: Exception? = null
-        for (src in SOURCES) {
+        val sources = sources()
+        for (src in sources) {
             try {
                 val releases = JSONArray(get(context, "https://api.github.com/repos/${src.repo}/releases?per_page=15"))
                 val seen = HashSet<String>()
@@ -110,7 +126,7 @@ object TurnipReleases {
                         val name = a.getString("name")
                         val kind = src.classify(name, tag) ?: continue
                         // A bundle is only offered from an official release, never a pre-release.
-                        if (kind.bundle && r.optBoolean("prerelease")) continue
+                        if (kind.bundle && r.optBoolean("prerelease") && !src.prerelease) continue
                         val linux = kind.linux
                         val label = kind.label
                         // Only assets GitHub has a sha256 for are offered: the download is checked against it.
@@ -129,7 +145,7 @@ object TurnipReleases {
                 lastError = e
             }
         }
-        if (failed.size == SOURCES.size) throw lastError ?: IOException("no source answered")
+        if (failed.size == sources.size) throw lastError ?: IOException("no source answered")
         val stored = JSONObject().put("assets", assets).put("latest", latest)
             .put("failed", JSONArray(failed)).put("checkedAt", System.currentTimeMillis())
         prefs(context).edit().putString(KEY_RELEASE, stored.toString()).apply()

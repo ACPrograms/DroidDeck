@@ -23,10 +23,21 @@ object DeviceSupport {
      * Xclipse) already handles. An Adreno keeps Turnip whatever the setting says.
      */
     fun vkBridge(context: Context): Boolean =
-        !adreno() && !SystemVulkanDriver.isAvailable() && com.droiddeck.launcher.session.SessionPrefs.vkBridge(context)
+        !adreno() && !SystemVulkanDriver.isAvailable() && !openDriverActive(context) &&
+            com.droiddeck.launcher.session.SessionPrefs.vkBridge(context)
 
-    /** A session can draw: Adreno with Turnip, PowerVR/Xclipse on the system driver, or the bridge. */
-    fun canDraw(context: Context): Boolean = graphicsAvailable() || vkBridge(context)
+    /**
+     * Whether an open non-Adreno driver pair (PanVK for Mali, RADV for Xclipse) is the one in use:
+     * it and the bridge are alternatives, and the pair wins. Always false on an Adreno.
+     */
+    fun openDriverActive(context: Context): Boolean =
+        !adreno() && com.droiddeck.launcher.gpu.DriverPairs.isNonAdreno(com.droiddeck.launcher.gpu.DriverBundle.active(context)?.id)
+
+    /**
+     * A session can draw: Adreno with Turnip, PowerVR/Xclipse on the system driver, an open
+     * non-Adreno driver pair, or the bridge.
+     */
+    fun canDraw(context: Context): Boolean = graphicsAvailable() || openDriverActive(context) || vkBridge(context)
 
     /** The chip as the device names it, for the card that explains the refusal. */
     fun gpuName(context: Context): String {

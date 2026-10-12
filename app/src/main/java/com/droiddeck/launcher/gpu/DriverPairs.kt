@@ -27,6 +27,30 @@ object DriverPairs {
     /** Each DD-Turnip release is its own pair: "dd-turnip:DD-Turnip-v0.1.0". */
     fun ddTurnip(tag: String) = "$DD_TURNIP:$tag"
 
+    /** The open non-Adreno drivers (The412Banner/droiddeck-nonadreno-drivers), one pair per driver. */
+    const val NON_ADRENO = "nad"
+    const val NAD_RADV_XCLIPSE = "nad:radv-xclipse"
+    const val NAD_MALI_JM = "nad:panvk-mali-jm"
+    const val NAD_MALI_G710 = "nad:panvk-mali-g710"
+    const val NAD_MALI_G615 = "nad:panvk-mali-g615"
+    const val NAD_MALI_G720 = "nad:panvk-mali-g720"
+    /** "PanVK-Mali-G720" (the release asset's id) to its pair key, "nad:panvk-mali-g720". */
+    fun nonAdreno(id: String) = "$NON_ADRENO:" + id.lowercase()
+    /** True for a non-Adreno pair's key, or a bundle installed from one ("PanVK-Mali-G720"). */
+    fun isNonAdreno(keyOrBundleId: String?): Boolean = keyOrBundleId != null &&
+        (keyOrBundleId.startsWith("$NON_ADRENO:") || Regex("""^(?i)(RADV-Xclipse|PanVK-Mali-[A-Za-z0-9]+)(-\d+)?$""").matches(keyOrBundleId))
+
+    fun nonAdrenoName(key: String): String = describeNonAdreno(key).first
+
+    private fun describeNonAdreno(key: String): Pair<String, Set<Family>> = when (key) {
+        NAD_RADV_XCLIPSE -> "RADV · Samsung Xclipse" to setOf(Family.POWERVR)
+        NAD_MALI_JM -> "PanVK · Mali G52-G78" to setOf(Family.MALI_JM)
+        NAD_MALI_G710 -> "PanVK · Mali-G610/G710" to setOf(Family.MALI_G610_G710)
+        NAD_MALI_G615 -> "PanVK · Mali-G615" to setOf(Family.MALI_G615)
+        NAD_MALI_G720 -> "PanVK · Mali-G720" to setOf(Family.MALI_G720)
+        else -> key.removePrefix("$NON_ADRENO:") to emptySet<Family>()
+    }
+
     class DriverPair(
         val key: String,
         /** "Banners-Turnip · Adreno 6xx/7xx", "WinNative · Balanced". */
@@ -44,14 +68,19 @@ object DriverPairs {
         /** "r4 · 1.19 + 0.1.2": the build of each half. */
         val version: String
             get() = listOfNotNull(bundle?.tag, display?.tag, linux?.tag).distinct().joinToString(" + ") { it.removePrefix("linux-").removePrefix("DD-Turnip-") }
-        fun suits(gpu: GpuInfo) = gpu.family in families ||
-            (gpu.family == Family.ADRENO_UNKNOWN && (Family.A7XX in families || Family.A8XX in families))
+        fun suits(gpu: GpuInfo) = when {
+            // The system-driver family covers PowerVR and Xclipse; RADV is only for the Xclipse.
+            key == NAD_RADV_XCLIPSE -> gpu.family == Family.POWERVR && gpu.name.contains("Xclipse", ignoreCase = true)
+            else -> gpu.family in families ||
+                (gpu.family == Family.ADRENO_UNKNOWN && (Family.A7XX in families || Family.A8XX in families))
+        }
     }
 
     private val ALL_ADRENO = setOf(Family.A6XX, Family.A7XX, Family.A7XX_LOW, Family.A8XX, Family.ADRENO_UNKNOWN)
 
     private fun describe(key: String): Pair<String, Set<Family>> = when {
         key.startsWith(DD_TURNIP) -> "DroidDeck · DD-Turnip" to ALL_ADRENO
+        key.startsWith("$NON_ADRENO:") -> describeNonAdreno(key)
         else -> describeFixed(key)
     }
 
@@ -68,7 +97,7 @@ object DriverPairs {
     /** Every pair the last release check found, in the order the list shows them. */
     fun from(check: TurnipReleases.Check?): List<DriverPair> {
         val assets = check?.assets.orEmpty().filter { it.pair.isNotEmpty() }
-        val order = listOf(DD_TURNIP, BANNER, BANNER_A8XX, BANNER_ONEUI, BANNER_710, WN_BALANCED, WN_PERFORMANCE)
+        val order = listOf(DD_TURNIP, BANNER, BANNER_A8XX, BANNER_ONEUI, BANNER_710, WN_BALANCED, WN_PERFORMANCE, NON_ADRENO)
         return assets.map { it.pair }.distinct()
             .sortedBy { key -> order.indexOf(key.substringBefore(':')).let { i -> if (i < 0) order.size else i } }
             .map { key ->
@@ -93,7 +122,13 @@ object DriverPairs {
      * the 710/720/722, and upstream Banners-Turnip for the rest. Null when nothing fits (not Adreno).
      */
     fun recommendedKey(gpu: GpuInfo, pairs: List<DriverPair>): String? = when (gpu.family) {
-        Family.NOT_ADRENO, Family.POWERVR -> null
+        // PowerVR and Xclipse keep the system driver (RADV stays a manual choice); a Mali no open
+        // build covers draws through the Vulkan bridge instead (DriverMenus.ensureAuto).
+        Family.NOT_ADRENO, Family.POWERVR, Family.MALI_OTHER -> null
+        Family.MALI_JM -> NAD_MALI_JM
+        Family.MALI_G610_G710 -> NAD_MALI_G710
+        Family.MALI_G615 -> NAD_MALI_G615
+        Family.MALI_G720 -> NAD_MALI_G720
         Family.A8XX -> if (gpu.model == 840) newestDdTurnip(pairs) ?: WN_BALANCED else WN_BALANCED
         Family.A7XX_LOW -> BANNER_710
         Family.A7XX -> if (gpu.oneUi8Gen2) BANNER_ONEUI else BANNER

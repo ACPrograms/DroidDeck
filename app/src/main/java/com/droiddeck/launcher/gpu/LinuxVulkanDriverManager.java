@@ -141,8 +141,8 @@ public class LinuxVulkanDriverManager {
                     // Flatten: only the base name matters, and it also defeats zip-slip paths.
                     String base = new File(entry.getName()).getName();
                     if (base.isEmpty()) continue;
-                    if (base.startsWith("libvulkan_freedreno") && base.endsWith(".so")) {
-                        if (soName != null) Log.w(TAG, "zip has several libvulkan_freedreno*.so; using the first (" + soName + ")");
+                    if (isDriverLibrary(base)) {
+                        if (soName != null) Log.w(TAG, "zip has several driver libraries; using the first (" + soName + ")");
                         else {
                             Files.copy(zis, new File(tmpDir, LIB_NAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
                             soName = base;
@@ -243,6 +243,16 @@ public class LinuxVulkanDriverManager {
         int n = 2;
         while (getDriverDir(id).exists()) id = base + "-" + (n++);
         return id;
+    }
+
+    /**
+     * A Linux Vulkan driver's library as release zips name it: Turnip (freedreno) on Adreno, PanVK
+     * (panfrost) on Mali, RADV (radeon) on Xclipse. Whichever it is, it is installed as
+     * {@link #LIB_NAME}; the ICD manifest loads it by that absolute path.
+     */
+    public static boolean isDriverLibrary(String base) {
+        return base.endsWith(".so") && (base.startsWith("libvulkan_freedreno")
+                || base.startsWith("libvulkan_panfrost") || base.startsWith("libvulkan_radeon"));
     }
 
     static String sanitizeId(String name) {
