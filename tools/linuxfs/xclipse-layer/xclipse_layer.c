@@ -31,7 +31,6 @@
 
 #define EXPORT __attribute__((visibility("default")))
 #define MAX_OBJECTS 64
-#define MAX_YCBCR_SAMPLERS 256
 
 extern char **environ;
 
@@ -66,8 +65,9 @@ struct device_data {
 };
 static struct instance_data instances[MAX_OBJECTS];
 static struct device_data devices[MAX_OBJECTS];
-/* YCbCr samplers by handle; non-dispatchable handles are unique per device on 64-bit. */
-static VkSampler ycbcr_samplers[MAX_YCBCR_SAMPLERS];
+/* The live YCbCr samplers each device created, so set layouts can recognise them. Guarded by lock. */
+static struct ycbcr_sampler { VkDevice device; VkSampler sampler; } *ycbcr_samplers;
+static size_t ycbcr_count, ycbcr_capacity;
 
 static struct instance_data *instance_by_key(dispatch_key key) {
     for (int i = 0; i < MAX_OBJECTS; i++)
@@ -219,6 +219,54 @@ static void VKAPI_CALL get_format_properties2(VkPhysicalDevice physical, VkForma
 
 /* ---- device ---- */
 
+/* Structures that may precede VkPhysicalDeviceFeatures2 in a device chain, by size. Only these are
+ * copied; a chain with anything else first is passed on unchanged. */
+static size_t copyable_size(VkStructureType type) {
+    switch (type) {
+    case VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO: return sizeof(VkLayerDeviceCreateInfo);
+    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2: return sizeof(VkPhysicalDeviceFeatures2);
+    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES: return sizeof(VkPhysicalDeviceVulkan11Features);
+    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES: return sizeof(VkPhysicalDeviceVulkan12Features);
+    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES: return sizeof(VkPhysicalDeviceVulkan13Features);
+    case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO: return sizeof(VkDeviceGroupDeviceCreateInfo);
+    case VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO: return sizeof(VkDevicePrivateDataCreateInfo);
+    default: return 0;
+    }
+}
+
+#define MAX_COPIED 16
+#define COPY_SIZE 512
+_Static_assert(sizeof(VkPhysicalDeviceVulkan12Features) <= COPY_SIZE &&
+               sizeof(VkPhysicalDeviceVulkan13Features) <= COPY_SIZE &&
+               sizeof(VkLayerDeviceCreateInfo) <= COPY_SIZE, "COPY_SIZE too small");
+struct chain_copy { _Alignas(16) unsigned char nodes[MAX_COPIED][COPY_SIZE]; };
+
+/* The chain with textureCompressionBC cleared in a copy of the VkPhysicalDeviceFeatures2 that enables
+ * it: every structure up to it is copied into [copy], the rest is shared. The caller's structures are
+ * never written. Returns [head] when nothing needs clearing or a structure ahead of it is unknown. */
+static const void *chain_without_bc(const void *head, struct chain_copy *copy) {
+    const VkBaseInStructure *target = NULL;
+    int count = 0;
+    for (const VkBaseInStructure *p = head; p && !target; p = p->pNext) {
+        if (!copyable_size(p->sType) || ++count > MAX_COPIED) return head;
+        if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 &&
+            ((const VkPhysicalDeviceFeatures2 *)p)->features.textureCompressionBC) target = p;
+    }
+    if (!target) return head;
+    VkBaseOutStructure *first = NULL, *last = NULL;
+    int index = 0;
+    for (const VkBaseInStructure *p = head; ; p = p->pNext) {
+        VkBaseOutStructure *node = (VkBaseOutStructure *)copy->nodes[index++];
+        memcpy(node, p, copyable_size(p->sType));
+        if (last) last->pNext = node; else first = node;
+        last = node;
+        if (p == target) {
+            ((VkPhysicalDeviceFeatures2 *)node)->features.textureCompressionBC = VK_FALSE;
+            return first; /* its pNext still leads to the caller's remaining structures */
+        }
+    }
+}
+
 static VkResult VKAPI_CALL create_device(VkPhysicalDevice physical, const VkDeviceCreateInfo *info,
                                          const VkAllocationCallbacks *allocator, VkDevice *device) {
     VkLayerDeviceCreateInfo *chain = (VkLayerDeviceCreateInfo *)info->pNext;
@@ -240,15 +288,9 @@ static VkResult VKAPI_CALL create_device(VkPhysicalDevice physical, const VkDevi
         plain_features.textureCompressionBC = VK_FALSE;
         patched.pEnabledFeatures = &plain_features;
     }
-    VkPhysicalDeviceFeatures2 *features2 = NULL;
-    for (VkBaseOutStructure *p = (VkBaseOutStructure *)info->pNext; p && strip_bc; p = p->pNext)
-        if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 &&
-            ((VkPhysicalDeviceFeatures2 *)p)->features.textureCompressionBC) {
-            features2 = (VkPhysicalDeviceFeatures2 *)p;
-            features2->features.textureCompressionBC = VK_FALSE;
-        }
+    struct chain_copy copy;
+    if (strip_bc) patched.pNext = chain_without_bc(info->pNext, &copy);
     VkResult result = next_create(physical, &patched, allocator, device);
-    if (features2) features2->features.textureCompressionBC = VK_TRUE;
     if (result != VK_SUCCESS) return result;
 
     PFN_vkCreateSampler create_sampler = (PFN_vkCreateSampler)next_gdpa(*device, "vkCreateSampler");
@@ -285,6 +327,9 @@ static void VKAPI_CALL destroy_device(VkDevice device, const VkAllocationCallbac
     pthread_mutex_lock(&lock);
     struct device_data *entry = device_by_key(key_of(device));
     if (entry) memset(entry, 0, sizeof(*entry));
+    for (size_t k = 0; k < ycbcr_count;)
+        if (ycbcr_samplers[k].device == device) ycbcr_samplers[k] = ycbcr_samplers[--ycbcr_count];
+        else k++;
     pthread_mutex_unlock(&lock);
     if (data.fallback && data.destroy_sampler) data.destroy_sampler(device, data.fallback, NULL);
     if (data.destroy_device) data.destroy_device(device, allocator);
@@ -302,20 +347,46 @@ static VkResult VKAPI_CALL create_sampler(VkDevice device, const VkSamplerCreate
     if (!next) return VK_ERROR_INITIALIZATION_FAILED;
     VkResult result = next(device, info, allocator, sampler);
     if (result != VK_SUCCESS) return result;
-    for (const VkBaseInStructure *p = info->pNext; p; p = p->pNext) {
-        if (p->sType != VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO) continue;
-        pthread_mutex_lock(&lock);
-        for (int k = 0; k < MAX_YCBCR_SAMPLERS; k++)
-            if (!ycbcr_samplers[k]) { ycbcr_samplers[k] = *sampler; break; }
-        pthread_mutex_unlock(&lock);
-        break;
+    int ycbcr = 0;
+    for (const VkBaseInStructure *p = info->pNext; p && !ycbcr; p = p->pNext)
+        ycbcr = p->sType == VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO;
+    if (!ycbcr) return result;
+    pthread_mutex_lock(&lock);
+    if (ycbcr_count == ycbcr_capacity) {
+        size_t capacity = ycbcr_capacity ? ycbcr_capacity * 2 : 16;
+        struct ycbcr_sampler *grown = realloc(ycbcr_samplers, capacity * sizeof(*grown));
+        if (!grown) {
+            pthread_mutex_unlock(&lock);
+            /* An untracked YCbCr sampler would reach a compute layout unreplaced: fail instead. */
+            PFN_vkDestroySampler destroy = device_of(device).destroy_sampler;
+            if (destroy) destroy(device, *sampler, allocator);
+            *sampler = VK_NULL_HANDLE;
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        ycbcr_samplers = grown;
+        ycbcr_capacity = capacity;
     }
+    ycbcr_samplers[ycbcr_count++] = (struct ycbcr_sampler){device, *sampler};
+    pthread_mutex_unlock(&lock);
     return result;
 }
 
-static int is_ycbcr(VkSampler sampler) {
-    for (int k = 0; k < MAX_YCBCR_SAMPLERS; k++)
-        if (sampler && ycbcr_samplers[k] == sampler) return 1;
+static void VKAPI_CALL destroy_sampler(VkDevice device, VkSampler sampler, const VkAllocationCallbacks *allocator) {
+    pthread_mutex_lock(&lock);
+    for (size_t k = 0; k < ycbcr_count; k++)
+        if (ycbcr_samplers[k].device == device && ycbcr_samplers[k].sampler == sampler) {
+            ycbcr_samplers[k] = ycbcr_samplers[--ycbcr_count];
+            break;
+        }
+    pthread_mutex_unlock(&lock);
+    PFN_vkDestroySampler next = device_of(device).destroy_sampler;
+    if (next) next(device, sampler, allocator);
+}
+
+/* Called with lock held. */
+static int is_ycbcr(VkDevice device, VkSampler sampler) {
+    for (size_t k = 0; sampler && k < ycbcr_count; k++)
+        if (ycbcr_samplers[k].device == device && ycbcr_samplers[k].sampler == sampler) return 1;
     return 0;
 }
 
@@ -329,32 +400,34 @@ static VkResult VKAPI_CALL create_set_layout(VkDevice device, const VkDescriptor
         const VkDescriptorSetLayoutBinding *binding = &info->pBindings[b];
         if (!(binding->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) || !binding->pImmutableSamplers) continue;
         for (uint32_t s = 0; s < binding->descriptorCount; s++)
-            if (is_ycbcr(binding->pImmutableSamplers[s])) { replace = 1; break; }
+            if (is_ycbcr(device, binding->pImmutableSamplers[s])) { replace = 1; break; }
     }
     pthread_mutex_unlock(&lock);
     if (!replace) return data.create_set_layout(device, info, allocator, layout);
 
+    VkResult result = VK_ERROR_OUT_OF_HOST_MEMORY;
     VkDescriptorSetLayoutBinding *bindings = calloc(info->bindingCount, sizeof(*bindings));
     VkSampler **arrays = calloc(info->bindingCount, sizeof(*arrays));
-    if (!bindings || !arrays) { free(bindings); free(arrays); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+    if (!bindings || !arrays) goto done;
     for (uint32_t b = 0; b < info->bindingCount; b++) {
         bindings[b] = info->pBindings[b];
         if (!(bindings[b].stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) || !bindings[b].pImmutableSamplers) continue;
-        arrays[b] = malloc(bindings[b].descriptorCount * sizeof(VkSampler));
-        if (!arrays[b]) continue;
+        /* Without the replacement the driver would see the samplers it cannot compile: fail instead. */
+        if (!(arrays[b] = malloc(bindings[b].descriptorCount * sizeof(VkSampler)))) goto done;
         pthread_mutex_lock(&lock);
         for (uint32_t s = 0; s < bindings[b].descriptorCount; s++) {
             VkSampler original = bindings[b].pImmutableSamplers[s];
-            arrays[b][s] = is_ycbcr(original) ? data.fallback : original;
+            arrays[b][s] = is_ycbcr(device, original) ? data.fallback : original;
         }
         pthread_mutex_unlock(&lock);
         bindings[b].pImmutableSamplers = arrays[b];
     }
     VkDescriptorSetLayoutCreateInfo patched = *info;
     patched.pBindings = bindings;
-    VkResult result = data.create_set_layout(device, &patched, allocator, layout);
+    result = data.create_set_layout(device, &patched, allocator, layout);
     if (debug) fprintf(stderr, "xclipse layer: compute YCbCr immutable samplers replaced (%d)\n", result);
-    for (uint32_t b = 0; b < info->bindingCount; b++) free(arrays[b]);
+done:
+    for (uint32_t b = 0; arrays && b < info->bindingCount; b++) free(arrays[b]);
     free(arrays);
     free(bindings);
     return result;
@@ -366,6 +439,7 @@ static PFN_vkVoidFunction device_hook(const char *name) {
     if (!strcmp(name, "vkGetDeviceProcAddr")) return NULL; /* handled by the caller */
     if (!strcmp(name, "vkDestroyDevice")) return (PFN_vkVoidFunction)destroy_device;
     if (!strcmp(name, "vkCreateSampler")) return (PFN_vkVoidFunction)create_sampler;
+    if (!strcmp(name, "vkDestroySampler")) return (PFN_vkVoidFunction)destroy_sampler;
     if (!strcmp(name, "vkCreateDescriptorSetLayout")) return (PFN_vkVoidFunction)create_set_layout;
     if (!strcmp(name, "vkGetCalibratedTimestampsKHR")) return (PFN_vkVoidFunction)timestamps_khr;
     return NULL;
