@@ -1,5 +1,6 @@
 package com.droiddeck.launcher.ui
 
+import android.app.Application
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -24,8 +25,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
+// Exercise the component UI without starting App's process-wide servers or crash handler.
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], application = Application::class)
 class ComponentsPageProfileTest {
     @get:Rule val compose = createRobolectricComposeRule()
 
