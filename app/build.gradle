@@ -185,15 +185,6 @@ android {
         unitTests.returnDefaultValues = true
         // Robolectric tests start activities whose text is now all string resources.
         unitTests.includeAndroidResources = true
-        // Temporary diagnostics for the test worker's unexplained exit 2.
-        unitTests.all {
-            systemProperty 'robolectric.logging', 'stdout'
-            testLogging {
-                events 'started', 'failed'
-                exceptionFormat 'full'
-                showStandardStreams = true
-            }
-        }
     }
 
     compileOptions {
