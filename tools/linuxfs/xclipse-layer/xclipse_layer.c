@@ -219,50 +219,56 @@ static void VKAPI_CALL get_format_properties2(VkPhysicalDevice physical, VkForma
 
 /* ---- device ---- */
 
-/* Structures that may precede VkPhysicalDeviceFeatures2 in a device chain, by size. Only these are
- * copied; a chain with anything else first is passed on unchanged. */
-static size_t copyable_size(VkStructureType type) {
+/* The size of each structure a VkDeviceCreateInfo chain may hold (device_chain.inc, generated from the
+ * Vulkan registry), plus the loader's own; 0 for anything else. */
+static size_t chain_size(VkStructureType type) {
     switch (type) {
+#define DEVICE_CHAIN(stype, name) case stype: return sizeof(name);
+#include "device_chain.inc"
+#undef DEVICE_CHAIN
     case VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO: return sizeof(VkLayerDeviceCreateInfo);
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2: return sizeof(VkPhysicalDeviceFeatures2);
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES: return sizeof(VkPhysicalDeviceVulkan11Features);
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES: return sizeof(VkPhysicalDeviceVulkan12Features);
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES: return sizeof(VkPhysicalDeviceVulkan13Features);
-    case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO: return sizeof(VkDeviceGroupDeviceCreateInfo);
-    case VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO: return sizeof(VkDevicePrivateDataCreateInfo);
     default: return 0;
     }
 }
 
-#define MAX_COPIED 16
-#define COPY_SIZE 512
-_Static_assert(sizeof(VkPhysicalDeviceVulkan12Features) <= COPY_SIZE &&
-               sizeof(VkPhysicalDeviceVulkan13Features) <= COPY_SIZE &&
-               sizeof(VkLayerDeviceCreateInfo) <= COPY_SIZE, "COPY_SIZE too small");
-struct chain_copy { _Alignas(16) unsigned char nodes[MAX_COPIED][COPY_SIZE]; };
+struct chain_copy { void **nodes; size_t count; };
+
+static void free_chain_copy(struct chain_copy *copy) {
+    for (size_t i = 0; i < copy->count; i++) free(copy->nodes[i]);
+    free(copy->nodes);
+    copy->nodes = NULL;
+    copy->count = 0;
+}
 
 /* The chain with textureCompressionBC cleared in a copy of the VkPhysicalDeviceFeatures2 that enables
  * it: every structure up to it is copied into [copy], the rest is shared. The caller's structures are
- * never written. Returns [head] when nothing needs clearing or a structure ahead of it is unknown. */
-static const void *chain_without_bc(const void *head, struct chain_copy *copy) {
+ * never written. *head_out stays [head] when nothing needs clearing, or when a structure ahead of it
+ * is unknown to this build (newer than its Vulkan headers); the compat layer then refuses the bit. */
+static VkResult chain_without_bc(const void *head, struct chain_copy *copy, const void **head_out) {
+    *head_out = head;
     const VkBaseInStructure *target = NULL;
-    int count = 0;
+    size_t count = 0;
     for (const VkBaseInStructure *p = head; p && !target; p = p->pNext) {
-        if (!copyable_size(p->sType) || ++count > MAX_COPIED) return head;
+        if (!chain_size(p->sType)) return VK_SUCCESS;
+        count++;
         if (p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 &&
             ((const VkPhysicalDeviceFeatures2 *)p)->features.textureCompressionBC) target = p;
     }
-    if (!target) return head;
+    if (!target) return VK_SUCCESS;
+    if (!(copy->nodes = calloc(count, sizeof(*copy->nodes)))) return VK_ERROR_OUT_OF_HOST_MEMORY;
     VkBaseOutStructure *first = NULL, *last = NULL;
-    int index = 0;
     for (const VkBaseInStructure *p = head; ; p = p->pNext) {
-        VkBaseOutStructure *node = (VkBaseOutStructure *)copy->nodes[index++];
-        memcpy(node, p, copyable_size(p->sType));
+        size_t size = chain_size(p->sType);
+        VkBaseOutStructure *node = malloc(size);
+        if (!node) { free_chain_copy(copy); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+        copy->nodes[copy->count++] = node;
+        memcpy(node, p, size);
         if (last) last->pNext = node; else first = node;
         last = node;
         if (p == target) {
             ((VkPhysicalDeviceFeatures2 *)node)->features.textureCompressionBC = VK_FALSE;
-            return first; /* its pNext still leads to the caller's remaining structures */
+            *head_out = first; /* its pNext still leads to the caller's remaining structures */
+            return VK_SUCCESS;
         }
     }
 }
@@ -288,9 +294,13 @@ static VkResult VKAPI_CALL create_device(VkPhysicalDevice physical, const VkDevi
         plain_features.textureCompressionBC = VK_FALSE;
         patched.pEnabledFeatures = &plain_features;
     }
-    struct chain_copy copy;
-    if (strip_bc) patched.pNext = chain_without_bc(info->pNext, &copy);
+    struct chain_copy copy = {0};
+    if (strip_bc) {
+        VkResult copied = chain_without_bc(info->pNext, &copy, &patched.pNext);
+        if (copied != VK_SUCCESS) return copied;
+    }
     VkResult result = next_create(physical, &patched, allocator, device);
+    free_chain_copy(&copy);
     if (result != VK_SUCCESS) return result;
 
     PFN_vkCreateSampler create_sampler = (PFN_vkCreateSampler)next_gdpa(*device, "vkCreateSampler");
