@@ -342,6 +342,13 @@ public final class TurnipDriver {
             if (forced.startsWith("a7")) return DRIVER_A7XX;
         }
         if (SystemVulkanDriver.isPowerVr()) return null;
+        // Not an Adreno (Mali, Xclipse...): Turnip cannot open a GPU without KGSL. The compositor
+        // runs on the phone's own driver, which has the dma-buf import it needs (the Mali bridge
+        // depends on it too).
+        if (!com.droiddeck.launcher.core.DeviceSupport.INSTANCE.adreno()) {
+            Log.i(TAG, "no KGSL: the compositor uses the system Vulkan driver");
+            return null;
+        }
         String model = gpuModel();
         Log.i(TAG, "gpu model: " + (model == null ? "unknown" : model));
         if (model != null) {

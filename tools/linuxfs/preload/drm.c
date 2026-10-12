@@ -51,8 +51,10 @@ static int is_kgsl(int fd) {
   struct stat st;
   pthread_mutex_lock(&lock);
   if (kgsl_state == 0) {
-    kgsl_state = stat("/dev/kgsl-3d0", &st) == 0 ? 1 : -1;
-    if (kgsl_state > 0) kgsl_dev = st.st_rdev;
+    /* KGSL, or the device the Mali bridge's session names as its render node (BL_DRM_STANDIN). */
+    const char *standin = getenv("BL_DRM_STANDIN");
+    kgsl_state = stat("/dev/kgsl-3d0", &st) == 0 || (standin && *standin && stat(standin, &st) == 0) ? 1 : -1;
+    kgsl_dev = st.st_rdev;
   }
   pthread_mutex_unlock(&lock);
   return kgsl_state > 0 && fstat(fd, &st) == 0 && S_ISCHR(st.st_mode) && st.st_rdev == kgsl_dev;

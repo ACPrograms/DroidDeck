@@ -17,6 +17,17 @@ object DeviceSupport {
 
     internal fun graphicsAvailable(adreno: Boolean, powerVrReady: Boolean): Boolean = adreno || powerVrReady
 
+    /**
+     * Whether the Linux side draws through the Vulkan bridge (tools/vkbridge, PR #517): asked for in
+     * Setup, and only on a GPU that is neither an Adreno nor one the system-Vulkan path (PowerVR,
+     * Xclipse) already handles. An Adreno keeps Turnip whatever the setting says.
+     */
+    fun vkBridge(context: Context): Boolean =
+        !adreno() && !SystemVulkanDriver.isAvailable() && com.droiddeck.launcher.session.SessionPrefs.vkBridge(context)
+
+    /** A session can draw: Adreno with Turnip, PowerVR/Xclipse on the system driver, or the bridge. */
+    fun canDraw(context: Context): Boolean = graphicsAvailable() || vkBridge(context)
+
     /** The chip as the device names it, for the card that explains the refusal. */
     fun gpuName(context: Context): String {
         val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL.takeIf { it.isNotBlank() && it != Build.UNKNOWN } else null
