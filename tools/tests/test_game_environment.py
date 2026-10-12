@@ -82,6 +82,32 @@ class SystemGraphicsLaunchTest(unittest.TestCase):
             for key in ("FEX_TSOENABLED", "WINESERVER", "CUSTOM"):
                 self.assertEqual(result[key], env[key])
 
+    def test_xclipse_selection_adds_its_layers_layer_path_and_dxvk_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime, _ = self.runtime(Path(tmp))
+            env = {"DROIDDECK_POWERVR_RUNTIME": str(runtime), "STEAM_COMPAT_DATA_PATH": "/compatdata/42",
+                   "DROIDDECK_HYBRIS_LAYERS": "VK_LAYER_DROIDDECK_xclipse:VK_LAYER_HYBRIS_compat",
+                   "DROIDDECK_HYBRIS_LAYER_PATH": "/usr/local/lib/droiddeck-xclipse",
+                   "DROIDDECK_HYBRIS_DXVK": "dxvk-2.6.2"}
+            command = ["/proton", "waitforexitandrun", "game.exe"]
+            # The selected payload is required like the default one.
+            with self.assertRaises(MODULE["SystemGraphicsError"]):
+                MODULE["system_graphics_launch"](command, env)
+            for arch in ("x32", "x64"):
+                for name in ("d3d8", "d3d9", "d3d10core", "d3d11", "dxgi"):
+                    target = runtime / "dxvk-2.6.2" / arch / (name + ".dll")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(b"component")
+            launch, result = MODULE["system_graphics_launch"](command, env)
+            self.assertEqual(launch, [str(runtime / "run-proton.py"), *command])
+            self.assertEqual(result["VK_INSTANCE_LAYERS"],
+                             "VK_LAYER_window_system_integration:VK_LAYER_DROIDDECK_xclipse:VK_LAYER_HYBRIS_compat")
+            self.assertEqual(result["VK_LAYER_PATH"], f"{runtime}/wsi:{runtime}/lib:/usr/local/lib/droiddeck-xclipse")
+            self.assertEqual(result["DROIDDECK_HYBRIS_DXVK"], "dxvk-2.6.2")
+            for name in ("../dxvk", "other", "dxvk/x"):
+                with self.subTest(name=name), self.assertRaises(MODULE["SystemGraphicsError"]):
+                    MODULE["system_graphics_launch"](command, dict(env, DROIDDECK_HYBRIS_DXVK=name))
+
     def test_incomplete_runtime_fails_before_any_proton_exec(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime, files = self.runtime(Path(tmp))

@@ -106,7 +106,7 @@ object DeviceReport {
         k("KGSL gpu_model", readSys("/sys/class/kgsl/kgsl-3d0/gpu_model"))
         k("KGSL chip id", readSys("/sys/class/kgsl/kgsl-3d0/gpu_chipid"))
         k("System Vulkan ICD", when {
-            SystemVulkanDriver.isPowerVr() -> "/vendor/lib64/hw/vulkan.powervr.so"
+            SystemVulkanDriver.isPowerVr() -> SystemVulkanDriver.hal()
             File("/vendor/lib64/hw/vulkan.adreno.so").exists() -> "/vendor/lib64/hw/vulkan.adreno.so"
             else -> "not at the usual path"
         })

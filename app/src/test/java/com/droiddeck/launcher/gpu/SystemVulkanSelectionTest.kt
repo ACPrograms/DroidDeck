@@ -35,6 +35,16 @@ class SystemVulkanSelectionTest {
             assertFalse(name, SystemVulkanDriver.powerVrDriver(name))
     }
 
+    @Test fun samsungXclipseGpuNodeIsSelectedOverItsDisplayNode() {
+        assertTrue(SystemVulkanDriver.powerVrDriver("sgpu"))
+        assertFalse("the display controller is not the GPU", SystemVulkanDriver.powerVrDriver("exynos-drm"))
+        // Galaxy A56 (Exynos 1580): the GPU owns renderD128, the display controller renderD129.
+        val drivers = mapOf("/dev/dri/renderD128" to "sgpu", "/dev/dri/renderD129" to "exynos-drm")
+        assertEquals("/dev/dri/renderD128", SystemVulkanDriver.findRenderNode(null) { path ->
+            SystemVulkanDriver.powerVrDriver(drivers[path])
+        })
+    }
+
     @Test fun renderNodeIdentityUsesTheDriverLinkOrUevent() {
         val device = Files.createTempDirectory("powervr-device").toFile()
         try {

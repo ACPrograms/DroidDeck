@@ -226,6 +226,91 @@
       "sha256": "348f9ec42159c1ee6e2baba4312a5e845d26687238f29e3f4a1b0c3c97e13b3c",
       "size": 362717,
       "url": "https://github.com/wallentx/DroidDeck/releases/download/v0.3.2-progress.20261010.4/wsi-abe5861.zip"
+    },
+    {
+      "files": [
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x32/d3d10core.dll",
+          "path": "dxvk-2.6.2/x32/d3d10core.dll",
+          "sha256": "b34b479fa0bce29eba6dcff5b1f8584c2ae699d53a123668590f8a2b84e84094",
+          "size": 176142
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x32/d3d11.dll",
+          "path": "dxvk-2.6.2/x32/d3d11.dll",
+          "sha256": "858d1a848dd5023191cb16cd986e0f00008faf5df8a87b5c835b56cf4b646910",
+          "size": 4845582
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x32/d3d8.dll",
+          "path": "dxvk-2.6.2/x32/d3d8.dll",
+          "sha256": "617459c8d1239f98687f8157bdaec85738ee4699885ed7d1ff13deb32609c759",
+          "size": 1658894
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x32/d3d9.dll",
+          "path": "dxvk-2.6.2/x32/d3d9.dll",
+          "sha256": "00bc142e98ddad1e334a4d88fa630038e092b0758b3d79e295172b181a4c772d",
+          "size": 4460558
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x32/dxgi.dll",
+          "path": "dxvk-2.6.2/x32/dxgi.dll",
+          "sha256": "67d7ca4a4f8f66baabd381c73b52a8e85870083e868ed474a4bc58b7da486883",
+          "size": 3137550
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x64/d3d10core.dll",
+          "path": "dxvk-2.6.2/x64/d3d10core.dll",
+          "sha256": "565154a0763c6460843fe47e5aaec62e609163d9995a922d5e19e85027fe2f88",
+          "size": 155662
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x64/d3d11.dll",
+          "path": "dxvk-2.6.2/x64/d3d11.dll",
+          "sha256": "5b63515a432d19302f7dc81dd2ee5bf40043683b5064a2bce03a2b6d27dcce5d",
+          "size": 4399118
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x64/d3d8.dll",
+          "path": "dxvk-2.6.2/x64/d3d8.dll",
+          "sha256": "dfd837c3467eeb15f69a773e18bbc0550cb69c9e33d5d57b4ea42c5f63bfdc4b",
+          "size": 1544206
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x64/d3d9.dll",
+          "path": "dxvk-2.6.2/x64/d3d9.dll",
+          "sha256": "01e7ae2b0544b6031fe695fd16fbc76786ded57fdbe3f6bd11eee7c98d2c370d",
+          "size": 4108302
+        },
+        {
+          "mode": 493,
+          "name": "dxvk-2.6.2/x64/dxgi.dll",
+          "path": "dxvk-2.6.2/x64/dxgi.dll",
+          "sha256": "074616e1af172edf175f3fc6ed7ca30f6c685a70875eed3af10797a10840ed39",
+          "size": 2891790
+        }
+      ],
+      "format": "tar.gz",
+      "id": "dxvk-xclipse",
+      "ignored": [],
+      "provenance": {
+        "note": "Unmodified upstream release, selected on Samsung Xclipse: its 128 bytes of push constants predate DXVK 3's 256-byte requirement. Covered by the zlib license already shipped as licenses/dxvk-LICENSE.",
+        "upstream_release": "https://github.com/doitsujin/dxvk/releases/tag/v2.6.2"
+      },
+      "recipe_inputs": {},
+      "sha256": "17761876556afd55736cb895d184f5a1c55d43350f1b1e3b129f8d28706d7992",
+      "size": 10107492,
+      "url": "https://github.com/doitsujin/dxvk/releases/download/v2.6.2/dxvk-2.6.2.tar.gz"
     }
   ],
   "format": 1,

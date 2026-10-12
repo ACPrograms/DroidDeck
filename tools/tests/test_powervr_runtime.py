@@ -48,6 +48,29 @@ def tar(entries):
                           capture_output=True, check=True).stdout
 
 
+def tar_gz(entries):
+    stream = io.BytesIO()
+    with tarfile.open(fileobj=stream, mode='w:gz') as archive:
+        for name, kind, content in entries:
+            info = tarfile.TarInfo(name)
+            info.type = kind
+            if kind == tarfile.SYMTYPE:
+                info.linkname = content
+                archive.addfile(info)
+            elif kind == tarfile.REGTYPE:
+                info.size = len(content)
+                archive.addfile(info, io.BytesIO(content))
+            else:
+                archive.addfile(info)
+    return stream.getvalue()
+
+
+def upstream_dxvk(version, architecture_of=lambda arch: arch):
+    return {'dxvk-%s/%s/%s' % (version, arch, name): pe(architecture_of(arch))
+            for arch in ('x32', 'x64')
+            for name in ('d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll')}
+
+
 class PowerVRRuntimeTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -95,6 +118,18 @@ class PowerVRRuntimeTest(unittest.TestCase):
         (self.cache / (component['sha256'] + '-' + name)).write_bytes(data)
         return component
 
+    def add_upstream_dxvk(self, files):
+        top = next(iter(files)).split('/')[0]
+        data = tar_gz([(top, tarfile.DIRTYPE, None)] +
+                      [(name, tarfile.REGTYPE, content) for name, content in files.items()])
+        component = self.component('dxvk-upstream.tar.gz', data)
+        component.update({'format': 'tar.gz', 'ignored': [], 'files': [
+            {'name': name, 'path': name, 'size': len(content), 'sha256': runtime.sha256(content), 'mode': 0o755}
+            for name, content in files.items()]})
+        self.release['archives'].append(component)
+        self.pins.write_bytes(runtime.json_bytes(self.release))
+        return component
+
     def assembled(self):
         runtime.assemble(self.root, self.cache)
         return runtime.read_tar((self.root / runtime.ASSETS / 'runtime.tzst').read_bytes())
@@ -106,6 +141,38 @@ class PowerVRRuntimeTest(unittest.TestCase):
         self.assembled()
         self.assertEqual(first, (self.root / runtime.ASSETS / 'runtime.tzst').read_bytes())
         self.assertEqual(runtime.read_tar(first)['lib/libhybris-common.so.1'][0], 'symlink')
+
+    def test_upstream_tarball_adds_a_second_dxvk_payload(self):
+        files = upstream_dxvk('2.6.2')
+        self.add_upstream_dxvk(files)
+        entries = self.assembled()
+        runtime.verify(self.root)
+        for name, content in files.items():
+            self.assertEqual(entries[name], ('file', 0o755, content))
+        self.assertIn('dxvk/x64/d3d9.dll', entries)
+
+    def test_second_dxvk_payload_with_wrong_pe_architecture_is_rejected(self):
+        self.add_upstream_dxvk(upstream_dxvk('2.6.2', lambda arch: 'x64' if arch == 'x32' else 'x32'))
+        with self.assertRaisesRegex(ValueError, 'wrong PE architecture: dxvk-2.6.2/'):
+            self.assembled()
+
+    def test_tar_gz_rejects_symlinks_unknown_members_and_changed_files(self):
+        pin = {'name': 'dxvk-1/x64/d3d9.dll', 'path': 'dxvk-1/x64/d3d9.dll', 'size': 4,
+               'sha256': runtime.sha256(b'good'), 'mode': 0o755}
+        component = {'files': [pin], 'ignored': []}
+        cases = [
+            [('dxvk-1/x64/d3d9.dll', tarfile.SYMTYPE, '../../outside')],
+            [('dxvk-1/x64/d3d9.dll', tarfile.REGTYPE, b'good'), ('dxvk-1/extra.dll', tarfile.REGTYPE, b'x')],
+            [('dxvk-1/x64/d3d9.dll', tarfile.REGTYPE, b'evil')],
+            [],
+        ]
+        for entries in cases:
+            with self.subTest(entries=[name for name, _, _ in entries]), self.assertRaises(ValueError):
+                runtime.read_tar_gz(tar_gz(entries), component)
+        self.assertEqual(runtime.read_tar_gz(tar_gz([('dxvk-1/x64/d3d9.dll', tarfile.REGTYPE, b'good')]), component),
+                         {'dxvk-1/x64/d3d9.dll': ('file', 0o755, b'good')})
+        with self.assertRaisesRegex(ValueError, 'unsupported component archive format'):
+            runtime.read_component(b'', {'format': 'rar'})
 
     def test_stale_wrapper_cannot_pass_with_an_updated_archive_checksum(self):
         self.assembled()
