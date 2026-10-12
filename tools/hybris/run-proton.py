@@ -11,6 +11,7 @@ change synchronization settings, or provide game-specific workarounds.
 """
 
 import argparse
+import os
 from pathlib import Path
 import sys
 
@@ -58,7 +59,12 @@ def main():
         parser.error("expected: PROTON waitforexitandrun GAME [ARGUMENTS...]")
 
     proton = Path(args.proton)
-    dxvk = Path(__file__).resolve().parent / "dxvk"
+    # A sibling payload directory by name (dxvk-2.6.2 for Xclipse); never a path.
+    name = os.environ.get("DROIDDECK_HYBRIS_DXVK") or "dxvk"
+    if not name.startswith("dxvk") or "/" in name or name.startswith("."):
+        print(f"DroidDeck DXVK profile: invalid payload name {name!r}", file=sys.stderr)
+        return 1
+    dxvk = Path(__file__).resolve().parent / name
     try:
         code = prepare(proton, dxvk)
     except (OSError, ValueError, SyntaxError) as error:

@@ -106,7 +106,9 @@ data class GpuInfo(
             val samsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             return GpuInfo(
                 name = when {
-                    family == Family.POWERVR -> VulkanInfo.cachedOrNull()?.get("device")?.takeIf { it.contains("PowerVR", ignoreCase = true) } ?: "PowerVR"
+                    family == Family.POWERVR -> SystemVulkanDriver.gpuName().let { gpu ->
+                        VulkanInfo.cachedOrNull()?.get("device")?.takeIf { it.contains(gpu, ignoreCase = true) } ?: gpu
+                    }
                     !adreno -> Build.HARDWARE.ifBlank { UNNAMED }
                     model > 0 -> "Adreno $model"
                     else -> "Adreno"

@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import posixpath
+import re
 import stat
 import subprocess
 import tarfile
@@ -194,6 +195,50 @@ def read_zip(data, component):
     return entries
 
 
+def read_tar_gz(data, component):
+    """An upstream release tarball, held to the same per-file pins as a CI archive."""
+    entries, seen = {}, set()
+    expected = {item["name"]: item for item in component["files"]}
+    allowed = set(expected) | set(component["ignored"])
+    total = 0
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        for member in archive:
+            name = safe_name(member.name)
+            if name in seen:
+                raise ValueError("duplicate archive path: " + name)
+            seen.add(name)
+            if member.isdir():
+                continue
+            if not member.isfile() or name not in allowed:
+                raise ValueError("unexpected component archive entry: " + name)
+            total += member.size
+            if total > MAX_UNPACKED:
+                raise ValueError("component archive exceeds size limit")
+            if name not in expected:
+                continue
+            pin = expected[name]
+            content = archive.extractfile(member).read()
+            if len(content) != pin["size"] or sha256(content) != pin["sha256"]:
+                raise ValueError("component member checksum mismatch: " + name)
+            path = safe_name(pin["path"])
+            if path in entries:
+                raise ValueError("duplicate component destination: " + path)
+            entries[path] = ("file", pin["mode"], content)
+    if set(expected) - seen:
+        raise ValueError("component archive missing files: " + ", ".join(sorted(set(expected) - seen)))
+    check_tree(entries)
+    return entries
+
+
+def read_component(data, component):
+    kind = component.get("format", "zip")
+    if kind == "zip":
+        return read_zip(data, component)
+    if kind == "tar.gz":
+        return read_tar_gz(data, component)
+    raise ValueError("unsupported component archive format: " + kind)
+
+
 def check_bundle(entries, release, root):
     check_tree(entries)
     if read(entries, "assembly-inputs.json") != json_bytes(assembly_inputs(root)):
@@ -221,15 +266,20 @@ def check_bundle(entries, release, root):
         content = read(entries, name)
         if content[:6] != b"\x7fELF\x02\x01" or content[18:20] != b"\xb7\x00":
             raise ValueError("runtime library is not ELF64 AArch64: " + name)
-    for architecture, machine, magic in (("x32", b"\x4c\x01", b"\x0b\x01"),
-                                         ("x64", b"\x64\x86", b"\x0b\x02")):
-        for name in ("d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"):
-            path = "dxvk/" + architecture + "/" + name
-            content = read(entries, path)
-            pe = int.from_bytes(content[60:64], "little")
-            if (content[:2] != b"MZ" or pe < 64 or content[pe:pe + 4] != b"PE\0\0"
-                    or content[pe + 4:pe + 6] != machine or content[pe + 24:pe + 26] != magic):
-                raise ValueError("DXVK library has wrong PE architecture: " + path)
+    # dxvk/ is the default payload; run-proton.py can select another dxvk-* sibling by name.
+    payloads = sorted({name.split("/")[0] for name in entries if re.fullmatch(r"dxvk[^/]*/x(32|64)/[^/]+\.dll", name)})
+    if "dxvk" not in payloads:
+        raise ValueError("default DXVK payload missing")
+    for payload in payloads:
+        for architecture, machine, magic in (("x32", b"\x4c\x01", b"\x0b\x01"),
+                                             ("x64", b"\x64\x86", b"\x0b\x02")):
+            for name in ("d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"):
+                path = payload + "/" + architecture + "/" + name
+                content = read(entries, path)
+                pe = int.from_bytes(content[60:64], "little")
+                if (content[:2] != b"MZ" or pe < 64 or content[pe:pe + 4] != b"PE\0\0"
+                        or content[pe + 4:pe + 6] != machine or content[pe + 24:pe + 26] != magic):
+                    raise ValueError("DXVK library has wrong PE architecture: " + path)
 
 
 def pack(entries):
@@ -273,7 +323,7 @@ def assemble(root, cache):
     if tree_digest(entries) != release["hybris"]["tree_sha256"]:
         raise ValueError("PowerVR bridge tree checksum mismatch")
     for component in release["archives"]:
-        additions = read_zip(fetch(component, cache), component)
+        additions = read_component(fetch(component, cache), component)
         if set(entries) & set(additions):
             raise ValueError("component overwrites existing runtime files")
         entries.update(additions)

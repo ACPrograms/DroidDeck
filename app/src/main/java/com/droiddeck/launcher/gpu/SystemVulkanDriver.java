@@ -22,7 +22,11 @@ import org.json.JSONObject;
 /** Isolated glibc-to-Android Vulkan bridge. It does not replace the rootfs's Mesa libraries. */
 public final class SystemVulkanDriver {
     private static final String ASSET = "hybris/runtime.tzst";
-    private static final String PVR_HAL = "/vendor/lib64/hw/vulkan.powervr.so";
+    /** Vendor HALs the bridge loads. Samsung Xclipse (Exynos, sgpu) is experimental. */
+    private static final String[] HALS = {
+        "/vendor/lib64/hw/vulkan.powervr.so",
+        "/vendor/lib64/hw/vulkan.samsung.so"
+    };
     private static final String[] REQUIRED = {
         "lib/libhybris-vulkan-icd.so.0", "lib/libhybris-common.so.1",
         "lib/libhybris/linker/q.so", "lib/libVkLayer_hybris_compat.so",
@@ -34,9 +38,28 @@ public final class SystemVulkanDriver {
         "dxvk/x64/d3d11.dll", "dxvk/x64/dxgi.dll"
     };
 
+    /** Rootfs directory of the Xclipse layer the apk stages (SessionFiles). */
+    private static final String XCLIPSE_LAYER_DIR = "/usr/local/lib/droiddeck-xclipse";
+
     private SystemVulkanDriver() {}
 
-    public static boolean isPowerVr() { return new File(PVR_HAL).isFile(); }
+    /** The first vendor HAL present, or null. */
+    public static String hal() {
+        for (String path : HALS) if (new File(path).isFile()) return path;
+        return null;
+    }
+
+    /** Samsung's Xclipse (Exynos, sgpu) rather than PowerVR. */
+    public static boolean isXclipse() {
+        String hal = hal();
+        return hal != null && hal.endsWith("/vulkan.samsung.so");
+    }
+
+    /** The system-driver GPU family, for labels. */
+    public static String gpuName() { return isXclipse() ? "Xclipse" : "PowerVR"; }
+
+    /** Whether a system-driver GPU (PowerVR or Xclipse) is present; the name predates Xclipse. */
+    public static boolean isPowerVr() { return hal() != null; }
 
     /** HAL detection names the GPU; launching also needs the real DRM render node. */
     public static boolean isAvailable() { return isPowerVr() && renderNodeAvailable(); }
@@ -77,7 +100,8 @@ public final class SystemVulkanDriver {
     }
 
     static boolean powerVrDriver(String driver) {
-        return "pvrsrvkm".equals(driver) || "pvr".equals(driver) || "powervr".equals(driver);
+        return "pvrsrvkm".equals(driver) || "pvr".equals(driver) || "powervr".equals(driver)
+                || "sgpu".equals(driver);
     }
 
     static boolean powerVrDevice(File device) {
@@ -200,12 +224,22 @@ public final class SystemVulkanDriver {
         String node = renderNodePath();
         if (node == null) throw new IllegalStateException("System PowerVR render node is unavailable");
         environment.add("HYBRIS_ANDROID_SDK_VERSION=" + Build.VERSION.SDK_INT);
-        environment.add("HYBRIS_VULKAN_HAL=" + PVR_HAL);
+        environment.add("HYBRIS_VULKAN_HAL=" + hal());
         environment.add("HYBRIS_LINKER_DIR=" + new File(directory, "lib/libhybris/linker").getPath());
         // Prefer framework dependencies for the system Vulkan loader, including libbase.so.
         environment.add("HYBRIS_LD_LIBRARY_PATH=/system/lib64:/system_ext/lib64:/vendor/lib64/egl:/vendor/lib64/hw:/vendor/lib64");
-        environment.add("VK_LAYER_PATH=" + new File(directory, "lib").getPath());
-        environment.add("VK_INSTANCE_LAYERS=VK_LAYER_HYBRIS_compat");
+        boolean xclipse = isXclipse();
+        // Xclipse gets its own layer (tools/linuxfs/xclipse-layer) in front of everything: it sets
+        // bionic's environ for the driver's shader compiler, among other driver workarounds. The
+        // session's own clients need nothing else; games keep the compat layer's BC emulation.
+        String layers = xclipse ? "VK_LAYER_DROIDDECK_xclipse" : "VK_LAYER_HYBRIS_compat";
+        environment.add("VK_LAYER_PATH=" + new File(directory, "lib").getPath() + (xclipse ? ":" + XCLIPSE_LAYER_DIR : ""));
+        environment.add("VK_INSTANCE_LAYERS=" + layers);
+        // Proton game launches add their WSI layer in front of these (droiddeck-game-env).
+        environment.add("DROIDDECK_HYBRIS_LAYERS=" + (xclipse ? layers + ":VK_LAYER_HYBRIS_compat" : layers));
+        if (xclipse) environment.add("DROIDDECK_HYBRIS_LAYER_PATH=" + XCLIPSE_LAYER_DIR);
+        // DXVK 3 needs 256 bytes of push constants; this driver has 128.
+        if (xclipse) environment.add("DROIDDECK_HYBRIS_DXVK=dxvk-2.6.2");
         // The Android driver has a render node, but no KMS primary node. SDL presents
         // through the wrapper's Wayland Vulkan swapchain instead of a KMS-style path.
         environment.add("BL_GAMESCOPE_BACKEND=sdl");

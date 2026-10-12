@@ -112,8 +112,12 @@ static struct wl_resource *create_android_buffer(struct wl_client *client, uint3
 static void create_buffer(struct wl_client *client, struct wl_resource *resource, uint32_t id,
                            int32_t width, int32_t height, int32_t stride, int32_t format,
                            int32_t usage, struct wl_resource *handle_resource) {
-    if (!valid_description(width, height, stride, format) ||
+    /* Some vendor allocators (Samsung Xclipse) record no stride for GPU-only buffers. The import
+     * must pass that 0 back unchanged: gralloc validates it against the handle's own value. */
+    if (!valid_description(width, height, stride ? stride : width, format) ||
         !wl_resource_instance_of(handle_resource, &android_wlegl_handle_interface, &handle_impl)) {
+        droiddeck_log("display", "android_wlegl rejected: %dx%d stride=%d format=%d usage=0x%x",
+                     width, height, stride, format, (uint32_t)usage);
         wl_resource_post_error(resource, ANDROID_WLEGL_ERROR_BAD_VALUE, "invalid Android buffer description");
         return;
     }

@@ -89,7 +89,7 @@ class ProtonWrapperTest(unittest.TestCase):
         return {"wrapper": wrapper, "dxvk": dxvk, "depot": depot, "proton": proton,
                 "probe": root / "proton-ran.json"}
 
-    def run_wrapper(self, fixture, *proton_args, check=False, exit_status=0):
+    def run_wrapper(self, fixture, *proton_args, check=False, exit_status=0, env=None):
         command = [sys.executable, str(fixture["wrapper"])]
         if check:
             command.append("--check")
@@ -98,7 +98,7 @@ class ProtonWrapperTest(unittest.TestCase):
             command,
             cwd=fixture["wrapper"].parent,
             env={"PATH": os.defpath, "PROBE": str(fixture["probe"]),
-                 "PROTON_EXIT": str(exit_status)},
+                 "PROTON_EXIT": str(exit_status), **(env or {})},
             text=True,
             capture_output=True,
         )
@@ -125,6 +125,36 @@ class ProtonWrapperTest(unittest.TestCase):
                     record["payloads"][architecture],
                     {name: f"{architecture}:{name}" for name in DLL_NAMES},
                 )
+
+    def test_named_sibling_payload_replaces_the_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.fixture(Path(tmp))
+            for architecture in ("x32", "x64"):
+                payload = fixture["wrapper"].parent / "dxvk-2.6.2" / architecture
+                payload.mkdir(parents=True)
+                for name in DLL_NAMES:
+                    (payload / name).write_text(f"2.6.2 {architecture}:{name}")
+            result = self.run_wrapper(fixture, "waitforexitandrun", "game.exe",
+                                      env={"DROIDDECK_HYBRIS_DXVK": "dxvk-2.6.2"})
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            record = json.loads(fixture["probe"].read_text())
+            for architecture in ("x32", "x64"):
+                self.assertEqual(
+                    record["payloads"][architecture],
+                    {name: f"2.6.2 {architecture}:{name}" for name in DLL_NAMES},
+                )
+
+    def test_payload_names_outside_the_wrapper_directory_are_refused(self):
+        for name in ("../dxvk", "dxvk/../../x", "/tmp/dxvk", "other", ".dxvk"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                fixture = self.fixture(Path(tmp))
+                result = self.run_wrapper(fixture, "waitforexitandrun", "game.exe",
+                                          env={"DROIDDECK_HYBRIS_DXVK": name})
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("invalid payload name", result.stderr)
+                self.assertFalse(fixture["probe"].exists())
 
     def test_check_validates_without_executing_proton(self):
         with tempfile.TemporaryDirectory() as tmp:
