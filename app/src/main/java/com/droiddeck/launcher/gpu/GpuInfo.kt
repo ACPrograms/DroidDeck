@@ -161,7 +161,8 @@ data class GpuInfo(
                     ?.substringBefore(" ")
                 ?: ""
 
-        private fun maliNumber(name: String): Int? =
+        /** The number in a Mali's name: 720 for "Mali-G720-Immortalis MC12". */
+        fun maliNumber(name: String): Int? =
             Regex("""G(\d{2,3})""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)?.toIntOrNull()
 
         /**

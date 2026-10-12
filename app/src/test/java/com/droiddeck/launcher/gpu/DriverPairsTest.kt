@@ -201,4 +201,22 @@ class DriverPairsTest {
         assertFalse(DriverPairs.isNonAdreno("DD-Turnip-v0.1.0"))
         assertFalse(DriverPairs.isNonAdreno(null))
     }
+
+    @Test
+    fun deviceBuildsAreOfferedOnlyForTheirMaliAndNeverByAuto() {
+        fun bundle(id: String) = TurnipReleases.Asset("Non-Adreno", id.lowercase(), "$id-Pair.zip", "https://example/$id", 9_000_000,
+            false, "label", "0".repeat(64), DriverPairs.nonAdreno(id), bundle = true)
+        val pairs = DriverPairs.from(TurnipReleases.Check(
+            listOf(bundle("PanVK-faux123-RP4Pro"), bundle("PanVK-faux123-Ace"), bundle("PanVK-faux123-RG556")),
+            emptyList(), emptyList(), 0L))
+        val g77 = GpuInfo("Mali-G77 MC9", 0, Family.MALI_JM, "", false)
+        val g57 = GpuInfo("Mali-G57 MC2", 0, Family.MALI_JM, "", false)
+        val g610 = GpuInfo("Mali-G610 MC6", 0, Family.MALI_G610_G710, "", false)
+        assertTrue(pairs.single { it.key == DriverPairs.NAD_FAUX_RP4PRO }.suits(g77))
+        assertFalse(pairs.single { it.key == DriverPairs.NAD_FAUX_RP4PRO }.suits(g57))
+        assertTrue(pairs.single { it.key == DriverPairs.NAD_FAUX_RG556 }.suits(g57))
+        assertTrue(pairs.single { it.key == DriverPairs.NAD_FAUX_ACE }.suits(g610))
+        assertEquals(DriverPairs.NAD_MALI_JM, DriverPairs.recommendedKey(g77, pairs, sdk = 34))
+        assertTrue(DriverPairs.isNonAdreno("PanVK-faux123-RP4Pro"))
+    }
 }

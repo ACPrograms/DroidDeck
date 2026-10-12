@@ -82,7 +82,7 @@ object TurnipReleases {
         // Xclipse), both halves in one zip. One release per driver, replaced in place on each
         // rebuild; every one is a test build, published as a pre-release.
         Source("Non-Adreno", NON_ADRENO_REPO, prerelease = true) { name, _ ->
-            val m = Regex("""^((?:RADV-Xclipse|PanVK-Mali-[A-Za-z0-9]+))-Pair\.zip$""").find(name) ?: return@Source null
+            val m = Regex("""^(RADV-Xclipse|PanVK-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*?)-Pair\.zip$""").find(name) ?: return@Source null
             val key = DriverPairs.nonAdreno(m.groupValues[1])
             Kind(false, "Android + Linux · " + DriverPairs.nonAdrenoName(key), key, bundle = true)
         },

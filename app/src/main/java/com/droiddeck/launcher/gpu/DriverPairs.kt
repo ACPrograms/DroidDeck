@@ -37,11 +37,17 @@ object DriverPairs {
     /** One PanVK kbase binary for Mali v9-v13; its display half needs Android 15. */
     const val NAD_MALI_KBASE = "nad:panvk-mali-kbase"
     const val MALI_KBASE_MIN_SDK = 35
+    /** faux123's PanVK builds for three handhelds: manual choices, never Auto. */
+    const val NAD_FAUX_RP4PRO = "nad:panvk-faux123-rp4pro"
+    const val NAD_FAUX_ACE = "nad:panvk-faux123-ace"
+    const val NAD_FAUX_RG556 = "nad:panvk-faux123-rg556"
+    /** The one Mali a device-specific build is for, by the number in the GPU's name. */
+    private val DEVICE_BUILDS = mapOf(NAD_FAUX_RP4PRO to 77, NAD_FAUX_ACE to 610, NAD_FAUX_RG556 to 57)
     /** "PanVK-Mali-G720" (the release asset's id) to its pair key, "nad:panvk-mali-g720". */
     fun nonAdreno(id: String) = "$NON_ADRENO:" + id.lowercase()
     /** True for a non-Adreno pair's key, or a bundle installed from one ("PanVK-Mali-G720"). */
     fun isNonAdreno(keyOrBundleId: String?): Boolean = keyOrBundleId != null &&
-        (keyOrBundleId.startsWith("$NON_ADRENO:") || Regex("""^(?i)(RADV-Xclipse|PanVK-Mali-[A-Za-z0-9]+)(-\d+)?$""").matches(keyOrBundleId))
+        (keyOrBundleId.startsWith("$NON_ADRENO:") || Regex("""^(?i)(RADV-Xclipse|PanVK-[A-Za-z0-9]+)(-[A-Za-z0-9]+)*$""").matches(keyOrBundleId))
 
     fun nonAdrenoName(key: String): String = describeNonAdreno(key).first
 
@@ -51,6 +57,9 @@ object DriverPairs {
         NAD_MALI_G710 -> "PanVK · Mali-G610/G710" to setOf(Family.MALI_G610_G710)
         NAD_MALI_G615 -> "PanVK · Mali-G615" to setOf(Family.MALI_G615)
         NAD_MALI_G720 -> "PanVK · Mali-G720" to setOf(Family.MALI_G720)
+        NAD_FAUX_RP4PRO -> "PanVK faux123 · Retroid Pocket 4 Pro (Mali-G77)" to setOf(Family.MALI_JM)
+        NAD_FAUX_ACE -> "PanVK faux123 · GameForce Ace (Mali-G610)" to setOf(Family.MALI_G610_G710)
+        NAD_FAUX_RG556 -> "PanVK faux123 · Anbernic RG556 (Mali-G57)" to setOf(Family.MALI_JM)
         NAD_MALI_KBASE -> "PanVK kbase · Mali G57-G925" to
             setOf(Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST)
         else -> key.removePrefix("$NON_ADRENO:") to emptySet<Family>()
@@ -78,6 +87,7 @@ object DriverPairs {
             key == NAD_RADV_XCLIPSE -> gpu.family == Family.POWERVR && gpu.name.contains("Xclipse", ignoreCase = true)
             // One binary for Mali v9-v13, not the older G52/G76 in the Job Manager family.
             key == NAD_MALI_KBASE -> gpu.family.mali && GpuInfo.maliKbaseCovered(gpu.name)
+            key in DEVICE_BUILDS -> gpu.family.mali && GpuInfo.maliNumber(gpu.name) == DEVICE_BUILDS[key]
             else -> gpu.family in families ||
                 (gpu.family == Family.ADRENO_UNKNOWN && (Family.A7XX in families || Family.A8XX in families))
         }
