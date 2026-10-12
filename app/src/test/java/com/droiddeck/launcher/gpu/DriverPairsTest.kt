@@ -139,7 +139,8 @@ class DriverPairsTest {
         assertEquals(Family.MALI_G610_G710, GpuInfo.familyOf(false, 0, mali = "Mali-G710"))
         assertEquals(Family.MALI_G615, GpuInfo.familyOf(false, 0, mali = "Mali-G615 MC6"))
         assertEquals(Family.MALI_G720, GpuInfo.familyOf(false, 0, mali = "Mali-G720-Immortalis MC12"))
-        assertEquals(Family.MALI_OTHER, GpuInfo.familyOf(false, 0, mali = "Mali-G925-Immortalis MC12"))
+        assertEquals(Family.MALI_LATEST, GpuInfo.familyOf(false, 0, mali = "Mali-G925-Immortalis MC12"))
+        assertEquals(Family.MALI_OTHER, GpuInfo.familyOf(false, 0, mali = "Mali-T880"))
         assertEquals(Family.MALI_OTHER, GpuInfo.familyOf(false, 0, mali = ""))
         // An Adreno is an Adreno whatever else the device reports, and the system HAL keeps priority.
         assertEquals(Family.A7XX, GpuInfo.familyOf(true, 740, mali = "Mali-G720"))
