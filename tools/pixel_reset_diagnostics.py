@@ -8,6 +8,7 @@ It emits fixed categories and numeric hardware fields, never arbitrary log lines
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -15,16 +16,22 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ENTRY = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+(SYSTEM_LAST_KMSG)\b', re.M)
 CATEGORIES = ('GNOC', 'PVRSRV', 'watchdog', 'IOMMU', 'S2MPU', 'access control', 'Kernel panic', 'HWR', 'GPU fault')
+PRIMARY_USER_STATES = frozenset(('RUNNING_LOCKED', 'RUNNING_UNLOCKING', 'RUNNING_UNLOCKED'))
+# Exact canonical reasons plus the vendor reason observed in the bounded Pixel
+# tests. Unrecognized/custom suffixes are not diagnostic output categories.
+BOOT_REASONS = frozenset(('cold', 'hard', 'warm', 'reboot', 'shutdown',
+                          'recovery', 'bootloader', 'kernel_panic', 'watchdog',
+                          'reset,warm,gnoc_error'))
 
 
 def primary_state(text):
-    match = re.search(r'Started users state: \[0=(RUNNING_[A-Z_]+)', text)
-    return match.group(1) if match else 'unknown'
+    match = re.search(r'Started users state: \[0=([A-Z_]+)(?=[,\]])', text)
+    return match.group(1) if match and match.group(1) in PRIMARY_USER_STATES else 'unknown'
 
 
 def safe_reason(text):
     value = text.strip()
-    return value if re.fullmatch(r'[A-Za-z0-9_, .():-]{1,160}', value) else 'unknown'
+    return value if value in BOOT_REASONS else 'unknown'
 
 
 def kernel_projection(text, device_timezone, after=None):
@@ -56,8 +63,10 @@ def kernel_projection(text, device_timezone, after=None):
         'access_control_addresses': r'Access Control Error \((0x[0-9a-fA-F]+)',
     }
     result['hardware_fields'] = {key: sorted(set(re.findall(pattern, body))) for key, pattern in patterns.items()}
-    reasons = re.findall(r'Last boot reason:\s*([A-Za-z0-9_,.-]+)', body)
-    result['last_boot_reasons'] = sorted(set(reasons))
+    # Read the complete value, not just a recognized-looking prefix. Apply the
+    # same fixed projection as getprop; no arbitrary kernel reason text escapes.
+    reasons = re.findall(r'Last boot reason:[ \t]*([^\r\n]*)', body)
+    result['last_boot_reasons'] = sorted({safe_reason(reason) for reason in reasons})
     return result
 
 
@@ -100,6 +109,15 @@ def collect(adb, serial, include_kernel=False, after=None):
     return result
 
 
+def write_private_output(path, output):
+    # Exclusive creation also rejects existing symlinks. Set the private mode
+    # before any bytes are written, rather than chmod after exposing the data.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0)
+    descriptor = os.open(path, flags, 0o600)
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+        stream.write(output)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--adb', default='adb')
@@ -114,9 +132,7 @@ def main():
     result = collect(args.adb, args.serial, args.kernel, after)
     output = json.dumps(result, indent=2) + '\n'
     if args.output:
-        with args.output.open('x') as stream:
-            stream.write(output)
-        args.output.chmod(0o600)
+        write_private_output(args.output, output)
     print(output, end='')
 
 

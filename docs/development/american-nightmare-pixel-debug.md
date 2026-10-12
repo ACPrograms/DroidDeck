@@ -100,7 +100,13 @@ and `reset,warm,gnoc_error` with a fresh GNOC numeric record for the second. The
 specific faulty component/operation and any relation to rendering are unknown.
 `tools/pixel_reset_diagnostics.py` exports only fixed fault categories/numeric
 fields, lock state, boot counter and entry times; never arbitrary log text or
-account data. Seven host tests cover its gating and narrow output.
+account data. Boot-property and kernel last-boot reasons use the same exact
+allowlist of canonical categories and the observed `reset,warm,gnoc_error` value;
+unknown reasons and custom suffixes produce `unknown`, never their original text.
+Primary-user states are likewise limited to recognized lifecycle categories.
+Output files are created exclusively with mode `0600` before any bytes are
+written (POSIX), and existing files/symlinks are refused. Host regressions cover
+these boundaries as well as freshness, unlock gating and narrow output.
 
 Private opt-in diagnostics captured maintenance5 inline modules, which the older
 shim path missed. Materialization passed nine actual-C ASan/UBSan cases; benign
