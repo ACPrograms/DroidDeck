@@ -224,13 +224,18 @@ public final class EpicDownloadManager {
             boolean javaPool = true;
             final int[] pendingIdx = pendingIndices(manifest, pending);
             boolean engine = com.droiddeck.launcher.stores.StoresNative.INSTANCE.getAvailable() && pendingIdx != null;
+            String nativeError = null;
             if (engine) {
                 NativeOutcome r = runNativePool(ctx, manifestBytes, pendingIdx, needed, fTotalBytes, installDirPath, cachePath, cdnUrls, cancel, cb,
                         completedBytes, completedCount, lastSpeedMs, lastSpeedBytes, speedBps);
                 if (r.started) {
                     javaPool = false;
                     if (r.cancelled) return null;
-                    if (!r.success) { cb.onLog("epic: engine failed: " + r.error); failCount.incrementAndGet(); }
+                    if (!r.success) {
+                        cb.onLog("epic: engine failed: " + r.error);
+                        nativeError = r.error;
+                        failCount.incrementAndGet();
+                    }
                 } else cb.onLog("epic: engine not started (" + r.error + "); using the built-in pool");
             }
             if (javaPool) {
@@ -265,7 +270,12 @@ public final class EpicDownloadManager {
                 }
             }
             if (cancel.get()) return null;
-            if (failCount.get() > 0) throw new InstallException(failCount.get() + " chunk(s) failed to download");
+            if (failCount.get() > 0) {
+                if (nativeError != null && !nativeError.isEmpty()) {
+                    throw new InstallException(nativeError);
+                }
+                throw new InstallException(failCount.get() + " chunk(s) failed to download");
+            }
 
             // The engine's assembler when it starts (it drops each chunk after its last use and the
             // cache at the end); the loop below when it does not.
