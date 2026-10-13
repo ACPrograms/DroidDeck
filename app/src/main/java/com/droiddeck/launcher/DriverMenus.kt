@@ -135,8 +135,10 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                 detail = if (!p.complete) activity.getString(R.string.drivers_half_published) else activity.getString(R.string.drivers_pair_size, mb),
                 recommended = p.key == recommended, suits = p.suits(gpu), complete = p.complete,
                 installed = displayId != null && linuxId != null,
-                active = displayId != null && linuxId != null &&
-                    SessionPrefs.androidDriver(activity) == displayId && SessionPrefs.linuxDriver(activity) == linuxId,
+                active = displayId != null && linuxId != null && SessionPrefs.linuxDriver(activity) == linuxId &&
+                    (SessionPrefs.androidDriver(activity) == displayId ||
+                        // A Mali pair under Auto: the display is the phone's own driver.
+                        (gpu.family.mali && DriverPairs.isNonAdreno(p.key) && SessionPrefs.androidDriver(activity) == TurnipDriver.AUTO)),
             )
         }.sortedByDescending { it.recommended }
     }
@@ -163,6 +165,15 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
             autoStatus = activity.getString(R.string.drivers_powervr_builtin)
             refreshDrivers()
             return
+        }
+        // A Mali pair set by an earlier build put its PanVK Android half on the display, which fails
+        // on Mali gralloc. Under Auto the display is the phone's own driver (Android's loader).
+        if (gpu.family.mali) {
+            val display = SessionPrefs.androidDriver(activity)
+            if (display.isNotEmpty() && DriverPairs.isNonAdreno(DriverBundle.containing(activity, display, false)?.id)) {
+                SessionPrefs.setAndroidDriver(activity, TurnipDriver.AUTO)
+                Log.i(TAG, "auto: Mali display back on the phone's own driver (was $display)")
+            }
         }
         if (!force && autoCheckedThisProcess) return
         autoCheckedThisProcess = true

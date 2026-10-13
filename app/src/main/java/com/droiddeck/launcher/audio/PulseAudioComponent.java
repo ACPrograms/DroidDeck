@@ -221,7 +221,8 @@ public class PulseAudioComponent extends SessionPart {
                     }
                 }
                 line = loadedAs != null ? "== client sink: DirectAudio did not come up at start; retried and got " + loadedAs
-                              : "== client sink: DirectAudio did not come up and the AAudio fallback failed too after 5 retries - no client sound";
+                              : "== client sink: DirectAudio did not come up and the AAudio fallback failed too after 5 retries - no client sound."
+                                + " If audio.log shows AAUDIO_ERROR_DISCONNECTED, Android refused the audio output: rebooting the phone usually fixes this";
                 Log.w(TAG, line);
             }
             Log.i(TAG, line);

@@ -160,7 +160,11 @@ object GraphicsReport {
             val guestLines = File(dir, "session.log").takeIf { it.isFile }?.useLines { seq ->
                 seq.filter { GUEST.containsMatchIn(it) }.take(200).toList()
             }.orEmpty()
+            val audio = File(dir, "audio.log").takeIf { it.isFile }?.readText().orEmpty()
             report.appendText(buildString {
+                if (audio.contains("AAUDIO_ERROR_DISCONNECTED")) {
+                    appendLine("!! SOUND: Android refused the audio output (AAUDIO_ERROR_DISCONNECTED) - rebooting the phone usually fixes this")
+                }
                 if (guestLines.any { it.contains("vkbridge", ignoreCase = true) && it.contains("FAIL") }) {
                     appendLine("!! MALI BRIDGE SELF-TEST FAILED: this GPU's driver did not pass the bridge's checks (see below)")
                 }
