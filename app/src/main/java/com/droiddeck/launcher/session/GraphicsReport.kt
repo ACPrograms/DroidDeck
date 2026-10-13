@@ -55,7 +55,9 @@ object GraphicsReport {
         appendLine("-- path")
         appendLine("path: " + path(context))
         appendLine("driver mode: " + SessionPrefs.gpuDriverMode(context))
-        appendLine("display driver: " + SessionPrefs.androidDriver(context).ifEmpty { "(auto)" })
+        appendLine("display driver (compositor): " + SessionPrefs.androidDriver(context).ifEmpty {
+            if (DeviceSupport.adreno()) "(auto: bundled Turnip)" else "(auto: the phone's own Vulkan driver, ${SystemVulkanDriver.hal() ?: "vendor HAL"})"
+        })
         appendLine("runtime driver: " + SessionPrefs.linuxDriver(context).ifEmpty { "(runtime default)" })
         DriverBundle.active(context)?.let { b ->
             appendLine("pair: ${b.name} ${b.version} (bundle ${b.id})")
@@ -137,12 +139,12 @@ object GraphicsReport {
     private val COMPOSITOR = Regex(
         """vk_present|waylandcomp|vk_loader|compositor|vkCreateDevice|extension|adrenotools|TurnipDriver|""" +
             """graphics driver|SystemVulkan|vkbridge|VkBridge|mali_gralloc|panvk|PanVK|radv|MESA|native buffer|first frame|present|""" +
-            """lsfg|FrameGen|device gates|AAudio|directaudio|pulse""",
+            """lsfg|FrameGen|device gates|AAudio|directaudio|pulse|gralloc|dma.?buf|modifier|import""",
         RegexOption.IGNORE_CASE,
     )
 
     /** The session script's driver lines: what it exported, the bridge's self-test, vulkaninfo, gamescope's Vulkan errors. */
-    private val GUEST = Regex("""== vulkan driver|== vkbridge|== vulkaninfo|vulkan:|panvk|PanVK|radv|primary node|No compatible|DRM format|kbase|AAUDIO|client sink""", RegexOption.IGNORE_CASE)
+    private val GUEST = Regex("""== vulkan driver|== vkbridge|== vulkaninfo|vulkan:|panvk|PanVK|radv|primary node|No compatible|DRM format|kbase|AAUDIO|client sink|Xwayland|\(EE\)|glamor|XWAYLAND_NO_GLAMOR""", RegexOption.IGNORE_CASE)
 
     /**
      * The end of the report, from the finished folder: the compositor's driver lines out of

@@ -277,7 +277,11 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
             ui.post {
                 pairBusy = null
                 pairPercent = -1
-                result.onSuccess { (displayId, linuxId) ->
+                result.onSuccess { (pairDisplayId, linuxId) ->
+                    // A Mali pair under Auto: the compositor draws on the phone's own Mali driver
+                    // (dma-buf, modifiers and AHB all work there) and the guest runs the pair's
+                    // PanVK. Its Android half stays installed for a manual pick.
+                    val displayId = if (auto && gpu.family.mali && DriverPairs.isNonAdreno(pair.key)) TurnipDriver.AUTO else pairDisplayId
                     val displayChanged = SessionPrefs.androidDriver(activity) != displayId
                     SessionPrefs.setAndroidDriver(activity, displayId)
                     SessionPrefs.setLinuxDriver(activity, linuxId)

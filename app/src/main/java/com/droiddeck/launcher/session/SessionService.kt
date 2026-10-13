@@ -307,6 +307,14 @@ class SessionService : Service() {
         return lines
     }
 
+    /** Whether the newest finished session's log shows Xwayland itself crashing. */
+    private fun lastXwaylandCrashed(): Boolean = runCatching {
+        val last = SessionPaths.sessionFolders(this).filter { it != SessionPaths.current() }.lastOrNull() ?: return false
+        val log = File(last, "session.log").takeIf { it.isFile } ?: return false
+        log.useLines { lines -> lines.any { it.contains("(EE) Segmentation fault") } } &&
+            log.useLines { lines -> lines.any { it.contains("X11 I/O error") || it.contains("Xwayland", ignoreCase = true) } }
+    }.getOrDefault(false)
+
     private fun tuDebug(linuxDriverId: String): String? {
         // Turnip's switch; a non-Adreno GPU runs another driver (PanVK, RADV, the bridge).
         if (!com.droiddeck.launcher.core.DeviceSupport.adreno()) return null
@@ -648,6 +656,13 @@ class SessionService : Service() {
         // An open Mali driver pair: /dev/mali0 stands in as the render node (LinuxRuntime.bindGpuNode)
         // and the session shim answers gamescope's PRIME calls on it as on KGSL. It only covers
         // libdrm's PRIME/GEM entry points, which PanVK on kbase never calls on its own device.
+        // Xwayland crashing in glamor (seen on Mali v9 with Zink on PanVK) left the last session at
+        // "X11 I/O error" before Steam: the next one on this device starts Xwayland without glamor
+        // (software 2D; Steam's GL still renders). Never on an Adreno.
+        if (!com.droiddeck.launcher.core.DeviceSupport.adreno() && lastXwaylandCrashed()) {
+            guest.add("XWAYLAND_NO_GLAMOR=1")
+            Log.w(TAG, "xwayland: the last session's Xwayland crashed; glamor off for this one (XWAYLAND_NO_GLAMOR=1)")
+        }
         if (!bridge && com.droiddeck.launcher.core.DeviceSupport.openDriverActive(this)) {
             LinuxRuntime.gpuStandIn(this)?.takeIf { it == LinuxRuntime.MALI_DEVICE }?.let { guest.add("BL_DRM_STANDIN=$it") }
         }

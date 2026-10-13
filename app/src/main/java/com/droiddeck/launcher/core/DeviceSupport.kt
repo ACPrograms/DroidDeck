@@ -30,8 +30,12 @@ object DeviceSupport {
      * Whether an open non-Adreno driver pair (PanVK for Mali, RADV for Xclipse) is the one in use:
      * it and the bridge are alternatives, and the pair wins. Always false on an Adreno.
      */
-    fun openDriverActive(context: Context): Boolean =
-        !adreno() && com.droiddeck.launcher.gpu.DriverPairs.isNonAdreno(com.droiddeck.launcher.gpu.DriverBundle.active(context)?.id)
+    fun openDriverActive(context: Context): Boolean {
+        if (adreno()) return false
+        // The runtime half is what counts: a Mali pair may run with the system driver as its display.
+        val linux = com.droiddeck.launcher.session.SessionPrefs.linuxDriver(context).ifEmpty { return false }
+        return com.droiddeck.launcher.gpu.DriverPairs.isNonAdreno(com.droiddeck.launcher.gpu.DriverBundle.containing(context, linux, true)?.id)
+    }
 
     /**
      * A session can draw: Adreno with Turnip, PowerVR/Xclipse on the system driver, an open
