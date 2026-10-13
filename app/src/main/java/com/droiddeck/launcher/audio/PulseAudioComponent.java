@@ -139,12 +139,12 @@ public class PulseAudioComponent extends SessionPart {
         config.add(".nofail");
         config.add("load-module module-directaudio-native-sink sink_name=DirectAudio performance_mode=1 adaptive=1 decay=0 limiter=1 watchdog=1 volume=1.0");
         if (!com.droiddeck.launcher.core.DeviceSupport.INSTANCE.adreno()) {
-            // Not an Adreno: the daemon makes its own fallbacks, without waiting for pactl. A
-            // Galaxy S24 FE's AAudio refuses the low-latency stream (AAUDIO_ERROR_DISCONNECTED) at
-            // open, so DirectAudio is asked again without low latency (shared, larger buffer),
-            // and the plain AAudio sink is loaded as a default underneath it. The last
+            // Not an Adreno: the daemon makes its own fallback, without waiting for pactl. A Galaxy
+            // S24 FE's AAudio refuses DirectAudio's low-latency stream (AAUDIO_ERROR_DISCONNECTED),
+            // so the plain AAudio sink, without low latency, is loaded as a default underneath it.
+            // (Loading DirectAudio a second time in the same daemon after its failed first load
+            // hung the daemon's start-up on that phone, so it is not retried here.) The last
             // set-default-sink that names a sink which exists wins.
-            config.add("load-module module-directaudio-native-sink sink_name=DirectAudio performance_mode=0 adaptive=1 decay=0 limiter=1 watchdog=1 volume=1.0");
             config.add("load-module module-aaudio-sink sink_name=AAudioSink performance_mode=0 adaptive=1 volume=1.0");
             config.add("set-default-sink AAudioSink");
         }
