@@ -1,0 +1,20 @@
+--- a/src/steamcompmgr.cpp
++++ b/src/steamcompmgr.cpp
+@@ -8101,6 +8101,9 @@
+ 
+ 		// Only pace windows the FPS limiter covers.
+ 		const bool entry_vblank = vblank && steamcompmgr_should_vblank_window( entry_win, vblank_idx, now );
++
++		if (entry_win && entry_win->appID == 1794680)
++			fprintf(stderr, "[dd-cadence] commit=%lu fifo=%d vblank=%d idx=%lu slot=%d now=%lu target=%lu desired=%lu queued=%zu\n", entry.commitID, entry.fifo, vblank, vblank_idx, entry_vblank, now, next_refresh_time, entry.desiredPresentTime, entry_win->commit_queue.size());
+ 
+ 		if (entry.fifo && (!entry_vblank || fifo_win_seqs.count(entry.winSeq) > 0))
+ 		{
+@@ -10393,6 +10396,7 @@
+ 		static uint64_t vblank_idx = 0;
+ 		if ( vblank )
+ 		{
++			fprintf(stderr, "[dd-vblank] idx=%lu now=%lu target=%lu\n", vblank_idx, get_time_in_nanos(), g_SteamCompMgrVBlankTime.schedule.ulTargetVBlank);
+ 			{
+ 				uint64_t now = get_time_in_nanos();
+ 
