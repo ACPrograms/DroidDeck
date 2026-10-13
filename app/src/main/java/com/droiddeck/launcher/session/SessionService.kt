@@ -645,6 +645,12 @@ class SessionService : Service() {
         }
         (if (bridge) null else LinuxVulkanDriver.resolveIcdPath(this, linuxDriverId))
             ?.let { guest.add(LinuxVulkanDriver.ENV + "=" + it) }
+        // An open Mali driver pair: /dev/mali0 stands in as the render node (LinuxRuntime.bindGpuNode)
+        // and the session shim answers gamescope's PRIME calls on it as on KGSL. It only covers
+        // libdrm's PRIME/GEM entry points, which PanVK on kbase never calls on its own device.
+        if (!bridge && com.droiddeck.launcher.core.DeviceSupport.openDriverActive(this)) {
+            LinuxRuntime.gpuStandIn(this)?.takeIf { it == LinuxRuntime.MALI_DEVICE }?.let { guest.add("BL_DRM_STANDIN=$it") }
+        }
         // Turnip's own debug switches, for the runtime's driver and everything on it. The file in
         // Downloads holds the value verbatim ("sysmem", "sysmem,deck_emu"); with nothing there, an
         // imported driver from the A710/A720/A722 legs gets "sysmem" on its own, which is what both

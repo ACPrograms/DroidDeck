@@ -333,7 +333,7 @@ public final class LinuxRuntime {
      * Turnip build reports the same device numbers for it.
      */
     /** Mali's kbase device, the stand-in render node on a Mali GPU (the Mali bridge's gamescope). */
-    private static final String MALI_DEVICE = "/dev/mali0";
+    public static final String MALI_DEVICE = "/dev/mali0";
 
     /**
      * The device that stands in for the GPU's render node: KGSL on an Adreno; with the Mali bridge
@@ -344,6 +344,9 @@ public final class LinuxRuntime {
     public static String gpuStandIn(Context context) {
         if (new File(KGSL_DEVICE).exists()) return KGSL_DEVICE;
         if (com.droiddeck.launcher.core.DeviceSupport.INSTANCE.vkBridge(context) && new File(MALI_DEVICE).exists()) return MALI_DEVICE;
+        // An open Mali driver pair (PanVK on kbase): gamescope needs a DRM node for the device the
+        // driver reports, and the driver reports /dev/mali0's numbers as its primary and render node.
+        if (com.droiddeck.launcher.core.DeviceSupport.INSTANCE.openDriverActive(context) && new File(MALI_DEVICE).exists()) return MALI_DEVICE;
         return null;
     }
 

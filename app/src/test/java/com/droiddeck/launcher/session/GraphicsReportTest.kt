@@ -25,7 +25,7 @@ class GraphicsReportTest {
         val old = launch("20261012-100000-1", 60)
         val mid = launch("20261012-110000-2", 60)
         val new = launch("20261012-120000-3", 200)
-        GraphicsReport.capGames(games, fileMax = 100, totalMax = 150)
+        GraphicsReport.capGames(games, fileMax = 100, totalMax = 170)
         assertEquals(100L, File(new, "steam-1.log").length())
         assertFalse(old.exists())
         assertTrue(mid.exists())

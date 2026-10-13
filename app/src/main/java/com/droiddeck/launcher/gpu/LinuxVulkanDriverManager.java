@@ -70,7 +70,9 @@ public class LinuxVulkanDriverManager {
     public boolean isInstalled(String id) {
         if (id == null || id.isEmpty() || id.contains("/") || id.contains("..")) return false;
         File dir = getDriverDir(id);
-        return new File(dir, LIB_NAME).isFile() && new File(dir, ICD_NAME).isFile();
+        if (!new File(dir, ICD_NAME).isFile()) return false;
+        for (String name : STORED_NAMES) if (new File(dir, name).isFile()) return true;
+        return false;
     }
 
     /** Absolute path of the driver's ICD manifest, or null when the id isn't installed. */
@@ -144,7 +146,7 @@ public class LinuxVulkanDriverManager {
                     if (isDriverLibrary(base)) {
                         if (soName != null) Log.w(TAG, "zip has several driver libraries; using the first (" + soName + ")");
                         else {
-                            Files.copy(zis, new File(tmpDir, LIB_NAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                            Files.copy(zis, new File(tmpDir, storedName(base)).toPath(), StandardCopyOption.REPLACE_EXISTING);
                             soName = base;
                         }
                     } else if (base.equals(META_NAME)) {
@@ -184,7 +186,8 @@ public class LinuxVulkanDriverManager {
             if (soName == null) {
                 throw new IllegalArgumentException(context.getString(R.string.lvd_no_library));
             }
-            File so = new File(tmpDir, LIB_NAME);
+            String stored = storedName(soName);
+            File so = new File(tmpDir, stored);
             if (!isAarch64Elf(so)) {
                 throw new IllegalArgumentException(context.getString(R.string.lvd_not_aarch64, soName));
             }
@@ -214,7 +217,7 @@ public class LinuxVulkanDriverManager {
             JSONObject icd = new JSONObject();
             icd.put("file_format_version", "1.0.0");
             JSONObject icdBody = new JSONObject();
-            icdBody.put("library_path", new File(dir, LIB_NAME).getAbsolutePath());
+            icdBody.put("library_path", new File(dir, stored).getAbsolutePath());
             icdBody.put("api_version", "1.1.274");
             icd.put("ICD", icdBody);
             if (!FileUtils.writeString(new File(tmpDir, ICD_NAME), icd.toString(2))) throw new IOException("cannot write icd.json");
@@ -227,6 +230,7 @@ public class LinuxVulkanDriverManager {
             meta.put("libc", "glibc");
             meta.put("minGlibc", minGlibc);
             meta.put("sourceLibraryName", soName);
+            meta.put("libraryName", stored);
             meta.put("importedAt", System.currentTimeMillis());
             if (!FileUtils.writeString(new File(tmpDir, META_NAME), meta.toString(2))) throw new IOException("cannot write meta.json");
 
@@ -250,6 +254,19 @@ public class LinuxVulkanDriverManager {
      * (panfrost) on Mali, RADV (radeon) on Xclipse. Whichever it is, it is installed as
      * {@link #LIB_NAME}; the ICD manifest loads it by that absolute path.
      */
+    /** The names an installed driver's library is kept under; Turnip keeps {@link #LIB_NAME}. */
+    private static final String[] STORED_NAMES = {LIB_NAME, "libvulkan_panfrost.so", "libvulkan_radeon.so"};
+
+    /**
+     * The name a driver library is installed under: its own driver's (PanVK, RADV), so the session
+     * log and the graphics report say which driver it is; a Turnip build keeps {@link #LIB_NAME}.
+     */
+    public static String storedName(String soName) {
+        if (soName != null && soName.startsWith("libvulkan_panfrost")) return "libvulkan_panfrost.so";
+        if (soName != null && soName.startsWith("libvulkan_radeon")) return "libvulkan_radeon.so";
+        return LIB_NAME;
+    }
+
     public static boolean isDriverLibrary(String base) {
         return base.endsWith(".so") && (base.startsWith("libvulkan_freedreno")
                 || base.startsWith("libvulkan_panfrost") || base.startsWith("libvulkan_radeon"));

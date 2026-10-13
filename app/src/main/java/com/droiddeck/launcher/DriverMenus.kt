@@ -46,7 +46,8 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
     /** Asset name -> download percent, while it downloads. */
     private val releaseProgress = HashMap<String, Int>()
     var linuxSelected by mutableStateOf("")
-    val gpu: GpuInfo = GpuInfo.detect()
+    var gpu: GpuInfo = GpuInfo.detect()
+        private set
     // Read in refreshDrivers/ensureAuto: the activity has no context yet while its fields are made.
     var mode by mutableStateOf(SessionPrefs.GPU_DRIVERS_AUTO)
     var pairRows by mutableStateOf<List<PairRow>>(emptyList())
@@ -165,6 +166,23 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         }
         if (!force && autoCheckedThisProcess) return
         autoCheckedThisProcess = true
+        if (gpu.family.mali && DriverPairs.recommendedKey(gpu, emptyList()) == null &&
+            com.droiddeck.launcher.gpu.VulkanInfo.cachedOrNull() == null) {
+            // No name for this Mali yet: ask its own Vulkan driver (it creates an instance, so off
+            // the main thread), then decide again with the name it gives.
+            autoStatus = activity.getString(R.string.drivers_checking_latest)
+            Thread({
+                com.droiddeck.launcher.gpu.VulkanInfo.query()
+                ui.post {
+                    gpu = GpuInfo.detect()
+                    Log.i(TAG, "auto: Mali named by its driver: ${gpu.name} -> ${gpu.family}")
+                    autoCheckedThisProcess = false
+                    ensureAuto(force)
+                }
+            }, "gpu-name").start()
+            return
+        }
+        Log.i(TAG, "auto: ${gpu.name} (${gpu.family}) -> " + (DriverPairs.recommendedKey(gpu, emptyList()) ?: "no pair"))
         if (gpu.family.mali && DriverPairs.recommendedKey(gpu, emptyList()) == null) {
             useMaliBridge()
             autoStatus = activity.getString(R.string.drivers_mali_bridge_auto)

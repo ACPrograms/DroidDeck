@@ -154,12 +154,39 @@ data class GpuInfo(
             ""
         }
 
-        /** The Mali's name, "" when the device has a kbase node but names no GPU. */
+        /**
+         * The Mali's name, "" when nothing names it: the vendor Vulkan driver's own name when this
+         * process has asked it, kbase's gpuinfo where SELinux lets the app read it (most phones do
+         * not), else the GPU the chip is known to carry ([MALI_SOCS]).
+         */
         private fun maliName(): String =
             VulkanInfo.cachedOrNull()?.get("device")?.takeIf { it.contains("Mali", ignoreCase = true) }
                 ?: FileUtils.readString(File("/sys/class/misc/mali0/device/gpuinfo"))?.trim()?.takeIf { it.contains("Mali", ignoreCase = true) }
                     ?.substringBefore(" ")
+                ?: maliOfSoc(socIds())
                 ?: ""
+
+        /** The chip's names as the platform gives them: "mt6989", "MT6989", "gs201". */
+        private fun socIds(): List<String> = listOfNotNull(
+            if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else null,
+            systemProperty("ro.board.platform"), systemProperty("ro.soc.model"), Build.HARDWARE, Build.BOARD,
+        ).filter { it.isNotBlank() }
+
+        /** Chips whose Mali is known for certain (MediaTek Dimensity / Helio / Kompanio, Google Tensor). */
+        private val MALI_SOCS = mapOf(
+            "mt6991" to "Mali-G925", "mt6989" to "Mali-G720", "mt6899" to "Mali-G720", "mt6985" to "Mali-G715",
+            "mt6983" to "Mali-G710", "mt6897" to "Mali-G615", "mt6878" to "Mali-G615", "mt6895" to "Mali-G610",
+            "mt6896" to "Mali-G610", "mt6886" to "Mali-G610", "mt6893" to "Mali-G77", "mt6891" to "Mali-G77",
+            "mt6889" to "Mali-G77", "mt6885" to "Mali-G77", "mt6877" to "Mali-G68", "mt6853" to "Mali-G57",
+            "mt6833" to "Mali-G57", "mt6835" to "Mali-G57", "mt6789" to "Mali-G57", "mt6785" to "Mali-G76",
+            "mt6781" to "Mali-G52", "mt6769" to "Mali-G52", "mt8192" to "Mali-G57", "mt8195" to "Mali-G57",
+            "gs101" to "Mali-G78", "gs201" to "Mali-G710", "zuma" to "Mali-G715", "zumapro" to "Mali-G715",
+        )
+
+        /** The Mali [ids] name a chip of, "Mali-G720 (by chip mt6989)", or null for an unknown chip. */
+        internal fun maliOfSoc(ids: List<String>): String? = ids.firstNotNullOfOrNull { id ->
+            MALI_SOCS[id.trim().lowercase()]?.let { "$it (by chip ${id.trim().lowercase()})" }
+        }
 
         /** The number in a Mali's name: 720 for "Mali-G720-Immortalis MC12". */
         fun maliNumber(name: String): Int? =

@@ -219,4 +219,14 @@ class DriverPairsTest {
         assertEquals(DriverPairs.NAD_MALI_JM, DriverPairs.recommendedKey(g77, pairs, sdk = 34))
         assertTrue(DriverPairs.isNonAdreno("PanVK-faux123-RP4Pro"))
     }
+
+    @Test
+    fun aMaliTheDeviceDoesNotNameIsKnownByItsChip() {
+        assertEquals("Mali-G720 (by chip mt6989)", GpuInfo.maliOfSoc(listOf("", "mt6989")))
+        assertEquals("Mali-G710 (by chip gs201)", GpuInfo.maliOfSoc(listOf("GS201")))
+        assertEquals(null, GpuInfo.maliOfSoc(listOf("unknown-chip")))
+        assertEquals(Family.MALI_G720, GpuInfo.familyOf(false, 0, mali = "Mali-G720 (by chip mt6989)"))
+        assertEquals(Family.MALI_LATEST, GpuInfo.familyOf(false, 0, mali = "Mali-G925 (by chip mt6991)"))
+        assertTrue(GpuInfo.maliKbaseCovered("Mali-G720 (by chip mt6989)"))
+    }
 }

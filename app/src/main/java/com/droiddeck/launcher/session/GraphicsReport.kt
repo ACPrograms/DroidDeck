@@ -66,6 +66,10 @@ object GraphicsReport {
             appendLine("auto would pick: " + (DriverPairs.recommendedKey(gpu, pairs) ?: "(no pair: system driver or bridge)"))
         }
         appendLine("mali bridge setting: " + SessionPrefs.vkBridge(context) + ", in use: " + DeviceSupport.vkBridge(context))
+        val standIn = runCatching { com.droiddeck.launcher.runtime.LinuxRuntime.gpuStandIn(context) }.getOrNull()
+        appendLine("render node for the guest: " + (standIn?.let { node ->
+            com.droiddeck.launcher.runtime.LinuxRuntime.deviceNumbers(node)?.let { n -> "/dev/dri/renderD${n.substringAfter(':')} -> $node ($n)" } ?: node
+        } ?: if (SystemVulkanDriver.isPowerVr()) "the system GPU's own /dev/dri node (#570)" else "none"))
         appendLine()
         appendLine("-- gpu")
         if (gpu != null) {
@@ -134,6 +138,9 @@ object GraphicsReport {
         RegexOption.IGNORE_CASE,
     )
 
+    /** The session script's driver lines: what it exported, the bridge's self-test, vulkaninfo, gamescope's Vulkan errors. */
+    private val GUEST = Regex("""== vulkan driver|== vkbridge|== vulkaninfo|vulkan:|panvk|PanVK|radv|primary node|No compatible|DRM format""", RegexOption.IGNORE_CASE)
+
     /**
      * The end of the report, from the finished folder: the compositor's driver lines out of
      * app.log, and games/ held to its size limits. Never throws.
@@ -144,7 +151,16 @@ object GraphicsReport {
             if (!report.isFile) return
             val lines = File(dir, "app.log").takeIf { it.isFile }?.useLines { seq -> seq.filter { COMPOSITOR.containsMatchIn(it) }.take(400).toList() }.orEmpty()
             val games = File(dir, GAMES_DIR).listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }.orEmpty()
+            val guestLines = File(dir, "session.log").takeIf { it.isFile }?.useLines { seq ->
+                seq.filter { GUEST.containsMatchIn(it) }.take(200).toList()
+            }.orEmpty()
             report.appendText(buildString {
+                if (guestLines.any { it.contains("vkbridge", ignoreCase = true) && it.contains("FAIL") }) {
+                    appendLine("!! MALI BRIDGE SELF-TEST FAILED: this GPU's driver did not pass the bridge's checks (see below)")
+                }
+                appendLine("-- driver lines from the session log (${guestLines.size})")
+                guestLines.forEach { appendLine(it) }
+                appendLine()
                 appendLine("-- compositor and driver lines from app.log (${lines.size})")
                 lines.forEach { appendLine(it) }
                 appendLine()
