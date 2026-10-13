@@ -1,0 +1,36 @@
+--- a/src/vblankmanager.cpp
++++ b/src/vblankmanager.cpp
+@@ -89,7 +89,12 @@
+ 
+ 		uint64_t ulTargetPoint = GetLastVBlank() + ulIntervalNSecs - ulOffset;
+ 
+-		while ( ulTargetPoint < ulNow )
++		// Host feedback can re-arm us after we already woke for this refresh.
++		// A decaying draw offset then puts the same refresh's wakeup ahead of
++		// now again. Do not count it twice; allow small host-clock corrections.
++		const uint64_t ulLastTimerVBlank = m_ulLastTimerVBlank.load();
++		while ( ulTargetPoint < ulNow ||
++		        ulTargetPoint + ulOffset < ulLastTimerVBlank + ulIntervalNSecs / 2 )
+ 			ulTargetPoint += ulIntervalNSecs;
+ 
+ 		return ulTargetPoint;
+@@ -299,6 +304,8 @@
+ 				return;
+ 
+ 
++			m_ulLastTimerVBlank = m_TimerFDSchedule.ulTargetVBlank;
++
+ 			m_PendingVBlank = VBlankTime
+ 			{
+ 				.schedule = m_TimerFDSchedule,
+--- a/src/vblankmanager.hpp
++++ b/src/vblankmanager.hpp
+@@ -69,6 +69,8 @@
+ 
+         uint64_t m_ulTargetVBlank = 0;
+         std::atomic<uint64_t> m_ulLastVBlank = { 0 };
++        // Last timerfd refresh dispatched; the frame-sync/nudge path is unchanged.
++        std::atomic<uint64_t> m_ulLastTimerVBlank = { 0 };
+         std::atomic<bool> m_bArmed = { false };
+         std::atomic<bool> m_bRunning = { true };
+ 
