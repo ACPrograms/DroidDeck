@@ -92,3 +92,11 @@ app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the
   backend failed. Also: 0130's probe pipeline is kept instead of destroyed, and skipped when
   `GAMESCOPE_NO_YCBCR_SAMPLERS=1` (destroying a pipeline the Venus host had refused killed the
   render server).
+- `0132-name-hung-up-waitable.patch`: "IWaitable hung up. Aborting." now names the waitable's class,
+  its fd and what the fd is (`/proc/self/fd`), and the Wayland backend's input thread says why the
+  compositor connection ended (protocol error or errno) first. An S24 FE aborted there after 60/120 Hz
+  flips and after a resume with nothing else in the log.
+- `0133-flippable-image-unexportable-modifiers.patch`: a flippable (dma-buf exported) image whose
+  modifiers the driver supports but does not report EXPORTABLE uses them anyway, and an image with no
+  usable modifier fails with a log line instead of asserting in `CVulkanTexture::BInit`. The Mali
+  bridge forwards the phone driver's answer, which leaves EXPORTABLE out, though it exports dma-bufs.
