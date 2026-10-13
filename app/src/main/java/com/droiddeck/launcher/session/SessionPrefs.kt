@@ -509,6 +509,16 @@ object SessionPrefs {
     @JvmStatic
     fun vkBridge(context: Context): Boolean = prefs(context).getBoolean("vkBridge", false)
 
+    /**
+     * Setup's "Mali (Venus)": the session's Vulkan through Mesa's Venus to the phone's own driver
+     * (VenusComponent, David Cimo's route). Off by default; on a GPU that is not an Adreno only.
+     */
+    fun venus(context: Context): Boolean = prefs(context).getBoolean("venus", false)
+
+    fun setVenus(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("venus", on).apply()
+    }
+
     fun setVkBridge(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("vkBridge", on).apply()
     }

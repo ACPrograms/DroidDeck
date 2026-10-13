@@ -423,6 +423,22 @@ jobs:
           [ -z "$VKB_NEED" ] || { echo "::error::the bridge ICD needs $VKB_NEED"; exit 1; }
           [ "$(syms "$VKB" | grep -c '^vk_icd')" = 3 ] || { echo "::error::the bridge ICD does not export the loader interface"; exit 1; }
 
+      # Mali (Venus), David Cimo's route: the vtest server (jniLibs), the Venus ICD (assets/venus)
+      # and the Mali compatibility layer (assets/linuxfs), built by build-venus.yml and fetched by
+      # tag + sha256 like gamescope. The app uses it only on a GPU that is not an Adreno.
+      - name: Fetch the Mali (Venus) component (tools/venus/release.env)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          . tools/venus/release.env
+          gh release download "${VENUS_TAG}" -R "${VENUS_REPO}" -p venus.tzst -O venus.tzst
+          echo "${VENUS_SHA256}  venus.tzst" | sha256sum -c -
+          tar --use-compress-program=unzstd -xf venus.tzst -C app/src/main
+          test -f app/src/main/jniLibs/arm64-v8a/libvirgl_test_server.so
+          test -f app/src/main/assets/venus/libvulkan_virtio.so
+          rm venus.tzst
+
       # The store download engines (app/src/main/rust/stores) are Rust, built by Gradle's
       # buildRustStores task through cargo-ndk. rustup and cargo are on the runner image; the Android
       # target and cargo-ndk are added here. Cache = cargo registry + cargo-ndk + the crate's target

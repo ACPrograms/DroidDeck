@@ -488,18 +488,41 @@ static int dev_init(void) {
     }
     g_vk.GetPhysicalDeviceMemoryProperties(g_pd, &g_memprops);
 
-    /* Verify the dmabuf-import extensions are present, and log any that are missing. */
-    const char *dev_exts[9] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_external_memory_fd",
-                               "VK_EXT_external_memory_dma_buf", "VK_EXT_image_drm_format_modifier",
-                               "VK_KHR_image_format_list", NULL, NULL};
-    uint32_t n_dev_exts = 5;
+    /* The dmabuf-import extensions are enabled only when present (David Cimo, Mali through Venus):
+     * a vendor driver may lack one, and naming it would fail vkCreateDevice and leave the session
+     * with no compositor. On an Adreno's Turnip all five are present, so nothing changes there. */
+    static const char *const wanted_exts[5] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_external_memory_fd",
+                                               "VK_EXT_external_memory_dma_buf", "VK_EXT_image_drm_format_modifier",
+                                               "VK_KHR_image_format_list"};
+    const char *dev_exts[9] = {0};
+    uint32_t n_dev_exts = 0;
     uint32_t ne = 0;
     g_vk.EnumerateDeviceExtensionProperties(g_pd, NULL, &ne, NULL);
     VkExtensionProperties *exts = calloc(ne ? ne : 1, sizeof(*exts));
     g_vk.EnumerateDeviceExtensionProperties(g_pd, NULL, &ne, exts);
-    for (unsigned i = 0; i < 5; i++)
-        if (!has_ext(exts, ne, dev_exts[i]))
-            LOGE("present: driver MISSING %s (dmabuf import will fail)", dev_exts[i]);
+    /* The whole list, once, on a driver that is not Turnip: on a vendor driver it is what Venus
+     * and the bridges can offer the session. Several lines, since a log line holds 512 bytes. */
+    if (!g_library_name || !strstr(g_library_name, "freedreno")) {
+        char names[440];
+        size_t len = 0;
+        names[0] = 0;
+        droiddeck_log("gpu", "device extensions: %u", ne);
+        for (uint32_t i = 0; i < ne; i++) {
+            if (len + strlen(exts[i].extensionName) + 2 > sizeof(names)) {
+                droiddeck_log("gpu", "  %s", names);
+                len = 0;
+                names[0] = 0;
+            }
+            len += (size_t)snprintf(names + len, sizeof(names) - len, "%s%s", len ? " " : "", exts[i].extensionName);
+        }
+        if (len) droiddeck_log("gpu", "  %s", names);
+    }
+    for (unsigned i = 0; i < 5; i++) {
+        if (has_ext(exts, ne, wanted_exts[i]))
+            dev_exts[n_dev_exts++] = wanted_exts[i];
+        else
+            LOGE("present: driver MISSING %s (dmabuf import will fail)", wanted_exts[i]);
+    }
     /* HDR sessions only: the HDR10 swapchain (frame generation) can carry the game's metadata. */
     int want_hdr_md = 0;
     if (droiddeck_color_requested()) {
@@ -1112,6 +1135,10 @@ struct vkp_image *vkp_image_import_dmabuf(int fd, uint32_t drm_format, uint64_t 
         }
     }
 
+    /* Venus reports a row pitch of 0 for gamescope's 1x1 root buffer, and a zero pitch fails
+     * vkCreateImage, which left the whole window unshown (David Cimo). One packed, 64-byte aligned
+     * row is what a linear buffer that small holds. */
+    if (stride == 0 && modifier == 0) stride = ((uint32_t)w * 4 + 63) & ~63u;
     VkSubresourceLayout plane = {.offset = offset, .rowPitch = stride};
     VkImageDrmFormatModifierExplicitCreateInfoEXT modInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,

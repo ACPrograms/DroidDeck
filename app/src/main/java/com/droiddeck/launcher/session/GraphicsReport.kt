@@ -102,6 +102,7 @@ object GraphicsReport {
     /** Which backend this session's Vulkan goes through, as the session decides it. */
     private fun path(context: Context): String = when {
         DeviceSupport.adreno() -> "Turnip (Adreno, KGSL)"
+        VenusComponent.wanted(context) -> "Mali (Venus): Mesa Venus over vtest to the phone's own Vulkan driver, with the Mali compatibility layer"
         DeviceSupport.vkBridge(context) -> "Mali bridge (#517): the phone's own Vulkan driver through the bridge"
         DeviceSupport.openDriverActive(context) -> "open driver pair (PanVK / RADV)"
         SystemVulkanDriver.usesDefault(SessionPrefs.linuxDriver(context)) && SystemVulkanDriver.isAvailable() ->

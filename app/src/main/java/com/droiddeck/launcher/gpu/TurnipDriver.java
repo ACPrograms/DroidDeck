@@ -317,6 +317,11 @@ public final class TurnipDriver {
     private String choose() {
         SessionPrefs.ensurePowerVrAutoDrivers(context);
         String chosen = SessionPrefs.androidDriver(context);
+        // Mali (Venus): the phone's own driver draws the screen, as Venus replays on it.
+        if (com.droiddeck.launcher.session.VenusComponent.wanted(context)) {
+            Log.i(TAG, "Mali (Venus): display on the system Vulkan loader");
+            return null;
+        }
         // A Mali under Auto draws its display on Android's own Vulkan loader, whatever an earlier
         // build set: a PanVK Android half fails on Mali gralloc. A manual pick is respected.
         if (chosen != null && !chosen.isEmpty() && new File("/dev/mali0").exists()

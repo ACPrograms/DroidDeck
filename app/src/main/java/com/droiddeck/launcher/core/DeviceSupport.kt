@@ -24,6 +24,7 @@ object DeviceSupport {
      */
     fun vkBridge(context: Context): Boolean =
         !adreno() && !SystemVulkanDriver.isAvailable() && !openDriverActive(context) &&
+            !com.droiddeck.launcher.session.VenusComponent.wanted(context) &&
             com.droiddeck.launcher.session.SessionPrefs.vkBridge(context)
 
     /**
@@ -32,6 +33,7 @@ object DeviceSupport {
      */
     fun openDriverActive(context: Context): Boolean {
         if (adreno()) return false
+        if (com.droiddeck.launcher.session.VenusComponent.wanted(context)) return false
         // The runtime half is what counts: a Mali pair may run with the system driver as its display.
         val linux = com.droiddeck.launcher.session.SessionPrefs.linuxDriver(context).ifEmpty { return false }
         return com.droiddeck.launcher.gpu.DriverPairs.isNonAdreno(com.droiddeck.launcher.gpu.DriverBundle.containing(context, linux, true)?.id)
@@ -41,7 +43,8 @@ object DeviceSupport {
      * A session can draw: Adreno with Turnip, PowerVR/Xclipse on the system driver, an open
      * non-Adreno driver pair, or the bridge.
      */
-    fun canDraw(context: Context): Boolean = graphicsAvailable() || openDriverActive(context) || vkBridge(context)
+    fun canDraw(context: Context): Boolean = graphicsAvailable() || openDriverActive(context) || vkBridge(context) ||
+        com.droiddeck.launcher.session.VenusComponent.wanted(context)
 
     /** The chip as the device names it, for the card that explains the refusal. */
     fun gpuName(context: Context): String {

@@ -141,6 +141,13 @@ object SessionFiles {
         val fexPreloads = listOf("x86_64", "i386").flatMap { arch ->
             listOf("libblsession.so", "libfakeinput.so", "libfaultreport.so").map { "$arch/$it" to "usr/local/lib/droiddeck-fex/$arch/$it" }
         } + listOf("libthunkaudit.so", "libvulkan-thunk.so").map { "x86_64/$it" to "usr/local/lib/droiddeck-fex/x86_64/$it" }
+        // The Mali compatibility layer (tools/venus/layer, David Cimo): an implicit Vulkan layer that
+        // fills in the features DXVK requires and Mali lacks. Idle outside Wine and on GPUs that have them.
+        // Never staged on an Adreno: an implicit layer is loaded into every Vulkan program there.
+        val maliCompat = if (com.droiddeck.launcher.core.DeviceSupport.adreno()) emptyList() else listOf(
+            "usr/local/lib/droiddeck-mali/libVkLayer_droiddeck_mali_compat.so",
+            "usr/local/share/vulkan/implicit_layer.d/VkLayer_droiddeck_mali_compat.json",
+        ).map { it to it }
         val optional = (arrayOf(
             "usr/local/bin/gamescope" to "usr/local/bin/gamescope",
             // The Mali bridge's Linux side (tools/vkbridge): the ICD, its manifest and the self-test.
@@ -149,7 +156,7 @@ object SessionFiles {
             "usr/local/bin/droiddeck-vkbridge-smoke" to "usr/local/bin/droiddeck-vkbridge-smoke",
             "usr/local/lib/droiddeck/uruntime" to "usr/local/lib/droiddeck/uruntime",
             "usr/local/share/licenses/uruntime/LICENSE" to "usr/local/share/licenses/uruntime/LICENSE",
-        ) + mangoapp + xclipse.map { it to it } + listOf("comet", "GalaxyCommunication.exe", "update-permissions.exe", "LICENSE", "version").map { "usr/local/lib/droiddeck-comet/$it" to "usr/local/lib/droiddeck-comet/$it" } + msitools.map { it to it } + fexPreloads).filter { (asset, _) ->
+        ) + mangoapp + xclipse.map { it to it } + maliCompat + listOf("comet", "GalaxyCommunication.exe", "update-permissions.exe", "LICENSE", "version").map { "usr/local/lib/droiddeck-comet/$it" to "usr/local/lib/droiddeck-comet/$it" } + msitools.map { it to it } + fexPreloads).filter { (asset, _) ->
             val dir = asset.substringBeforeLast('/')
             runCatching { context.assets.list("linuxfs/$dir")?.contains(asset.substringAfterLast('/')) == true }.getOrDefault(false)
         }

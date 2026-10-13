@@ -391,6 +391,9 @@ class SessionService : Service() {
 
         val pulse = startAudio(guest, sessionDir)
         startVkBridge(guest, sessionDir)
+        if (VenusComponent.wanted(this)) {
+            components.add(VenusComponent(File(sessionDir, "venus.log")).also { it.attach(this) })
+        }
 
         guest.add("BL_WIDTH=" + size.first)
         guest.add("BL_HEIGHT=" + size.second)
@@ -645,7 +648,13 @@ class SessionService : Service() {
         guest.add("MESA_LOADER_DRIVER_OVERRIDE=zink")
         guest.add("GALLIUM_DRIVER=zink")
         guest.add("LIBGL_KOPPER_DRI2=true")
-        LinuxRuntime.vulkanIcd(this)?.let { guest.add("VK_ICD_FILENAMES=" + it.path) }
+        val venus = VenusComponent.wanted(this)
+        if (venus) {
+            // Mali (Venus): the session's Vulkan is Mesa's Venus ICD over vtest to the phone's driver.
+            VenusComponent.guestEnv(this).forEach { guest.add(it) }
+        } else {
+            LinuxRuntime.vulkanIcd(this)?.let { guest.add("VK_ICD_FILENAMES=" + it.path) }
+        }
         // An imported glibc Turnip, when one is set (by the user, or by Auto): the session script
         // checks the manifest and its library from inside and points the loader at it with
         // VK_DRIVER_FILES, so the runtime's own driver above stays untouched and is what a bad
@@ -655,10 +664,10 @@ class SessionService : Service() {
         // Mali bridge (PR #517) on: the bridge ICD is the driver (startVkBridge). Otherwise the system
         // PowerVR/Xclipse path (PR #570) or the imported/runtime Turnip, as before.
         val bridge = com.droiddeck.launcher.core.DeviceSupport.vkBridge(this)
-        if (!bridge && SystemVulkanDriver.usesDefault(linuxDriverId)) {
+        if (!bridge && !venus && SystemVulkanDriver.usesDefault(linuxDriverId)) {
             SystemVulkanDriver.addEnvironment(this, guest)
         }
-        (if (bridge) null else LinuxVulkanDriver.resolveIcdPath(this, linuxDriverId))
+        (if (bridge || venus) null else LinuxVulkanDriver.resolveIcdPath(this, linuxDriverId))
             ?.let { guest.add(LinuxVulkanDriver.ENV + "=" + it) }
         // An open Mali driver pair: /dev/mali0 stands in as the render node (LinuxRuntime.bindGpuNode)
         // and the session shim answers gamescope's PRIME calls on it as on KGSL. It only covers
@@ -697,7 +706,7 @@ class SessionService : Service() {
         // Downloads holds the value verbatim ("sysmem", "sysmem,deck_emu"); with nothing there, an
         // imported driver from the A710/A720/A722 legs gets "sysmem" on its own, which is what both
         // its authors advise for those GPUs and what nothing else in the list needs.
-        tuDebug(linuxDriverId)?.let { guest.add("TU_DEBUG=$it") }
+        if (!venus) tuDebug(linuxDriverId)?.let { guest.add("TU_DEBUG=$it") }
         // Zink renders the client's UI (Chromium -> ANGLE -> Zink -> Turnip). Lazy descriptors is
         // the mode Zink recommends where the driver has no descriptor buffer, and what Ludashi ships
         // by default for its Zink path; a switch here because on one Fold the menus run at 14 fps.

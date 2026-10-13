@@ -148,6 +148,8 @@ object DeviceReport {
             k("Linux driver", label)
         }
         k("Runtime's own ICD", LinuxRuntime.vulkanIcd(context)?.path)
+        k("Mali (Venus)", if (com.droiddeck.launcher.session.VenusComponent.wanted(context)) "in use"
+            else if (com.droiddeck.launcher.session.VenusComponent.available(context)) "available, off" else "not in this build")
 
         h("Runtime")
         k("Installed version", LinuxRuntimeInstaller.installedVersion(context))
