@@ -1095,6 +1095,22 @@ struct vkp_image *vkp_image_import_dmabuf(int fd, uint32_t drm_format, uint64_t 
     const VkImageUsageFlags sampled_usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     img->sampled = !as_blit_dst && g_vk.GetPhysicalDeviceImageFormatProperties2 &&
                    modifier_importable(img->fmt, modifier, sampled_usage);
+    /* Each new format/modifier/size a client hands over, once, for the graphics report: a colour
+     * or swizzle mismatch on a non-Adreno driver shows up as the pair it arrived as. */
+    {
+        static struct { uint32_t fmt; uint64_t mod; int w, h; } seen[32];
+        static int nseen;
+        int known = 0;
+        for (int i = 0; i < nseen; i++)
+            if (seen[i].fmt == drm_format && seen[i].mod == modifier && seen[i].w == w && seen[i].h == h) known = 1;
+        if (!known && nseen < 32) {
+            seen[nseen].fmt = drm_format; seen[nseen].mod = modifier; seen[nseen].w = w; seen[nseen].h = h; nseen++;
+            droiddeck_log("gpu", "dmabuf import: %c%c%c%c %s %dx%d stride %u offset %u -> vk format %d, %s%s",
+                          drm_format & 0xff, (drm_format >> 8) & 0xff, (drm_format >> 16) & 0xff, (drm_format >> 24) & 0xff,
+                          vkp_modifier_name(modifier), w, h, stride, offset, (int)img->fmt,
+                          img->sampled ? "sampled" : "copied", as_blit_dst ? ", blit target" : "");
+        }
+    }
 
     VkSubresourceLayout plane = {.offset = offset, .rowPitch = stride};
     VkImageDrmFormatModifierExplicitCreateInfoEXT modInfo = {
