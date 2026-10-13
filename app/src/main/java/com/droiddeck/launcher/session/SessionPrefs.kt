@@ -526,10 +526,23 @@ object SessionPrefs {
      * Setup's "Steam interface: GPU drawing": with an open driver pair the Steam client composites
      * its web views in software (stale tiles on RADV/Xclipse); this turns GPU compositing back on.
      */
-    fun steamGpuCompositing(context: Context): Boolean = prefs(context).getBoolean("steamGpuCompositing", false)
+    fun steamGpuCompositing(context: Context): Boolean {
+        if (!steamGpuCompositingAllowed()) {
+            // Never on a Mali: with PanVK it rebooted an Edge 60 (G615) twice as steamwebhelper
+            // started. A value saved by the build that offered it is cleared.
+            if (prefs(context).getBoolean("steamGpuCompositing", false))
+                prefs(context).edit().putBoolean("steamGpuCompositing", false).apply()
+            return false
+        }
+        return prefs(context).getBoolean("steamGpuCompositing", false)
+    }
+
+    /** Setup offers "Steam interface: GPU drawing" on Xclipse (RADV) and other non-Mali, non-Adreno GPUs. */
+    fun steamGpuCompositingAllowed(): Boolean =
+        !com.droiddeck.launcher.core.DeviceSupport.adreno() && !com.droiddeck.launcher.core.DeviceSupport.mali()
 
     fun setSteamGpuCompositing(context: Context, on: Boolean) {
-        prefs(context).edit().putBoolean("steamGpuCompositing", on).apply()
+        prefs(context).edit().putBoolean("steamGpuCompositing", on && steamGpuCompositingAllowed()).apply()
     }
 
     fun setVenus(context: Context, on: Boolean) {

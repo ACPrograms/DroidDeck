@@ -5,6 +5,7 @@
 #   usr/local/lib/vkbridge/libvulkan_droidbridge.so   the Vulkan ICD
 #   usr/local/share/vkbridge/droidbridge_icd.json     its manifest
 #   usr/local/bin/droiddeck-vkbridge-smoke            the session-start self-test
+#   usr/local/bin/droiddeck-glprobe                   GLX start-up probe (Mali Venus route)
 set -euo pipefail
 d=$1
 cc=${2:-aarch64-linux-gnu-gcc}
@@ -20,6 +21,8 @@ mkdir -p "$d/usr/local/lib/vkbridge" "$d/usr/local/share/vkbridge" "$d/usr/local
 "$strip" --strip-unneeded "$d/usr/local/lib/vkbridge/libvulkan_droidbridge.so"
 "$cc" -O2 -Wall $inc -I"$here/tests" -o "$d/usr/local/bin/droiddeck-vkbridge-smoke" "$here/tests/smoke.c" -ldl
 "$strip" --strip-unneeded "$d/usr/local/bin/droiddeck-vkbridge-smoke"
+"$cc" -O2 -Wall -o "$d/usr/local/bin/droiddeck-glprobe" "$here/tests/glprobe.c" -ldl
+"$strip" --strip-unneeded "$d/usr/local/bin/droiddeck-glprobe"
 cat > "$d/usr/local/share/vkbridge/droidbridge_icd.json" <<JSON
 {"file_format_version": "1.0.0", "ICD": {"library_path": "/usr/local/lib/vkbridge/libvulkan_droidbridge.so", "api_version": "1.4.341"}}
 JSON

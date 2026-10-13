@@ -27,6 +27,14 @@ object DeviceSupport {
             com.droiddeck.launcher.session.SessionPrefs.vkBridge(context)
 
     /** Whether this phone can use the Mali bridge at all: a Mali (kbase) without a system-driver route. */
+    /** A Mali GPU (its kbase device is there, or the GPU reports a Mali family). Never an Adreno. */
+    fun mali(): Boolean = isMali
+
+    private val isMali by lazy {
+        !adreno() && (File("/dev/mali0").exists() ||
+            com.droiddeck.launcher.gpu.GpuInfo.detect().family.name.startsWith("MALI"))
+    }
+
     fun bridgeUsable(): Boolean = !adreno() && !SystemVulkanDriver.isAvailable() && File("/dev/mali0").exists()
 
     /**

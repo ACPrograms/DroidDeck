@@ -78,3 +78,10 @@ app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the
   per shader type names the pipeline (shader type, layer count, ycbcr/colorspace masks, fp16) and the
   SPIR-V capabilities its shader declares. A Mali-G615 through Venus refused all 119 composite
   pipelines with VK_ERROR_INITIALIZATION_FAILED and nothing said which feature it objected to.
+- `0130-composite-without-immutable-ycbcr-samplers.patch`: one composite pipeline is compiled at
+  start-up; when the driver refuses it, the descriptor layout is rebuilt without binding 4's immutable
+  YCbCr samplers (that binding then takes the slot's ordinary sampler) and the probe tried again, with
+  both outcomes in the log. `GAMESCOPE_NO_YCBCR_SAMPLERS=1` forces it. A Mali-G615 through Venus
+  refused every composite shader (blit, blur, RCAS: SPIR-V capabilities Shader, Sampled1D,
+  ImageQuery, no Float16) while EASU, NIS and the NV12 converter, which share the layout but never
+  touch binding 4, compiled.
