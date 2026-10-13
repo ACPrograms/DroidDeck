@@ -73,7 +73,10 @@ int __android_log_print(int, const char *, const char *, ...);
 ''')
         (tmp / 'wayland-server.h').write_text('#pragma once\nstruct wl_display; struct wl_resource; struct wl_client;\n')
         compositor = (SOURCE.parent / 'compositor.c').read_text()
-        callers = '\n'.join(function(compositor, n) for n in ('buffer_release_blocked', 'send_buffer_release', 'take_shm', 'take_pixel'))
+        # send_buffer_release is a macro over send_buffer_release_at (with buffer tracing).
+        callers = ('static void buf_trace_release(struct wl_resource *b, int line) { (void)b; (void)line; }\n'
+                   + '#define send_buffer_release(b) send_buffer_release_at((b), __LINE__)\n'
+                   + '\n'.join(function(compositor, n) for n in ('buffer_release_blocked', 'send_buffer_release_at', 'take_shm', 'take_pixel')))
         harness = (Path(__file__).with_name('vk_terminal_callers_test.c')).read_text()
         probe = tmp / 'probe.c'
         probe.write_text(harness.replace('/* COMPOSITOR_CALLERS */', callers))

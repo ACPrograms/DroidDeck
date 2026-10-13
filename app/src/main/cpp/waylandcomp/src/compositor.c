@@ -385,8 +385,39 @@ static struct dmabuf_buffer *get_dmabuf(struct wl_resource *buffer);
 static int buffer_release_blocked(struct wl_resource *buffer) {
     return vkp_completion_unknown() && get_dmabuf(buffer) != NULL;
 }
-static void send_buffer_release(struct wl_resource *buffer) {
-    if (!buffer_release_blocked(buffer)) wl_buffer_send_release(buffer);
+/* Buffer tracing on a GPU that is not an Adreno (no KGSL node): every attach and release of the
+ * first 400 buffer events, by wl_buffer id and the line that sent it, and any release of a buffer
+ * already released and not attached again since (gamescope: "Compositor released us but we were
+ * not acquired"). Off on an Adreno. */
+static int g_buf_trace = -1;
+static int g_buf_trace_left = 400;
+static uint32_t g_released_ids[128];
+static int buf_trace_on(void) {
+    if (g_buf_trace < 0) g_buf_trace = access("/dev/kgsl-3d0", F_OK) != 0;
+    return g_buf_trace;
+}
+static void buf_trace_attach(struct wl_resource *buffer) {
+    if (!buffer || !buf_trace_on()) return;
+    uint32_t id = wl_resource_get_id(buffer);
+    for (int i = 0; i < 128; i++) if (g_released_ids[i] == id) g_released_ids[i] = 0;
+    if (g_buf_trace_left > 0) { g_buf_trace_left--; droiddeck_log("buffer", "attach id %u", id); }
+}
+static void buf_trace_release(struct wl_resource *buffer, int line) {
+    if (!buffer || !buf_trace_on()) return;
+    uint32_t id = wl_resource_get_id(buffer);
+    int twice = 0, slot = -1;
+    for (int i = 0; i < 128; i++) {
+        if (g_released_ids[i] == id) twice = 1;
+        if (slot < 0 && g_released_ids[i] == 0) slot = i;
+    }
+    if (twice) droiddeck_log("buffer", "DOUBLE release id %u (line %d): released again without an attach", id, line);
+    else if (slot >= 0) g_released_ids[slot] = id;
+    if (g_buf_trace_left > 0) { g_buf_trace_left--; droiddeck_log("buffer", "release id %u (line %d)", id, line); }
+}
+
+#define send_buffer_release(b) send_buffer_release_at((b), __LINE__)
+static void send_buffer_release_at(struct wl_resource *buffer, int line) {
+    if (!buffer_release_blocked(buffer)) { buf_trace_release(buffer, line); wl_buffer_send_release(buffer); }
 }
 
 static void pending_release_free(struct pending_release *pr) {
@@ -1147,6 +1178,7 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
             /* Role-less surface: never drawn, but its buffer is kept for a set_cursor to come. */
             if (buffer) surface_hold_idle(s, buffer);
         } else if (db) {
+            buf_trace_attach(buffer);
             take_dmabuf(s, db, buffer);
         } else if (shm) {
             drop_dmabuf(s, 1);

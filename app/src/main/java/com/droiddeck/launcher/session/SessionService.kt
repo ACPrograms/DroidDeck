@@ -688,6 +688,8 @@ class SessionService : Service() {
             // CEF's accelerated shared-texture output showed stale, half-written tiles on RADV
             // (Xclipse), as #570 found on PowerVR: web compositing in software, GPU raster kept.
             guest.add("BL_STEAM_SOFT_COMPOSITING=1")
+            // droiddeck-game-env leaves vkd3d-proton to report the driver's own caps on this path.
+            guest.add("BL_OPEN_DRIVER=1")
             Log.i(TAG, "steam: software web compositing for the open driver pair (GPU raster kept)")
             LinuxRuntime.gpuStandIn(this)?.takeIf { it == LinuxRuntime.MALI_DEVICE }?.let { guest.add("BL_DRM_STANDIN=$it") }
         }

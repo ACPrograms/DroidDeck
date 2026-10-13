@@ -393,6 +393,20 @@ class GameEnvironmentTest(unittest.TestCase):
             named = game_logs(command, on, None, now=0)
             self.assertTrue(Path(named["PROTON_LOG_DIR"]).name.endswith("-Hades"))
 
+    def test_open_driver_pairs_report_the_drivers_own_vkd3d_caps(self):
+        apply = MODULE["apply_config"]
+        config = {"version": 1, "shared": {"VKD3D_FEATURE_LEVEL": "12_2", "VKD3D_SHADER_MODEL": "6_9"},
+                  "games": {"42": {"VKD3D_SHADER_MODEL": "6_6"}}}
+        adreno = apply({}, config, "1")
+        self.assertEqual(adreno["VKD3D_FEATURE_LEVEL"], "12_2")
+        pair = apply({"BL_OPEN_DRIVER": "1"}, config, "1")
+        self.assertNotIn("VKD3D_FEATURE_LEVEL", pair)
+        self.assertNotIn("VKD3D_SHADER_MODEL", pair)
+        self.assertEqual(pair["DROIDDECK_VKD3D_CAPS"], "driver")
+        own = apply({"BL_OPEN_DRIVER": "1"}, config, "42")
+        self.assertEqual(own["VKD3D_SHADER_MODEL"], "6_6")
+        self.assertNotIn("VKD3D_FEATURE_LEVEL", own)
+
     def test_game_ids_and_probes(self):
         for prefix in ("", "/compatdata/0", "/compatdata/0-123", "/compatdata/nope", "/compatdata/4294967296"):
             self.assertIsNone(MODULE["game_id"]({"STEAM_COMPAT_DATA_PATH": prefix}))

@@ -178,6 +178,15 @@ def apply_config(env, config, app_id, fixes=None):
         if dxvk:
             own = result.get("DXVK_CONFIG", "").strip().rstrip(";").strip()
             result["DXVK_CONFIG"] = own + "; " + dxvk if own else dxvk
+    # An open driver pair (PanVK, RADV) on a GPU that is not an Adreno: vkd3d-proton reports the
+    # driver's own feature level and shader model. The app-wide 12_2 / 6_9 over-promised what PanVK
+    # has, and an Unreal DX12 game took paths that crashed. A game's own setting still wins.
+    if env.get("BL_OPEN_DRIVER") == "1":
+        game = config.get("games", {}).get(app_id, {}) or {}
+        for name in ("VKD3D_FEATURE_LEVEL", "VKD3D_SHADER_MODEL"):
+            if name not in game and name in result:
+                result.pop(name)
+                result["DROIDDECK_VKD3D_CAPS"] = "driver"
     return result
 
 
@@ -379,7 +388,6 @@ def game_logs(command, env, app_id, now=None):
         "VKD3D_DEBUG": env.get("VKD3D_DEBUG", "warn"),
         "VKD3D_SHADER_DEBUG": env.get("VKD3D_SHADER_DEBUG", "none"),
         "MESA_LOG_FILE": str(folder / "mesa.log"),
-        "MESA_DEBUG": env.get("MESA_DEBUG", "silent"),
         "PANVK_DEBUG": env.get("PANVK_DEBUG", "startup"),
     })
     try:
@@ -389,7 +397,7 @@ def game_logs(command, env, app_id, now=None):
             "proton: %s" % command[0],
             "started: %s" % time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)),
         ] + ["%s=%s" % (key, env[key]) for key in sorted(env)
-             if key.startswith(("VK_", "BL_VK", "BL_DRM", "MESA_", "PANVK", "DXVK_", "VKD3D", "ZINK", "TU_"))]) + "\n")
+             if key.startswith(("VK_", "BL_VK", "BL_DRM", "BL_OPEN", "MESA_", "PANVK", "DXVK_", "VKD3D", "ZINK", "TU_", "DROIDDECK_VKD3D"))]) + "\n")
     except OSError:
         pass
     # Whether the game's sound reaches PulseAudio: the streams 20 s and 60 s in, without waiting.
