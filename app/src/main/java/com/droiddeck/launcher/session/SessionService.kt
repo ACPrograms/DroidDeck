@@ -700,10 +700,15 @@ class SessionService : Service() {
         if (!bridge && com.droiddeck.launcher.core.DeviceSupport.openDriverActive(this)) {
             // CEF's accelerated shared-texture output showed stale, half-written tiles on RADV
             // (Xclipse), as #570 found on PowerVR: web compositing in software, GPU raster kept.
-            guest.add("BL_STEAM_SOFT_COMPOSITING=1")
+            // Setup's "Steam interface: GPU drawing" turns GPU compositing back on (Xclipse users).
+            if (SessionPrefs.steamGpuCompositing(this)) {
+                Log.i(TAG, "steam: GPU web compositing (Setup's \"Steam interface: GPU drawing\")")
+            } else {
+                guest.add("BL_STEAM_SOFT_COMPOSITING=1")
+                Log.i(TAG, "steam: software web compositing for the open driver pair (GPU raster kept)")
+            }
             // droiddeck-game-env leaves vkd3d-proton to report the driver's own caps on this path.
             guest.add("BL_OPEN_DRIVER=1")
-            Log.i(TAG, "steam: software web compositing for the open driver pair (GPU raster kept)")
             LinuxRuntime.gpuStandIn(this)?.takeIf { it == LinuxRuntime.MALI_DEVICE }?.let { guest.add("BL_DRM_STANDIN=$it") }
         }
         // Turnip's own debug switches, for the runtime's driver and everything on it. The file in
@@ -786,6 +791,12 @@ class SessionService : Service() {
             components.add(it)
         }
         guest.add("BL_VKBRIDGE=1")
+        if (SessionPrefs.steamGpuCompositing(this)) guest.add("BL_STEAM_GPU_COMPOSITING=1")
+        // If the bridge's self-test fails images or draws, the session script falls back to the
+        // Mali driver pair set for the runtime (its ICD here), rather than crashing gamescope.
+        SessionPrefs.linuxDriver(this).takeIf { it.isNotEmpty() }
+            ?.let { runCatching { LinuxVulkanDriver.resolveIcdPath(this, it) }.getOrNull() }
+            ?.let { guest.add("BL_VKBRIDGE_FALLBACK_ICD=$it") }
         guest.add("VKBRIDGE_SOCKET=" + socket.path)
         guest.add("VKBRIDGE_CLIENT_LOG=" + File(sessionDir, "vkbridge-client.log").path)
         // The render node gamescope sees is Mali's device standing in (LinuxRuntime.bindGpuNode):

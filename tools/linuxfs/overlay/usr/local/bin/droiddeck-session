@@ -162,16 +162,49 @@ if [ "${BL_VKBRIDGE:-0}" = 1 ]; then
     unset TU_DEBUG
     if [ -z "${BL_INSIDE:-}" ]; then
       step "vkbridge self-test"
-      timeout 60 /usr/local/bin/droiddeck-vkbridge-smoke 2>&1 | sed 's/^/== vkbridge: /'
+      bl_vkb_smoke=$(timeout 60 /usr/local/bin/droiddeck-vkbridge-smoke 2>&1)
+      printf '%s\n' "$bl_vkb_smoke" | sed 's/^/== vkbridge: /'
+      # Images or draws failing the self-test mean gamescope cannot start on the bridge (it
+      # asserted in CVulkanTexture::BInit): this session falls back to the Mali driver pair the
+      # app named, and says so (the app shows it in Setup).
+      if printf '%s\n' "$bl_vkb_smoke" | grep -qE '^FAIL (image clear|draw)' && [ -r "${BL_VKBRIDGE_FALLBACK_ICD:-}" ]; then
+        export VK_DRIVER_FILES=$BL_VKBRIDGE_FALLBACK_ICD VK_ICD_FILENAMES=$BL_VKBRIDGE_FALLBACK_ICD BL_VKBRIDGE=0
+        # What the app sets for a pair session (SessionService): the bridge already bound /dev/mali0
+        # as the stand-in render node, which is what PanVK reports too.
+        export BL_OPEN_DRIVER=1 BL_DRM_STANDIN=/dev/mali0
+        [ "${BL_STEAM_GPU_COMPOSITING:-0}" = 1 ] || export BL_STEAM_SOFT_COMPOSITING=1
+        echo "== vkbridge: self-test failed images or draws; this session uses the PanVK pair instead ($BL_VKBRIDGE_FALLBACK_ICD)"
+        [ -n "${BL_DEBUG_DIR:-}" ] && echo "$BL_VKBRIDGE_FALLBACK_ICD" > "$BL_DEBUG_DIR/vkbridge-fallback" 2>/dev/null
+      fi
+      unset bl_vkb_smoke
       if command -v vulkaninfo >/dev/null 2>&1; then
         timeout 30 vulkaninfo --summary 2>&1 | sed -n '/^Devices:/,$p' | head -40 | sed 's/^/== vulkaninfo: /'
       fi
     fi
-    echo "== vulkan driver: Mali bridge ($bl_vkb_icd, server at $VKBRIDGE_SOCKET)"
+    [ "${BL_VKBRIDGE:-0}" = 1 ] && echo "== vulkan driver: Mali bridge ($bl_vkb_icd, server at $VKBRIDGE_SOCKET)"
   else
     echo "== vulkan driver: Mali bridge requested but NOT usable (icd $bl_vkb_icd, socket ${VKBRIDGE_SOCKET:-unset}); this GPU will show a black screen"
   fi
   unset bl_vkb_icd
+fi
+# Mali (Venus): Steam's GL and Xwayland's glamor run on Zink, which refuses a device without
+# robustness2's nullDescriptor (Mali has none; the Mali compatibility layer stands in for it). When
+# the session's Vulkan still lacks it, GL goes to llvmpipe instead: slower, but Steam starts rather
+# than sitting at 0% with "glXChooseVisual failed".
+if [ "${BL_VENUS:-0}" = 1 ] && [ -z "${BL_INSIDE:-}" ] && command -v vulkaninfo >/dev/null 2>&1; then
+  if bl_vn_info=$(timeout 30 vulkaninfo 2>/dev/null); then
+    case $(printf '%s\n' "$bl_vn_info" | grep -m1 'nullDescriptor') in
+      *true*) echo "== venus: nullDescriptor present (Zink keeps the GPU)" ;;
+      *)
+        export GALLIUM_DRIVER=llvmpipe LIBGL_ALWAYS_SOFTWARE=1
+        unset MESA_LOADER_DRIVER_OVERRIDE LIBGL_KOPPER_DRI2
+        echo "== venus: no nullDescriptor on this device even with the Mali compatibility layer; Steam's GL and Xwayland use llvmpipe (software)"
+        ;;
+    esac
+  else
+    echo "== venus: vulkaninfo failed or timed out; GL left on Zink"
+  fi
+  unset bl_vn_info
 fi
 # Detailed graphics logs (BL_GAME_LOGS=1: a GPU that is not an Adreno, or Setup's switch): the
 # session's own view of Vulkan, with the driver exactly as exported above, once per session. In the
@@ -213,6 +246,38 @@ nap() {
   [ -n "${bl_nap_fd:-}" ] || exec {bl_nap_fd}<> <(:)
   read -r -t "$1" -u "$bl_nap_fd" _ 2>/dev/null || :
 }
+# Which program a driver error came from: Mesa's lines ("radv/amdgpu: The CS has been rejected",
+# "ZINK: vkQueueWaitIdle failed") carry no process name. For the first three minutes of an open
+# driver pair's session, every process that appears goes into processes.txt with the session log's
+# line count at that moment, so an error's line number in session.log points at what had just
+# started. Pure bash over /proc (no execs: see nap).
+watch_processes() {
+  local out=$BL_DEBUG_DIR/processes.txt log=$BL_DEBUG_DIR/session.log i p pid comm lines
+  local -a argv new
+  local -A seen=()
+  echo "# seconds  session.log-lines  pid  name  command line" > "$out" 2>/dev/null || return 0
+  for ((i = 0; i < 360; i++)); do
+    new=()
+    for p in /proc/[0-9]*; do
+      pid=${p#/proc/}
+      [ -n "${seen[$pid]:-}" ] && continue
+      seen[$pid]=1
+      read -r comm < "$p/comm" 2>/dev/null || continue
+      argv=()
+      mapfile -d '' -t argv < "$p/cmdline" 2>/dev/null
+      new+=("$pid"$'\t'"$comm"$'\t'"${argv[*]:0:8}")
+    done
+    if [ ${#new[@]} -gt 0 ]; then
+      lines=0
+      [ -r "$log" ] && { mapfile -t argv < "$log"; lines=${#argv[@]}; argv=(); }
+      for p in "${new[@]}"; do printf '%s\t%s\t%.200s\n' "$SECONDS" "$lines" "$p"; done >> "$out"
+    fi
+    nap 0.5
+  done
+}
+if [ "${BL_OPEN_DRIVER:-0}" = 1 ] && [ -z "${BL_INSIDE:-}" ] && [ -n "${BL_DEBUG_DIR:-}" ]; then
+  watch_processes &
+fi
 export XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
 export XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}

@@ -47,6 +47,10 @@ class VkDmabufQuarantineTest(unittest.TestCase):
                 helpers += [function(comp, 'send_buffer_release')]
         else:
             helpers = ['static int __attribute__((unused)) buffer_release_blocked(struct wl_resource *b) { (void)b; return 0; }']
+        if re.search(r'\bstatic int buffer_shown_elsewhere\(', comp):
+            # One surface per buffer in these scenarios: never shown elsewhere.
+            helpers += ['static int buffer_shown_elsewhere(struct wl_resource *b, const struct surface *e) '
+                        '{ (void)b; (void)e; return 0; }']
         query = function(vk, 'vkp_completion_unknown') if 'int vkp_completion_unknown(' in vk else \
             'int vkp_completion_unknown(void) { return g_dev_state == -3; }'
         comp_functions = [function(comp, names[0])] + helpers + [function(comp, n) for n in names[1:]]

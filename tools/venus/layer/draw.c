@@ -6,7 +6,8 @@
  * - robustness2's nullDescriptor: VK_NULL_HANDLE buffers, image views and vertex buffers in
  *   descriptor writes (plain, template and push) and vertex-buffer binds are replaced with small
  *   stand-ins the layer owns. robustBufferAccess2 itself maps to robustBufferAccess (layer.c).
- *   A texel-buffer view stays null: its format is not known here.
+ *   A null texel-buffer view gets an RGBA8 (uniform) or R32_UINT (storage) view of the stand-in
+ *   buffer: its format is not known here, but Zink leaves them unbound and never reads them.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -72,7 +73,8 @@ static bool null_resources(struct device *dev)
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = NULL_BUFFER_SIZE,
         .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                 VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
     if (dev->CreateBuffer(dev->handle, &binfo, NULL, &dev->null_buffer) != VK_SUCCESS)
@@ -130,6 +132,18 @@ static bool null_resources(struct device *dev)
     };
     if (dev->CreateImageView(dev->handle, &vinfo, NULL, &dev->null_view) != VK_SUCCESS)
         return false;
+    /* Texel views are optional: a write that needs one and has none keeps its null. */
+    VkBufferViewCreateInfo tinfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+        .buffer = dev->null_buffer,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .range = VK_WHOLE_SIZE,
+    };
+    if (dev->CreateBufferView(dev->handle, &tinfo, NULL, &dev->null_uniform_texel) != VK_SUCCESS)
+        dev->null_uniform_texel = VK_NULL_HANDLE;
+    tinfo.format = VK_FORMAT_R32_UINT;
+    if (dev->CreateBufferView(dev->handle, &tinfo, NULL, &dev->null_storage_texel) != VK_SUCCESS)
+        dev->null_storage_texel = VK_NULL_HANDLE;
     dev->null_ready = 1;
     layer_log("nullDescriptor: stand-in buffer and 1x1 image ready");
     return true;
@@ -145,6 +159,8 @@ void null_resources_destroy(struct device *dev)
         }
     }
     map_free(&dev->templates);
+    if (dev->null_uniform_texel) dev->DestroyBufferView(dev->handle, dev->null_uniform_texel, NULL);
+    if (dev->null_storage_texel) dev->DestroyBufferView(dev->handle, dev->null_storage_texel, NULL);
     if (dev->null_view) dev->DestroyImageView(dev->handle, dev->null_view, NULL);
     if (dev->null_image) dev->DestroyImage(dev->handle, dev->null_image, NULL);
     if (dev->null_image_memory) dev->FreeMemory(dev->handle, dev->null_image_memory, NULL);
@@ -162,6 +178,18 @@ static bool is_image_type(VkDescriptorType t)
 {
     return t == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE || t == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
            t == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || t == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+}
+
+static bool is_texel_type(VkDescriptorType t)
+{
+    return t == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER || t == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+}
+
+static void fix_texel(struct device *dev, VkDescriptorType t, VkBufferView *view)
+{
+    if (*view != VK_NULL_HANDLE || !null_resources(dev))
+        return;
+    *view = t == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER ? dev->null_storage_texel : dev->null_uniform_texel;
 }
 
 static void fix_buffer(struct device *dev, VkDescriptorBufferInfo *info)
@@ -194,6 +222,8 @@ static VkWriteDescriptorSet *fix_writes(struct device *dev, uint32_t count, cons
             if (is_image_type(w->descriptorType) && w->pImageInfo && w->pImageInfo[j].imageView == VK_NULL_HANDLE &&
                 w->descriptorType != VK_DESCRIPTOR_TYPE_SAMPLER)
                 null_found = true;
+            if (is_texel_type(w->descriptorType) && w->pTexelBufferView && w->pTexelBufferView[j] == VK_NULL_HANDLE)
+                null_found = true;
         }
         if (!null_found)
             continue;
@@ -209,6 +239,13 @@ static VkWriteDescriptorSet *fix_writes(struct device *dev, uint32_t count, cons
                 fix_buffer(dev, &b[j]);
             copies[i].pBufferInfo = b;
             (*scratch)[(*scratch_count)++] = b;
+        } else if (is_texel_type(w->descriptorType)) {
+            VkBufferView *v = malloc(w->descriptorCount * sizeof(*v));
+            memcpy(v, w->pTexelBufferView, w->descriptorCount * sizeof(*v));
+            for (uint32_t j = 0; j < w->descriptorCount; j++)
+                fix_texel(dev, w->descriptorType, &v[j]);
+            copies[i].pTexelBufferView = v;
+            (*scratch)[(*scratch_count)++] = v;
         } else {
             VkDescriptorImageInfo *im = malloc(w->descriptorCount * sizeof(*im));
             memcpy(im, w->pImageInfo, w->descriptorCount * sizeof(*im));
@@ -320,13 +357,15 @@ static void *fix_template_data(struct device *dev, VkDescriptorUpdateTemplate tm
             const VkDescriptorUpdateTemplateEntry *e = &t->entries[i];
             bool buffer = is_buffer_type(e->descriptorType);
             bool image = is_image_type(e->descriptorType);
-            if (!buffer && !image)
+            bool texel = is_texel_type(e->descriptorType);
+            if (!buffer && !image && !texel)
                 continue;
             for (uint32_t j = 0; j < e->descriptorCount; j++) {
                 size_t at = e->offset + (size_t)j * e->stride;
                 const char *src = (const char *)(copy ? copy : data) + at;
-                bool null_handle = buffer ? ((const VkDescriptorBufferInfo *)src)->buffer == VK_NULL_HANDLE
-                                          : ((const VkDescriptorImageInfo *)src)->imageView == VK_NULL_HANDLE;
+                bool null_handle = buffer  ? ((const VkDescriptorBufferInfo *)src)->buffer == VK_NULL_HANDLE
+                                   : texel ? *(const VkBufferView *)src == VK_NULL_HANDLE
+                                           : ((const VkDescriptorImageInfo *)src)->imageView == VK_NULL_HANDLE;
                 if (!null_handle)
                     continue;
                 if (!copy) {
@@ -335,6 +374,8 @@ static void *fix_template_data(struct device *dev, VkDescriptorUpdateTemplate tm
                 }
                 if (buffer)
                     fix_buffer(dev, (VkDescriptorBufferInfo *)((char *)copy + at));
+                else if (texel)
+                    fix_texel(dev, e->descriptorType, (VkBufferView *)((char *)copy + at));
                 else
                     fix_image(dev, (VkDescriptorImageInfo *)((char *)copy + at));
             }

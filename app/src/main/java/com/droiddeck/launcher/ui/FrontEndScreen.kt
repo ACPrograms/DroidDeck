@@ -100,6 +100,8 @@ class FrontEndState(
     /** Setup's Debugging tools toggle (AgentAccess): off unless the user turns it on. */
     val agentCommands: Boolean = false,
     val graphicsLogs: Boolean = false,
+    val steamGpuDrawing: Boolean = false,
+    val bridgeFellBack: Boolean = false,
     val steamGames: List<Library.SteamGame>,
     val emulators: List<Library.Emulator>,
     val running: String?,
@@ -213,6 +215,7 @@ class FrontEndActions(
     val onLogs: () -> Unit,
     val onAgentCommands: () -> Unit = {},
     val onGraphicsLogs: () -> Unit = {},
+    val onSteamGpuDrawing: () -> Unit = {},
     val onShareLogs: () -> Unit = {},
     val onClearLogs: () -> Unit = {},
     val onOffline: () -> Unit,

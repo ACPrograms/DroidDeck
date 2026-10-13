@@ -30,8 +30,12 @@ static void build_memory_model(vkb_physdev *pd)
     int pure_dl = -1;
     for (uint32_t t = 0; t < s->memoryTypeCount; t++) {
         VkMemoryPropertyFlags f = s->memoryTypes[t].propertyFlags;
+        /* Not a lazily allocated type (Mali lists one first, for transient attachments): an
+         * ordinary image cannot use it, and taking it as "the" device-local type left images with
+         * no memory type at all (self-test "image clear: setup", gamescope "No compatible image
+         * memory type"). */
         if ((f & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) && !(f & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
-            !(f & VK_MEMORY_PROPERTY_PROTECTED_BIT)) {
+            !(f & VK_MEMORY_PROPERTY_PROTECTED_BIT) && !(f & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT)) {
             pure_dl = (int)t;
             break;
         }
@@ -55,7 +59,8 @@ static void build_memory_model(vkb_physdev *pd)
         /* A device-local type with no host access, backed by the first device-local type. */
         for (uint32_t t = 0; t < s->memoryTypeCount; t++) {
             VkMemoryPropertyFlags f = s->memoryTypes[t].propertyFlags;
-            if ((f & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) && !(f & VK_MEMORY_PROPERTY_PROTECTED_BIT)) {
+            if ((f & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) && !(f & VK_MEMORY_PROPERTY_PROTECTED_BIT) &&
+                !(f & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT)) {
                 cands[nc++] = (struct cand){VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, s->memoryTypes[t].heapIndex, t, 0};
                 break;
             }

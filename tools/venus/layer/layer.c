@@ -1,5 +1,7 @@
+#define _GNU_SOURCE
 #include "mali_compat.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -133,13 +135,19 @@ void map_free(struct handle_map *map)
     *map = (struct handle_map){0};
 }
 
-/* Wine processes only: the Steam client and gamescope run fine without the layer, and their
- * Zink would otherwise start using the made-up features too. */
+/* Wine processes by default. DROIDDECK_MALI_COMPAT=1 (the app's Venus route) turns it on everywhere
+ * but gamescope, so Zink in the Steam client and Xwayland gets robustness2's nullDescriptor, which it
+ * requires; gamescope runs fine on the driver's own features. =all includes gamescope too. */
 static bool wanted(void)
 {
     const char *setting = getenv("DROIDDECK_MALI_COMPAT");
-    if (setting)
-        return strcmp(setting, "0") != 0;
+    if (setting) {
+        if (strcmp(setting, "0") == 0)
+            return false;
+        if (strcmp(setting, "all") == 0)
+            return true;
+        return strcmp(program_invocation_short_name, "gamescope") != 0;
+    }
     return getenv("WINEPREFIX") != NULL;
 }
 

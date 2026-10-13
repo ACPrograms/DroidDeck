@@ -74,3 +74,7 @@ app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the
   import, so the screen cycled through the first few frames forever while Steam ran on behind them.
   Only dma-buf textures are memoized now; a shm buffer is uploaded on every commit. Adreno never
   takes this path, since its Xwayland hands over dma-bufs. Also what XWAYLAND_NO_GLAMOR sessions need.
+- `0129-log-failing-compute-pipeline.patch`: when `vkCreateComputePipelines` fails, one extra line
+  per shader type names the pipeline (shader type, layer count, ycbcr/colorspace masks, fp16) and the
+  SPIR-V capabilities its shader declares. A Mali-G615 through Venus refused all 119 composite
+  pipelines with VK_ERROR_INITIALIZATION_FAILED and nothing said which feature it objected to.

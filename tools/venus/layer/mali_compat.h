@@ -119,6 +119,8 @@ struct instance {
     X(GetImageMemoryRequirements) \
     X(BindImageMemory) \
     X(DestroyImageView) \
+    X(CreateBufferView) \
+    X(DestroyBufferView) \
     X(UpdateDescriptorSets) \
     X(CmdPushDescriptorSet) \
     X(CreateDescriptorUpdateTemplate) \
@@ -157,6 +159,9 @@ struct device {
     VkImage null_image;
     VkDeviceMemory null_image_memory;
     VkImageView null_view;
+    /* Texel-buffer stand-ins: RGBA8 for uniform (sampled) texel buffers, R32_UINT for storage. */
+    VkBufferView null_uniform_texel;
+    VkBufferView null_storage_texel;
     struct device *next;
 };
 

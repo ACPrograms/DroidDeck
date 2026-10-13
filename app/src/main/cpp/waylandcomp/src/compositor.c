@@ -420,6 +420,19 @@ static void send_buffer_release_at(struct wl_resource *buffer, int line) {
     if (!buffer_release_blocked(buffer)) { buf_trace_release(buffer, line); wl_buffer_send_release(buffer); }
 }
 
+/* Whether a surface other than `except` is showing this buffer right now. gamescope's Wayland
+ * backend moves one buffer between its planes (the game's frame goes from the window to a
+ * subsurface above a black backing while a Steam notification is up): releasing it when the first
+ * surface lets go handed gamescope a buffer still on screen ("Compositor released us but we were
+ * not acquired"). Only the last surface to let go releases it. */
+static int buffer_shown_elsewhere(struct wl_resource *buffer, const struct surface *except) {
+    struct surface *o;
+    if (!buffer) return 0;
+    wl_list_for_each(o, &g_surfaces, link)
+        if (o != except && o->dmabuf == buffer) return 1;
+    return 0;
+}
+
 static void pending_release_free(struct pending_release *pr) {
     if (pr->surface && pr->surface->releases_pending > 0) pr->surface->releases_pending--;
     wl_list_remove(&pr->destroy.link);
@@ -459,6 +472,11 @@ static int on_release_timer(int fd, uint32_t mask, void *data) {
     if (read(fd, &expirations, sizeof(expirations)) < 0 && errno != EAGAIN) return 0;
     wl_list_for_each_safe(pr, tmp, &g_pending_releases, link) {
         if (pr->at_ns <= now && !buffer_release_blocked(pr->buffer)) {
+            /* Attached again since (to its surface or another): that surface releases it later. */
+            if (buffer_shown_elsewhere(pr->buffer, NULL)) {
+                pending_release_free(pr);
+                continue;
+            }
             send_buffer_release(pr->buffer);
             perf_note_release(pr->since_ns);
             pending_release_free(pr);
@@ -735,7 +753,9 @@ static void drop_dmabuf(struct surface *s, int paced) {
         wl_list_remove(&s->dmabuf_destroy.link);
         /* A buffer on the zero-copy layer is the display's until SurfaceFlinger says otherwise:
          * ahb_swapchain.c releases it then. */
-        if (!ahb_swapchain_defer_release(s->dmabuf_buf, s->dmabuf, s, paced)) {
+        if (buffer_shown_elsewhere(s->dmabuf, s)) {
+            /* still on another surface: released when that one lets go */
+        } else if (!ahb_swapchain_defer_release(s->dmabuf_buf, s->dmabuf, s, paced)) {
             if (paced) release_buffer(s, s->dmabuf, now_ns());
             else send_buffer_release(s->dmabuf);
         }

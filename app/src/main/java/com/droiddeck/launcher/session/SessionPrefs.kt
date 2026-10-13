@@ -515,12 +515,29 @@ object SessionPrefs {
      */
     fun venus(context: Context): Boolean = prefs(context).getBoolean("venus", false)
 
+    /** The last session's Mali bridge self-test failed and it ran on the pair instead (Setup says so). */
+    fun bridgeFellBack(context: Context): Boolean = prefs(context).getBoolean("bridgeFellBack", false)
+
+    fun setBridgeFellBack(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("bridgeFellBack", on).apply()
+    }
+
+    /**
+     * Setup's "Steam interface: GPU drawing": with an open driver pair the Steam client composites
+     * its web views in software (stale tiles on RADV/Xclipse); this turns GPU compositing back on.
+     */
+    fun steamGpuCompositing(context: Context): Boolean = prefs(context).getBoolean("steamGpuCompositing", false)
+
+    fun setSteamGpuCompositing(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("steamGpuCompositing", on).apply()
+    }
+
     fun setVenus(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("venus", on).apply()
     }
 
     fun setVkBridge(context: Context, on: Boolean) {
-        prefs(context).edit().putBoolean("vkBridge", on).apply()
+        prefs(context).edit().putBoolean("vkBridge", on).putBoolean("bridgeFellBack", false).apply()
     }
 
     fun setZinkLazy(context: Context, on: Boolean) {

@@ -89,6 +89,11 @@ class VenusComponent(private val logFile: File?) : SessionPart() {
                 "VTEST_SOCKET_NAME=" + socket(context).path,
                 // Xwayland has no DRI3 without a DRM node, so swapchains present through shared memory.
                 "MESA_VK_WSI_DEBUG=sw",
+                // The Mali compatibility layer in every process but gamescope, not only Wine: Zink
+                // (Steam's GL, Xwayland's glamor) requires robustness2's nullDescriptor, which the
+                // layer stands in for. The session script checks it and falls back to llvmpipe.
+                "DROIDDECK_MALI_COMPAT=1",
+                "BL_VENUS=1",
             )
         }
 

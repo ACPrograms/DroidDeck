@@ -41,8 +41,12 @@ object GraphicsReport {
     /** Per-game graphics logs and the guest's Vulkan summary: on for a non-Adreno GPU, or by Setup's switch. */
     fun detailed(context: Context): Boolean = !DeviceSupport.adreno() || SessionPrefs.detailedGraphicsLogs(context)
 
+    /** For finish(), which runs from the session's end without a context of its own. */
+    @Volatile private var appContext: Context? = null
+
     /** Writes the start of the report; never throws. */
     fun begin(context: Context, dir: File, guest: List<String>) {
+        appContext = context.applicationContext
         runCatching { File(dir, FILE).writeText(start(context, guest)) }
             .onFailure { android.util.Log.w("GraphicsReport", "could not write $FILE", it) }
     }
@@ -177,10 +181,13 @@ object GraphicsReport {
             val guestLines = File(dir, "session.log").takeIf { it.isFile }?.useLines { seq ->
                 seq.filter { GUEST.containsMatchIn(it) }.take(200).toList()
             }.orEmpty()
+            val fellBack = File(dir, "vkbridge-fallback").takeIf { it.isFile }?.readText()?.trim()
+            runCatching { SessionPrefs.setBridgeFellBack(appContext ?: return@runCatching, fellBack != null) }
             val limits = File(dir, "limits.txt").takeIf { it.isFile }?.readText()?.trim()
             val audio = File(dir, "audio.log").takeIf { it.isFile }?.readText().orEmpty()
             report.appendText(buildString {
                 limits?.let { appendLine("open files limit: $it") }
+                fellBack?.let { appendLine("!! MALI BRIDGE FELL BACK: the self-test failed images or draws; the session ran on $it") }
                 if (audio.contains("AAUDIO_ERROR_DISCONNECTED")) {
                     appendLine("!! SOUND: Android refused the audio output (AAUDIO_ERROR_DISCONNECTED) - rebooting the phone usually fixes this")
                 }
