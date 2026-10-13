@@ -1,0 +1,16 @@
+--- a/src/Backends/WaylandBackend.cpp
++++ b/src/Backends/WaylandBackend.cpp
+@@ -1183,7 +1183,12 @@
+         wl_display_flush( m_pBackend->GetDisplay() );
+ 
+         GetVBlankTimer().UpdateWasCompositing( bNeedsFullComposite );
+-        GetVBlankTimer().UpdateLastDrawTime( get_time_in_nanos() - g_SteamCompMgrVBlankTime.ulWakeupTime );
++        // Direct planes still need time for the host compositor to dispatch and draw.
++        // Measuring only our submission lets the offset decay towards the host's
++        // latch deadline, so small dispatch delays make a capped frame miss a refresh.
++        GetVBlankTimer().UpdateLastDrawTime( std::max<uint64_t>(
++            get_time_in_nanos() - g_SteamCompMgrVBlankTime.ulWakeupTime,
++            CVBlankTimer::kDefaultVBlankDrawTimeMinCompositing ) );
+ 
+         m_pBackend->PollState();
+ 
