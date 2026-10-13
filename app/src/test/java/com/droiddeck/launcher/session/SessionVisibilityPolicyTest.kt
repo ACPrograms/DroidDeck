@@ -30,4 +30,69 @@ class SessionVisibilityPolicyTest {
         // SessionActivity reports onStart/onStop; a focus-only onPause does not mark it hidden.
         assertFalse(SessionVisibilityPolicy.isHidden(true, true, true, true))
     }
+
+    @Test fun defaultDisplayScreenOnResumesAfterScreenOff() {
+        val wasHidden = SessionVisibilityPolicy.isHidden(true, false, true, true)
+        val isHidden = SessionVisibilityPolicy.isHidden(true, true, true, true)
+        assertTrue(SessionVisibilityPolicy.shouldResumeOnVisibleTransition(
+            previouslyHidden = wasHidden,
+            currentlyHidden = isHidden,
+            suspendPolicy = SessionPrefs.SUSPEND_AUTO,
+        ))
+    }
+
+    @Test fun externalDisplayOnResumesAfterOffOrDisconnect() {
+        val wasHidden = SessionVisibilityPolicy.isHidden(true, false, false, false)
+        val isHidden = SessionVisibilityPolicy.isHidden(true, false, false, true)
+        assertTrue(SessionVisibilityPolicy.shouldResumeOnVisibleTransition(
+            previouslyHidden = wasHidden,
+            currentlyHidden = isHidden,
+            suspendPolicy = SessionPrefs.SUSPEND_NATIVE,
+        ))
+    }
+
+    @Test fun startedActivityResumesAfterBeingStopped() {
+        val wasHidden = SessionVisibilityPolicy.isHidden(false, false, false, true)
+        val isHidden = SessionVisibilityPolicy.isHidden(true, false, false, true)
+        assertTrue(SessionVisibilityPolicy.shouldResumeOnVisibleTransition(
+            previouslyHidden = wasHidden,
+            currentlyHidden = isHidden,
+            suspendPolicy = SessionPrefs.SUSPEND_AUTO,
+        ))
+    }
+
+    @Test fun onToOnDisplayPropertyChangeDoesNotResume() {
+        val wasHidden = SessionVisibilityPolicy.isHidden(true, true, false, true)
+        val isHidden = SessionVisibilityPolicy.isHidden(true, true, false, true)
+        assertFalse(SessionVisibilityPolicy.shouldResumeOnVisibleTransition(
+            previouslyHidden = wasHidden,
+            currentlyHidden = isHidden,
+            suspendPolicy = SessionPrefs.SUSPEND_AUTO,
+        ))
+        assertFalse(SessionVisibilityPolicy.shouldResumeOnVisibleTransition(
+            previouslyHidden = null,
+            currentlyHidden = isHidden,
+            suspendPolicy = SessionPrefs.SUSPEND_AUTO,
+        ))
+    }
+
+    @Test fun handsetScreenOnDoesNotResumeVisibleExternalDisplay() {
+        val wasHidden = SessionVisibilityPolicy.isHidden(true, false, false, true)
+        val isHidden = SessionVisibilityPolicy.isHidden(true, true, false, true)
+        assertFalse(SessionVisibilityPolicy.shouldResumeOnVisibleTransition(
+            previouslyHidden = wasHidden,
+            currentlyHidden = isHidden,
+            suspendPolicy = SessionPrefs.SUSPEND_AUTO,
+        ))
+    }
+
+    @Test fun manualPolicyDoesNotResumeOnVisibleTransition() {
+        val wasHidden = SessionVisibilityPolicy.isHidden(true, false, true, true)
+        val isHidden = SessionVisibilityPolicy.isHidden(true, true, true, true)
+        assertFalse(SessionVisibilityPolicy.shouldResumeOnVisibleTransition(
+            previouslyHidden = wasHidden,
+            currentlyHidden = isHidden,
+            suspendPolicy = SessionPrefs.SUSPEND_MANUAL,
+        ))
+    }
 }

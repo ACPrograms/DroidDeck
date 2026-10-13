@@ -91,6 +91,7 @@ class SessionService : Service() {
     private var activityVisible = true
     private var activityDisplayId = Display.DEFAULT_DISPLAY
     private var screenOn = true
+    private var previouslyHidden: Boolean? = null
     private var manualPauseRequested = false
     /** An explicit Steam sleep request is independent of the background policy. */
     private var steamSleepToken: String? = null
@@ -115,7 +116,6 @@ class SessionService : Service() {
                 Intent.ACTION_SCREEN_ON -> screenOn = true
                 else -> return
             }
-            if (screenOn) resumeSteamSleepOnReturn()
             suspendAttemptFailed = false
             updateSuspendPolicy()
         }
@@ -182,7 +182,6 @@ class SessionService : Service() {
                 if (!SessionState.pipActive) pipTask = false
                 activityVisible = true
                 suspendDownloadNow = false
-                resumeSteamSleepOnReturn()
                 suspendAttemptFailed = false
                 updateSuspendPolicy()
                 return START_NOT_STICKY
@@ -196,9 +195,6 @@ class SessionService : Service() {
             }
             ACTION_ACTIVITY_DISPLAY_CHANGED -> {
                 activityDisplayId = intent.getIntExtra(EXTRA_ACTIVITY_DISPLAY_ID, activityDisplayId)
-                if (activityVisible && (SessionState.suspended || steamSleepToken != null || nativeSleepToken != null)) {
-                    resumeSteamSleepOnReturn()
-                }
                 suspendAttemptFailed = false
                 updateSuspendPolicy()
                 return START_NOT_STICKY
@@ -240,6 +236,7 @@ class SessionService : Service() {
         activityVisible = true
         activityDisplayId = SessionState.activityDisplayId
         screenOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive ?: true
+        previouslyHidden = null
         manualPauseRequested = false
         suspendDownloadNow = false
         steamDownloadMonitor.reset()
@@ -1357,6 +1354,11 @@ class SessionService : Service() {
             activityOnDefaultDisplay = activityDisplayId == Display.DEFAULT_DISPLAY,
             activityDisplayOn = activityDisplayOn,
         )
+        val wasHidden = previouslyHidden
+        previouslyHidden = hidden
+        if (SessionVisibilityPolicy.shouldResumeOnVisibleTransition(wasHidden, hidden, suspendPolicy)) {
+            resumeSteamSleepOnReturn()
+        }
         if (suspendPolicy == SessionPrefs.SUSPEND_MANUAL && hidden) {
             manualPauseRequested = true
         }
