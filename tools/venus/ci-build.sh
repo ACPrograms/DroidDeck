@@ -78,6 +78,7 @@ git clone -q --depth 1 -b 1.5.10 https://github.com/anholt/libepoxy.git
 git clone -q --depth 1 -b v1.4.365 https://github.com/KhronosGroup/Vulkan-Headers.git
 git clone -q --depth 1 -b virglrenderer-1.3.0 https://gitlab.freedesktop.org/virgl/virglrenderer.git
 git -C virglrenderer apply "$REPO/tools/venus/virglrenderer-android.patch"
+git -C virglrenderer apply "$REPO/tools/venus/virglrenderer-destroy-unknown-pipeline.patch"
 cat > compat/log/log.h <<'EOC'
 #pragma once
 #include <android/log.h>

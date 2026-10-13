@@ -85,3 +85,10 @@ app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the
   refused every composite shader (blit, blur, RCAS: SPIR-V capabilities Shader, Sampled1D,
   ImageQuery, no Float16) while EASU, NIS and the NV12 converter, which share the layout but never
   touch binding 4, compiled.
+- `0131-memory-type-fallback-keep-probe.patch`: `findMemoryType` asked for DEVICE_LOCAL|HOST_VISIBLE
+  memory falls back to host-visible memory without DEVICE_LOCAL, and a failure logs the requested
+  properties, the type bits and every memory type. The Mali bridge models a unified-memory GPU like a
+  discrete one (host-visible types without DEVICE_LOCAL), so the upload buffer found nothing and the
+  backend failed. Also: 0130's probe pipeline is kept instead of destroyed, and skipped when
+  `GAMESCOPE_NO_YCBCR_SAMPLERS=1` (destroying a pipeline the Venus host had refused killed the
+  render server).

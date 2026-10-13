@@ -21,6 +21,8 @@ object SteamRedists {
         "228988" to ("vcredist2019_dll" to "VC++ 2019"),
         "228989" to ("vcredist2022_dll" to "VC++ 2022"),
         "228990" to ("d3dx9" to "DirectX (June 2010)"),
+        // OpenAL 2.0.7.0 (Hotline Miami lists it; without it HotlineGL.exe fails to load, c0000135).
+        "229020" to ("oalinst_dll" to "OpenAL"),
     )
     private val BLOCK = Regex("\"SharedDepots\"\\s*\\{([^}]*)\\}", RegexOption.IGNORE_CASE)
     private val ENTRY = Regex("\"(\\d+)\"\\s+\"\\d+\"")
