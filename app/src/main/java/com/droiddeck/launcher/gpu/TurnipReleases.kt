@@ -187,8 +187,16 @@ object TurnipReleases {
     }
 
     /** The id an asset was installed as, when it was downloaded before and is still installed. */
-    fun installedId(context: Context, asset: Asset, isInstalled: (String) -> Boolean): String? =
-        downloads(context).optString(asset.name, "").takeIf { it.isNotEmpty() && isInstalled(it) }
+    fun installedId(context: Context, asset: Asset, isInstalled: (String) -> Boolean): String? {
+        val d = downloads(context)
+        // The open non-Adreno drivers are rebuilt in place under the same asset name: one whose
+        // digest changed since it was downloaded counts as not installed, so it is fetched again.
+        if (DriverPairs.isNonAdreno(asset.pair) && asset.sha256.isNotEmpty() &&
+            !asset.sha256.equals(d.optString(SHA_PREFIX + asset.name, asset.sha256), ignoreCase = true)) return null
+        return d.optString(asset.name, "").takeIf { it.isNotEmpty() && isInstalled(it) }
+    }
+
+    private const val SHA_PREFIX = "sha256:"
 
     /** True when [id] came from a release download rather than a zip picked by hand. */
     fun isDownloaded(context: Context, id: String): Boolean {
@@ -197,7 +205,9 @@ object TurnipReleases {
     }
 
     fun recordDownload(context: Context, asset: Asset, id: String) {
-        prefs(context).edit().putString(KEY_DOWNLOADS, downloads(context).put(asset.name, id).toString()).apply()
+        val d = downloads(context).put(asset.name, id)
+        if (DriverPairs.isNonAdreno(asset.pair) && asset.sha256.isNotEmpty()) d.put(SHA_PREFIX + asset.name, asset.sha256)
+        prefs(context).edit().putString(KEY_DOWNLOADS, d.toString()).apply()
     }
 
     /** Forget a deleted driver, so its release offers the download again. */

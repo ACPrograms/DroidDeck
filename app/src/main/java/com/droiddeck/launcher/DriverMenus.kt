@@ -208,7 +208,9 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         autoStatus = activity.getString(R.string.drivers_checking_latest)
         Thread({
             val cached = TurnipReleases.cached(activity)
-            val stale = cached == null || System.currentTimeMillis() - cached.checkedAt > 24 * 3_600_000L ||
+            // The open non-Adreno drivers are rebuilt in place while they are tested: an hour.
+            val maxAge = if (DeviceSupport.adreno()) 24 * 3_600_000L else 3_600_000L
+            val stale = cached == null || System.currentTimeMillis() - cached.checkedAt > maxAge ||
                 cached.assets.none { it.pair.isNotEmpty() } ||
                 // A list checked before this device's open drivers were offered has none of them.
                 (!DeviceSupport.adreno() && cached.assets.none { DriverPairs.isNonAdreno(it.pair) })
