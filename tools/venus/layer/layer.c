@@ -190,6 +190,14 @@ uint32_t physical_device_gaps(struct instance *inst, VkPhysicalDevice physical_d
         gaps |= GAP_BC;
     if (robustness2 && !robust.robustBufferAccess2)
         gaps |= GAP_ROBUSTNESS2;
+    if (!features.features.multiDrawIndirect)
+        gaps |= GAP_MULTI_DRAW;
+    if (!has_extension(inst, physical_device, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME))
+        gaps |= GAP_DEPTH_CLIP;
+    /* No robustness2 at all: the extension is offered with robustBufferAccess2 (as robustBufferAccess)
+     * and nullDescriptor (stand-ins, draw.c). */
+    if (!robustness2)
+        gaps |= GAP_ROBUSTNESS2 | GAP_NULL_DESCRIPTOR;
 
     pthread_mutex_lock(&inst->lock);
     if (inst->physical_device_count < sizeof(inst->physical_devices) / sizeof(inst->physical_devices[0])) {
@@ -198,6 +206,48 @@ uint32_t physical_device_gaps(struct instance *inst, VkPhysicalDevice physical_d
     }
     pthread_mutex_unlock(&inst->lock);
     return gaps;
+}
+
+/* Structures of extensions the driver does not have are taken out of a chain for the call down and
+ * put back after it: the driver (and Venus) must not see them. */
+struct unlinked {
+    VkBaseOutStructure *prev, *node;
+};
+
+static uint32_t unlink_types(void *head, const VkStructureType *types, uint32_t type_count,
+                             struct unlinked *out, uint32_t max)
+{
+    uint32_t n = 0;
+    VkBaseOutStructure *prev = head;
+    while (prev && prev->pNext && n < max) {
+        VkBaseOutStructure *s = prev->pNext;
+        bool drop = false;
+        for (uint32_t i = 0; i < type_count; i++)
+            drop |= s->sType == types[i];
+        if (drop) {
+            out[n++] = (struct unlinked){prev, s};
+            prev->pNext = s->pNext;
+        } else {
+            prev = s;
+        }
+    }
+    return n;
+}
+
+static void relink(struct unlinked *list, uint32_t n)
+{
+    while (n--)
+        list[n].prev->pNext = list[n].node;
+}
+
+static uint32_t foreign_types(uint32_t gaps, VkStructureType *types)
+{
+    uint32_t n = 0;
+    if (gaps & GAP_DEPTH_CLIP)
+        types[n++] = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT;
+    if (gaps & GAP_NULL_DESCRIPTOR)
+        types[n++] = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+    return n;
 }
 
 static void report_features(VkPhysicalDeviceFeatures *features, uint32_t gaps)
@@ -212,6 +262,8 @@ static void report_features(VkPhysicalDeviceFeatures *features, uint32_t gaps)
         features->shaderCullDistance = VK_TRUE;
     if (gaps & GAP_BC)
         features->textureCompressionBC = VK_TRUE;
+    if (gaps & GAP_MULTI_DRAW)
+        features->multiDrawIndirect = VK_TRUE;
 }
 
 /* Which made-up features the application asked for, and off with them before the driver sees them. */
@@ -238,6 +290,10 @@ static uint32_t take_features(VkPhysicalDeviceFeatures *features, uint32_t gaps)
         requested |= GAP_BC;
         features->textureCompressionBC = VK_FALSE;
     }
+    if ((gaps & GAP_MULTI_DRAW) && features->multiDrawIndirect) {
+        requested |= GAP_MULTI_DRAW;
+        features->multiDrawIndirect = VK_FALSE;
+    }
     return requested;
 }
 
@@ -245,6 +301,8 @@ static void report_limits(VkPhysicalDeviceLimits *limits, uint32_t gaps)
 {
     if (gaps & GAP_MULTI_VIEWPORT)
         limits->maxViewports = 16;
+    if ((gaps & GAP_MULTI_DRAW) && limits->maxDrawIndirectCount < (1u << 30))
+        limits->maxDrawIndirectCount = 1u << 30;
     if (gaps & GAPS_SHADER) {
         limits->maxClipDistances = 8;
         limits->maxCullDistances = 8;
@@ -264,12 +322,21 @@ static VKAPI_ATTR void VKAPI_CALL GetPhysicalDeviceFeatures2(VkPhysicalDevice ph
                                                              VkPhysicalDeviceFeatures2 *features)
 {
     struct instance *inst = instance_from_handle(physical_device);
-    inst->GetPhysicalDeviceFeatures2(physical_device, features);
     uint32_t gaps = physical_device_gaps(inst, physical_device);
+    VkStructureType types[4];
+    struct unlinked dropped[8];
+    uint32_t dropped_count = unlink_types(features, types, foreign_types(gaps, types), dropped, 8);
+    inst->GetPhysicalDeviceFeatures2(physical_device, features);
+    relink(dropped, dropped_count);
     report_features(&features->features, gaps);
     for (VkBaseOutStructure *s = features->pNext; s; s = s->pNext) {
-        if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT && (gaps & GAP_ROBUSTNESS2))
+        if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT && (gaps & GAP_ROBUSTNESS2)) {
             ((VkPhysicalDeviceRobustness2FeaturesEXT *)s)->robustBufferAccess2 = VK_TRUE;
+            if (gaps & GAP_NULL_DESCRIPTOR)
+                ((VkPhysicalDeviceRobustness2FeaturesEXT *)s)->nullDescriptor = VK_TRUE;
+        }
+        if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT && (gaps & GAP_DEPTH_CLIP))
+            ((VkPhysicalDeviceDepthClipEnableFeaturesEXT *)s)->depthClipEnable = VK_TRUE;
     }
 }
 
@@ -287,6 +354,40 @@ static VKAPI_ATTR void VKAPI_CALL GetPhysicalDeviceProperties2(VkPhysicalDevice 
     struct instance *inst = instance_from_handle(physical_device);
     inst->GetPhysicalDeviceProperties2(physical_device, properties);
     report_limits(&properties->properties.limits, physical_device_gaps(inst, physical_device));
+}
+
+/* The extensions the layer stands in for, added to the driver's list. */
+static VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysicalDevice physical_device,
+                                                                         const char *layer_name, uint32_t *count,
+                                                                         VkExtensionProperties *properties)
+{
+    struct instance *inst = instance_from_handle(physical_device);
+    if (layer_name)
+        return inst->EnumerateDeviceExtensionProperties(physical_device, layer_name, count, properties);
+    uint32_t gaps = physical_device_gaps(inst, physical_device);
+    VkExtensionProperties extra[2];
+    uint32_t extra_count = 0;
+    if (gaps & GAP_DEPTH_CLIP)
+        extra[extra_count++] = (VkExtensionProperties){VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME, 1};
+    if (gaps & GAP_NULL_DESCRIPTOR)
+        extra[extra_count++] = (VkExtensionProperties){VK_EXT_ROBUSTNESS_2_EXTENSION_NAME, 1};
+    uint32_t own = 0;
+    VkResult result = inst->EnumerateDeviceExtensionProperties(physical_device, NULL, &own, NULL);
+    if (result != VK_SUCCESS)
+        return result;
+    if (!properties) {
+        *count = own + extra_count;
+        return VK_SUCCESS;
+    }
+    VkExtensionProperties *all = calloc(own + extra_count, sizeof(*all));
+    inst->EnumerateDeviceExtensionProperties(physical_device, NULL, &own, all);
+    memcpy(all + own, extra, extra_count * sizeof(*extra));
+    uint32_t total = own + extra_count;
+    uint32_t n = *count < total ? *count : total;
+    memcpy(properties, all, n * sizeof(*all));
+    free(all);
+    *count = n;
+    return n < total ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *info,
@@ -410,8 +511,35 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physical_dev
             enabled->robustBufferAccess = VK_TRUE;
     }
 
+    /* The extensions the layer stands in for leave the list, and their structures the chain. */
+    const char **names = NULL;
+    if (gaps & (GAP_DEPTH_CLIP | GAP_NULL_DESCRIPTOR)) {
+        names = malloc((info->enabledExtensionCount ? info->enabledExtensionCount : 1) * sizeof(*names));
+        copy.enabledExtensionCount = 0;
+        for (uint32_t i = 0; i < info->enabledExtensionCount; i++) {
+            const char *name = info->ppEnabledExtensionNames[i];
+            if ((gaps & GAP_DEPTH_CLIP) && !strcmp(name, VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME)) {
+                requested |= GAP_DEPTH_CLIP;
+                continue;
+            }
+            if ((gaps & GAP_NULL_DESCRIPTOR) && !strcmp(name, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME)) {
+                requested |= GAP_NULL_DESCRIPTOR;
+                if (enabled)
+                    enabled->robustBufferAccess = VK_TRUE;
+                continue;
+            }
+            names[copy.enabledExtensionCount++] = name;
+        }
+        copy.ppEnabledExtensionNames = names;
+    }
+    VkStructureType foreign[4];
+    struct unlinked dropped[8];
+    uint32_t dropped_count = unlink_types(&copy, foreign, foreign_types(gaps, foreign), dropped, 8);
+
     VkResult result = create(physical_device, &copy, allocator, device);
 
+    relink(dropped, dropped_count);
+    free(names);
     if (features2 && !info->pEnabledFeatures)
         features2->features = saved_features;
     if (robust)
@@ -447,12 +575,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice physical_dev
     pthread_mutex_unlock(&global_lock);
 
     if (requested) {
-        layer_log("emulating%s%s%s%s%s%s for %s", (requested & GAP_FILL_MODE) ? " fillModeNonSolid" : "",
+        layer_log("emulating%s%s%s%s%s%s%s%s%s for %s", (requested & GAP_FILL_MODE) ? " fillModeNonSolid" : "",
                   (requested & GAP_MULTI_VIEWPORT) ? " multiViewport" : "",
                   (requested & GAP_CLIP_DISTANCE) ? " shaderClipDistance" : "",
                   (requested & GAP_CULL_DISTANCE) ? " shaderCullDistance" : "",
                   (requested & GAP_ROBUSTNESS2) ? " robustBufferAccess2" : "",
-                  (requested & GAP_BC) ? " textureCompressionBC" : "", properties.deviceName);
+                  (requested & GAP_BC) ? " textureCompressionBC" : "",
+                  (requested & GAP_MULTI_DRAW) ? " multiDrawIndirect" : "",
+                  (requested & GAP_DEPTH_CLIP) ? " depthClipEnable" : "",
+                  (requested & GAP_NULL_DESCRIPTOR) ? " nullDescriptor" : "", properties.deviceName);
     }
     return VK_SUCCESS;
 }
@@ -471,6 +602,7 @@ static VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocat
     if (!dev)
         return;
     bc_destroy_device(dev);
+    null_resources_destroy(dev);
     dev->DestroyDevice(device, allocator);
     for (uint32_t i = 0; i < dev->shader_modules.capacity; i++) {
         struct spirv_code *code = dev->shader_modules.values[i];
@@ -538,6 +670,22 @@ static const struct hook device_hooks[] = {
     HOOK(ResetCommandBuffer, GAP_BC),
     HOOK(ResetCommandPool, GAP_BC),
     HOOK(DestroyCommandPool, GAP_BC),
+    HOOK(CmdDrawIndirect, GAP_MULTI_DRAW),
+    HOOK(CmdDrawIndexedIndirect, GAP_MULTI_DRAW),
+    HOOK(UpdateDescriptorSets, GAP_NULL_DESCRIPTOR),
+    HOOK(CmdPushDescriptorSet, GAP_NULL_DESCRIPTOR),
+    HOOK_ALIAS(CmdPushDescriptorSet, CmdPushDescriptorSetKHR, GAP_NULL_DESCRIPTOR),
+    HOOK(CreateDescriptorUpdateTemplate, GAP_NULL_DESCRIPTOR),
+    HOOK_ALIAS(CreateDescriptorUpdateTemplate, CreateDescriptorUpdateTemplateKHR, GAP_NULL_DESCRIPTOR),
+    HOOK(DestroyDescriptorUpdateTemplate, GAP_NULL_DESCRIPTOR),
+    HOOK_ALIAS(DestroyDescriptorUpdateTemplate, DestroyDescriptorUpdateTemplateKHR, GAP_NULL_DESCRIPTOR),
+    HOOK(UpdateDescriptorSetWithTemplate, GAP_NULL_DESCRIPTOR),
+    HOOK_ALIAS(UpdateDescriptorSetWithTemplate, UpdateDescriptorSetWithTemplateKHR, GAP_NULL_DESCRIPTOR),
+    HOOK(CmdPushDescriptorSetWithTemplate, GAP_NULL_DESCRIPTOR),
+    HOOK_ALIAS(CmdPushDescriptorSetWithTemplate, CmdPushDescriptorSetWithTemplateKHR, GAP_NULL_DESCRIPTOR),
+    HOOK(CmdBindVertexBuffers, GAP_NULL_DESCRIPTOR),
+    HOOK(CmdBindVertexBuffers2, GAP_NULL_DESCRIPTOR),
+    HOOK_ALIAS(CmdBindVertexBuffers2, CmdBindVertexBuffers2EXT, GAP_NULL_DESCRIPTOR),
 };
 
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice device, const char *name);
@@ -562,6 +710,7 @@ static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetDeviceProcAddr(VkDevice devic
 }
 
 static const struct hook physical_device_hooks[] = {
+    HOOK(EnumerateDeviceExtensionProperties, 0),
     HOOK(GetPhysicalDeviceFeatures, 0),
     HOOK(GetPhysicalDeviceFeatures2, 0),
     HOOK_ALIAS(GetPhysicalDeviceFeatures2, GetPhysicalDeviceFeatures2KHR, 0),

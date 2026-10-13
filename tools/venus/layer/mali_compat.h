@@ -25,10 +25,14 @@ enum gap {
     GAP_CULL_DISTANCE = 1u << 3,
     GAP_ROBUSTNESS2 = 1u << 4,
     GAP_BC = 1u << 5,
+    /* draw.c and pipeline.c (added for Mali-G57 and drivers without these, on top of David Cimo's six) */
+    GAP_MULTI_DRAW = 1u << 6,     /* multiDrawIndirect: indirect draws looped one by one */
+    GAP_DEPTH_CLIP = 1u << 7,     /* VK_EXT_depth_clip_enable: depthClipEnable off becomes depth clamp */
+    GAP_NULL_DESCRIPTOR = 1u << 8, /* VK_EXT_robustness2 missing entirely: nullDescriptor stand-ins */
 };
 
 #define GAPS_SHADER (GAP_CLIP_DISTANCE | GAP_CULL_DISTANCE)
-#define GAPS_PIPELINE (GAP_FILL_MODE | GAP_MULTI_VIEWPORT | GAPS_SHADER)
+#define GAPS_PIPELINE (GAP_FILL_MODE | GAP_MULTI_VIEWPORT | GAPS_SHADER | GAP_DEPTH_CLIP)
 
 void layer_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
 
@@ -109,7 +113,20 @@ struct instance {
     X(BeginCommandBuffer) \
     X(ResetCommandBuffer) \
     X(ResetCommandPool) \
-    X(DestroyCommandPool)
+    X(DestroyCommandPool) \
+    X(CmdDrawIndirect) \
+    X(CmdDrawIndexedIndirect) \
+    X(GetImageMemoryRequirements) \
+    X(BindImageMemory) \
+    X(DestroyImageView) \
+    X(UpdateDescriptorSets) \
+    X(CmdPushDescriptorSet) \
+    X(CreateDescriptorUpdateTemplate) \
+    X(DestroyDescriptorUpdateTemplate) \
+    X(UpdateDescriptorSetWithTemplate) \
+    X(CmdPushDescriptorSetWithTemplate) \
+    X(CmdBindVertexBuffers) \
+    X(CmdBindVertexBuffers2)
 
 struct staging_block;
 
@@ -132,6 +149,14 @@ struct device {
     struct handle_map memories;        /* VkDeviceMemory -> struct mapped_memory */
     struct handle_map command_buffers; /* VkCommandBuffer -> struct command_buffer */
     struct staging_block *free_staging;
+    struct handle_map templates;       /* VkDescriptorUpdateTemplate -> struct template_info (draw.c) */
+    /* nullDescriptor stand-ins (draw.c): 0 not made yet, 1 ready, -1 failed. */
+    int null_ready;
+    VkBuffer null_buffer;
+    VkDeviceMemory null_buffer_memory;
+    VkImage null_image;
+    VkDeviceMemory null_image_memory;
+    VkImageView null_view;
     struct device *next;
 };
 
@@ -243,4 +268,17 @@ struct instance *instance_from_handle(const void *dispatchable);
 /* What the GPU lacks of the features the layer can make up for. */
 uint32_t physical_device_gaps(struct instance *inst, VkPhysicalDevice physical_device);
 
+
+/* draw.c */
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndirect(VkCommandBuffer cmd, VkBuffer buffer, VkDeviceSize offset, uint32_t draw_count, uint32_t stride);
+VKAPI_ATTR void VKAPI_CALL CmdDrawIndexedIndirect(VkCommandBuffer cmd, VkBuffer buffer, VkDeviceSize offset, uint32_t draw_count, uint32_t stride);
+VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(VkDevice device, uint32_t write_count, const VkWriteDescriptorSet *writes, uint32_t copy_count, const VkCopyDescriptorSet *copies);
+VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSet(VkCommandBuffer cmd, VkPipelineBindPoint bind_point, VkPipelineLayout layout, uint32_t set, uint32_t write_count, const VkWriteDescriptorSet *writes);
+VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorUpdateTemplate(VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *info, const VkAllocationCallbacks *allocator, VkDescriptorUpdateTemplate *tmpl);
+VKAPI_ATTR void VKAPI_CALL DestroyDescriptorUpdateTemplate(VkDevice device, VkDescriptorUpdateTemplate tmpl, const VkAllocationCallbacks *allocator);
+VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet set, VkDescriptorUpdateTemplate tmpl, const void *data);
+VKAPI_ATTR void VKAPI_CALL CmdPushDescriptorSetWithTemplate(VkCommandBuffer cmd, VkDescriptorUpdateTemplate tmpl, VkPipelineLayout layout, uint32_t set, const void *data);
+VKAPI_ATTR void VKAPI_CALL CmdBindVertexBuffers(VkCommandBuffer cmd, uint32_t first, uint32_t count, const VkBuffer *buffers, const VkDeviceSize *offsets);
+VKAPI_ATTR void VKAPI_CALL CmdBindVertexBuffers2(VkCommandBuffer cmd, uint32_t first, uint32_t count, const VkBuffer *buffers, const VkDeviceSize *offsets, const VkDeviceSize *sizes, const VkDeviceSize *strides);
+void null_resources_destroy(struct device *dev);
 #endif

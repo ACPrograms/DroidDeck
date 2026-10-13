@@ -87,6 +87,8 @@ static void find_stage_code(struct device *dev, const VkPipelineShaderStageCreat
 
 struct pipeline_rewrite {
     VkPipelineRasterizationStateCreateInfo rasterization;
+    /* VK_EXT_depth_clip_enable's state, taken out of the application's chain for the call. */
+    VkBaseOutStructure *clip_prev, *clip_node;
     VkPipelineViewportStateCreateInfo viewport;
     VkPipelineShaderStageCreateInfo stages[MAX_STAGES];
     VkShaderModuleCreateInfo modules[MAX_STAGES];
@@ -207,6 +209,29 @@ static void rewrite_pipeline(struct device *dev, VkGraphicsPipelineCreateInfo *i
         rw->rasterization.polygonMode = VK_POLYGON_MODE_FILL;
         info->pRasterizationState = &rw->rasterization;
     }
+    /* No VK_EXT_depth_clip_enable: depth clipping off is the nearest the driver has as depth clamp. */
+    if ((dev->emulated & GAP_DEPTH_CLIP) && info->pRasterizationState) {
+        VkBaseOutStructure *prev = (VkBaseOutStructure *)info->pRasterizationState;
+        while (prev->pNext && prev->pNext->sType != VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT)
+            prev = prev->pNext;
+        VkBaseOutStructure *node = prev->pNext;
+        if (node) {
+            bool clip = ((VkPipelineRasterizationDepthClipStateCreateInfoEXT *)node)->depthClipEnable;
+            if (info->pRasterizationState != &rw->rasterization) {
+                rw->rasterization = *info->pRasterizationState;
+                if (prev == (VkBaseOutStructure *)info->pRasterizationState)
+                    prev = (VkBaseOutStructure *)&rw->rasterization;
+                info->pRasterizationState = &rw->rasterization;
+            }
+            if (!clip)
+                rw->rasterization.depthClampEnable = VK_TRUE;
+            if (prev != (VkBaseOutStructure *)&rw->rasterization) {
+                rw->clip_prev = prev;
+                rw->clip_node = node;
+            }
+            prev->pNext = node->pNext;
+        }
+    }
     if ((dev->emulated & GAP_MULTI_VIEWPORT) && info->pViewportState &&
         (info->pViewportState->viewportCount > 1 || info->pViewportState->scissorCount > 1)) {
         rw->viewport = *info->pViewportState;
@@ -222,6 +247,8 @@ static void rewrite_pipeline(struct device *dev, VkGraphicsPipelineCreateInfo *i
 
 static void undo_rewrite(struct device *dev, struct pipeline_rewrite *rw)
 {
+    if (rw->clip_prev)
+        rw->clip_prev->pNext = rw->clip_node;
     for (uint32_t i = 0; i < MAX_STAGES; i++) {
         if (rw->in_place[i]) {
             rw->in_place[i]->pCode = rw->in_place_code[i];
