@@ -18,3 +18,14 @@
  			{
  				uint64_t now = get_time_in_nanos();
  
+--- a/src/Backends/WaylandBackend.cpp
++++ b/src/Backends/WaylandBackend.cpp
+@@ -1473,6 +1473,8 @@
+ 
+     void CWaylandPlane::Present( std::optional<WaylandPlaneState> oState )
+     {
++        if (m_pFrame && oState)
++            fprintf(stderr, "[dd-plane] now=%lu buffer=%p\n", get_time_in_nanos(), oState->pBuffer);
+         {
+             std::unique_lock lock( m_PlaneStateLock );
+             m_oCurrentPlaneState = oState;
