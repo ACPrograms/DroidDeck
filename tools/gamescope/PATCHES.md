@@ -45,5 +45,13 @@ library list, before anything is published.
   `GAMESCOPE_FOCUSABLE_WINDOWS`, so the client kept its loading screen over the running game
   (Skyrim SE, A Plague Tale: Innocence, on the games' own Xwayland). MapNotify now refreshes the flag.
 
+- `0115-vblank-timer-once-per-refresh.patch` - this app: host presentation feedback can re-arm
+  the nested vblank timer after it already woke for a refresh. As the draw offset decays, the
+  same refresh's new wakeup can be ahead of the current time, so it fires twice and advances the
+  FPS limiter's counter twice. A 30 FPS FIFO game then reaches the host 1 or 3 refreshes apart
+  instead of 2, particularly with MangoHud redrawing between game frames. Remember the last
+  timerfd refresh dispatched and schedule beyond it, allowing small host-clock corrections.
+  This does not change the frame-sync/nudge path or add compositor buffering.
+
 Sixteen more of Armada's patches are DRM/lease/HDR-on-KMS work for a native display, which this
 app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the runtime has.
