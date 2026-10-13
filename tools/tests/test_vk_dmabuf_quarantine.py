@@ -37,7 +37,14 @@ class VkDmabufQuarantineTest(unittest.TestCase):
                  'droiddeck_release_buffer']
         helpers = []
         if re.search(r'\bstatic int buffer_release_blocked\(', comp):
-            helpers = [function(comp, n) for n in ('buffer_release_blocked', 'send_buffer_release')]
+            helpers = [function(comp, 'buffer_release_blocked')]
+            if re.search(r'\bstatic void send_buffer_release_at\(', comp):
+                # send_buffer_release is a macro over send_buffer_release_at (with buffer tracing).
+                helpers += ['static void buf_trace_release(struct wl_resource *b, int line) { (void)b; (void)line; }',
+                            '#define send_buffer_release(b) send_buffer_release_at((b), __LINE__)',
+                            function(comp, 'send_buffer_release_at')]
+            else:
+                helpers += [function(comp, 'send_buffer_release')]
         else:
             helpers = ['static int __attribute__((unused)) buffer_release_blocked(struct wl_resource *b) { (void)b; return 0; }']
         query = function(vk, 'vkp_completion_unknown') if 'int vkp_completion_unknown(' in vk else \
