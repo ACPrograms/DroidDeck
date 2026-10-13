@@ -61,7 +61,7 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
     private var autoCheckedThisProcess = false
 
     fun state() = GpuDriversState(
-        gpuName = gpu.displayName(activity), gpuFamily = gpu.family.label(activity), soc = gpu.soc, supportText = gpu.supportText(activity),
+        gpuName = gpu.displayName(activity), gpuFamily = if (gpu.name.contains("Xclipse", ignoreCase = true)) gpu.family.label(gpu.name) else gpu.family.label(activity), soc = gpu.soc, supportText = gpu.supportText(activity),
         supported = gpu.support == GpuInfo.Support.TESTED, unsupported = gpu.support == GpuInfo.Support.UNSUPPORTED,
         auto = mode == SessionPrefs.GPU_DRIVERS_AUTO, pairs = pairRows, busy = pairBusy, percent = pairPercent,
         autoStatus = autoStatus, releaseStatus = releaseStatus.ifEmpty { activity.getString(R.string.drivers_not_checked) }, checking = releaseChecking,
@@ -198,7 +198,9 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         Thread({
             val cached = TurnipReleases.cached(activity)
             val stale = cached == null || System.currentTimeMillis() - cached.checkedAt > 24 * 3_600_000L ||
-                cached.assets.none { it.pair.isNotEmpty() }
+                cached.assets.none { it.pair.isNotEmpty() } ||
+                // A list checked before this device's open drivers were offered has none of them.
+                (!DeviceSupport.adreno() && cached.assets.none { DriverPairs.isNonAdreno(it.pair) })
             val problem = if (force || stale) runCatching { TurnipReleases.refresh(activity) }.exceptionOrNull()?.message else null
             ui.post {
                 releaseChecking = false

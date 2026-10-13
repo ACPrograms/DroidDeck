@@ -49,6 +49,9 @@ data class GpuInfo(
 
         val mali: Boolean get() = name.startsWith("MALI_")
 
+        /** [label] for this GPU: the system-driver family is a Samsung Xclipse or a PowerVR. */
+        fun label(gpuName: String): String = if (this == POWERVR && gpuName.contains("Xclipse", ignoreCase = true)) "Samsung Xclipse" else label
+
         /** [label] in the app's language: the Adreno families are names, the rest is words. */
         fun label(context: Context): String = if (this == NOT_ADRENO) context.getString(R.string.gpuinfo_not_adreno) else label
     }
@@ -69,7 +72,8 @@ data class GpuInfo(
         get() = when (support) {
             Support.TESTED -> "Supported"
             Support.UNTESTED -> when (family) {
-                Family.POWERVR -> "System PowerVR driver: compatibility varies by device"
+                Family.POWERVR -> if (name.contains("Xclipse", ignoreCase = true)) "Experimental: RADV or the system Xclipse driver"
+                    else "System PowerVR driver: compatibility varies by device"
                 Family.MALI_OTHER -> "Experimental: Mali through the Vulkan bridge"
                 Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST -> "Experimental: open Mali driver (test builds)"
                 Family.A7XX_LOW -> "Experimental: its drivers are test builds"

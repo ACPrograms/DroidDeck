@@ -65,6 +65,8 @@ object GraphicsReport {
             val pairs = DriverPairs.from(TurnipReleases.cached(context))
             appendLine("auto would pick: " + (DriverPairs.recommendedKey(gpu, pairs) ?: "(no pair: system driver or bridge)"))
         }
+        appendLine("frame generation: " + runCatching { com.droiddeck.launcher.gpu.FrameGen.mode(context).toString() }.getOrDefault("?") +
+            " (engine=off means it is switched off in Play settings; a driver that fails LSFG's gates logs \"device gates\" below)")
         appendLine("mali bridge setting: " + SessionPrefs.vkBridge(context) + ", in use: " + DeviceSupport.vkBridge(context))
         val standIn = runCatching { com.droiddeck.launcher.runtime.LinuxRuntime.gpuStandIn(context) }.getOrNull()
         appendLine("render node for the guest: " + (standIn?.let { node ->
@@ -134,7 +136,8 @@ object GraphicsReport {
     /** The compositor's driver lines from the app's own log. */
     private val COMPOSITOR = Regex(
         """vk_present|waylandcomp|vk_loader|compositor|vkCreateDevice|extension|adrenotools|TurnipDriver|""" +
-            """graphics driver|SystemVulkan|vkbridge|VkBridge|mali_gralloc|panvk|PanVK|radv|MESA|native buffer|first frame|present""",
+            """graphics driver|SystemVulkan|vkbridge|VkBridge|mali_gralloc|panvk|PanVK|radv|MESA|native buffer|first frame|present|""" +
+            """lsfg|FrameGen|device gates|AAudio|directaudio|pulse""",
         RegexOption.IGNORE_CASE,
     )
 

@@ -392,6 +392,14 @@ def game_logs(command, env, app_id, now=None):
              if key.startswith(("VK_", "BL_VK", "BL_DRM", "MESA_", "PANVK", "DXVK_", "VKD3D", "ZINK", "TU_"))]) + "\n")
     except OSError:
         pass
+    # Whether the game's sound reaches PulseAudio: the streams 20 s and 60 s in, without waiting.
+    try:
+        subprocess.Popen(["sh", "-c", 'for t in 20 40; do sleep $t; { echo "== $(date +%T)"; '
+                          'pactl list sink-inputs 2>&1 | head -80; } >> "$1/audio-streams.txt"; done', "audio", str(folder)],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except OSError:
+        pass
     return result
 
 

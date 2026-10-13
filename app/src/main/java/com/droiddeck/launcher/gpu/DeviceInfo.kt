@@ -61,7 +61,7 @@ object DeviceInfo {
 
     private fun gpu(gpu: GpuInfo) = Section("GPU", buildList<Pair<String, String>> {
         add("GPU", gpu.name)
-        add("Family", gpu.family.label)
+        add("Family", gpu.family.label(gpu.name))
         add("Model found from", when (gpu.modelSource) {
             "kernel" -> "the kernel's GPU name"
             "vulkan" -> "the Vulkan driver (the kernel's name has no model)"
