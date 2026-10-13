@@ -885,6 +885,11 @@ BUSCONF
       # and the selected game driver still use the system GPU.
       bl_steam_presentation=(-cef-disable-gpu-compositing)
       echo "== steam: system PowerVR uses OpenGL/DRI3 through Zink with software CEF compositing"
+    elif [ "${BL_STEAM_SOFT_COMPOSITING:-}" = 1 ]; then
+      # An open driver pair on a GPU that is not an Adreno (RADV on Xclipse, PanVK on Mali): CEF's
+      # accelerated shared-texture output showed stale tiles there; raster stays on the GPU.
+      bl_steam_presentation=(-cef-disable-gpu-compositing)
+      echo "== steam: open driver pair - software CEF compositing, GPU raster"
     fi
     # The client's CEF flags for this presentation; the UI choice below may replace them.
     _bl_cef=(-cef-force-gpu "${bl_steam_presentation[@]}" -cef-use-gl=angle "-cef-use-angle=$bl_steam_angle")

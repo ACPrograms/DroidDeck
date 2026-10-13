@@ -138,16 +138,6 @@ public class PulseAudioComponent extends SessionPart {
         // AAudio sink in its place.
         config.add(".nofail");
         config.add("load-module module-directaudio-native-sink sink_name=DirectAudio performance_mode=1 adaptive=1 decay=0 limiter=1 watchdog=1 volume=1.0");
-        if (!com.droiddeck.launcher.core.DeviceSupport.INSTANCE.adreno()) {
-            // Not an Adreno: the daemon makes its own fallback, without waiting for pactl. A Galaxy
-            // S24 FE's AAudio refuses DirectAudio's low-latency stream (AAUDIO_ERROR_DISCONNECTED),
-            // so the plain AAudio sink, without low latency, is loaded as a default underneath it.
-            // (Loading DirectAudio a second time in the same daemon after its failed first load
-            // hung the daemon's start-up on that phone, so it is not retried here.) The last
-            // set-default-sink that names a sink which exists wins.
-            config.add("load-module module-aaudio-sink sink_name=AAudioSink performance_mode=0 adaptive=1 volume=1.0");
-            config.add("set-default-sink AAudioSink");
-        }
         config.add("set-default-sink DirectAudio");
         config.add(".fail");
         if (micFifoPath != null && !micFifoPath.isEmpty()) {
@@ -193,15 +183,24 @@ public class PulseAudioComponent extends SessionPart {
      */
     private void ensureClientSink(java.io.PrintWriter out) {
         try {
-            long deadline = System.currentTimeMillis() + 15000L;
+            // Nothing that may block (a sink whose AAudio open hangs: a Galaxy S24 FE (US) hung the
+            // daemon's start-up loading one from default.pa) is loaded by the daemon itself; the
+            // fallbacks are loaded here, after it is up, each pactl call bounded by its timeout.
+            long started = System.currentTimeMillis();
+            long deadline = started + 30000L;
             String sinks = null;
+            boolean socketSeen = false;
             while (System.currentTimeMillis() < deadline && pid > 1) {
-                if (socket().exists() && (sinks = pactl("list", "short", "sinks")) != null) break;
+                socketSeen |= socket().exists();
+                if (socketSeen && (sinks = pactl("list", "short", "sinks")) != null) break;
                 try { Thread.sleep(250L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
             }
+            note(out, "client sink: daemon " + (sinks != null ? "answered" : "did not answer") + " after "
+                    + (System.currentTimeMillis() - started) + " ms (socket " + (socketSeen ? "present" : "never appeared") + ", pactl "
+                    + (new File(workingDir, "pactl").isFile() ? "present" : "MISSING") + ", daemon pid " + pid + ")");
             String line;
             if (sinks == null) {
-                line = "== client sink: the daemon did not answer in 15 s; no fallback attempted";
+                line = "== client sink: the daemon did not answer in 30 s; no fallback attempted";
             } else if (sinks.contains("\tDirectAudio\t") || sinks.startsWith("DirectAudio\t") || sinks.contains("\tDirectAudio\n") || sinks.matches("(?s).*\\bDirectAudio\\b.*")) {
                 line = "== client sink: DirectAudio (module-directaudio-native-sink)";
             } else {
@@ -215,7 +214,8 @@ public class PulseAudioComponent extends SessionPart {
                             "adaptive=1", "decay=0", "limiter=1", "watchdog=1", "volume=1.0") != null
                             && pactl("set-default-sink", "DirectAudio") != null) {
                         loadedAs = "DirectAudio on attempt " + attempt;
-                    } else if (pactl("load-module", "module-aaudio-sink", "sink_name=AAudioSink", "performance_mode=1", "adaptive=1", "volume=1.0") != null
+                    } else if (pactl("load-module", "module-aaudio-sink", "sink_name=AAudioSink",
+                            "performance_mode=" + (attempt == 1 ? "1" : "0"), "adaptive=1", "volume=1.0") != null
                             && pactl("set-default-sink", "AAudioSink") != null) {
                         loadedAs = "the plain AAudio sink (AAudioSink) on attempt " + attempt;
                     }
@@ -229,6 +229,13 @@ public class PulseAudioComponent extends SessionPart {
         } catch (Throwable t) {
             Log.w(TAG, "ensureClientSink failed", t);
         }
+    }
+
+    /** A timestamped line in the session's audio log. */
+    private void note(java.io.PrintWriter out, String what) {
+        String line = "== " + new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(new java.util.Date()) + " " + what;
+        Log.i(TAG, line);
+        if (out != null) synchronized (out) { out.println(line); out.flush(); }
     }
 
     /** Runs pactl against this daemon; its stdout, or null when it failed or timed out. */

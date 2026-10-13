@@ -685,6 +685,10 @@ class SessionService : Service() {
             }
         }
         if (!bridge && com.droiddeck.launcher.core.DeviceSupport.openDriverActive(this)) {
+            // CEF's accelerated shared-texture output showed stale, half-written tiles on RADV
+            // (Xclipse), as #570 found on PowerVR: web compositing in software, GPU raster kept.
+            guest.add("BL_STEAM_SOFT_COMPOSITING=1")
+            Log.i(TAG, "steam: software web compositing for the open driver pair (GPU raster kept)")
             LinuxRuntime.gpuStandIn(this)?.takeIf { it == LinuxRuntime.MALI_DEVICE }?.let { guest.add("BL_DRM_STANDIN=$it") }
         }
         // Turnip's own debug switches, for the runtime's driver and everything on it. The file in
