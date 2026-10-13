@@ -307,6 +307,13 @@ class SessionService : Service() {
         return lines
     }
 
+    /** Whether a kernel release ("6.1.157-android14-11") is older than [major].[minor]; false if unreadable. */
+    internal fun kernelBefore(release: String, major: Int, minor: Int): Boolean {
+        val m = Regex("""^(\d+)\.(\d+)""").find(release) ?: return false
+        val (a, b) = m.destructured
+        return a.toInt() < major || (a.toInt() == major && b.toInt() < minor)
+    }
+
     /** Whether the newest finished session's log shows Xwayland itself crashing. */
     private fun lastXwaylandCrashed(): Boolean = runCatching {
         val last = SessionPaths.sessionFolders(this).filter { it != SessionPaths.current() }.lastOrNull() ?: return false
@@ -662,6 +669,20 @@ class SessionService : Service() {
         if (!com.droiddeck.launcher.core.DeviceSupport.adreno() && lastXwaylandCrashed()) {
             guest.add("XWAYLAND_NO_GLAMOR=1")
             Log.w(TAG, "xwayland: the last session's Xwayland crashed; glamor off for this one (XWAYLAND_NO_GLAMOR=1)")
+        }
+        // gamescope's explicit sync waits on DRM syncobj timelines through
+        // DRM_IOCTL_SYNCOBJ_EVENTFD, which a kernel before 6.6 does not have (Exynos 2400e on 6.1:
+        // hundreds of "timeline ... failed" and a game stuck at black), and Mali's stand-in node
+        // (/dev/mali0) has no syncobjs at all. There clients use implicit sync instead
+        // (tools/gamescope/patches/0126). Never on an Adreno.
+        if (!com.droiddeck.launcher.core.DeviceSupport.adreno()) {
+            val kernel = System.getProperty("os.version").orEmpty()
+            val old = kernelBefore(kernel, 6, 6)
+            val maliNode = LinuxRuntime.gpuStandIn(this) == LinuxRuntime.MALI_DEVICE
+            if (old || maliNode) {
+                guest.add("GAMESCOPE_DISABLE_EXPLICIT_SYNC=1")
+                Log.i(TAG, "gamescope: explicit sync off (" + (if (old) "kernel $kernel has no SYNCOBJ_EVENTFD" else "Mali stand-in node has no syncobjs") + ")")
+            }
         }
         if (!bridge && com.droiddeck.launcher.core.DeviceSupport.openDriverActive(this)) {
             LinuxRuntime.gpuStandIn(this)?.takeIf { it == LinuxRuntime.MALI_DEVICE }?.let { guest.add("BL_DRM_STANDIN=$it") }

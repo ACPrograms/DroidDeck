@@ -62,3 +62,9 @@ The system PowerVR driver uses the existing SDL/Wayland swapchain backend. Its a
 
 Sixteen more of Armada's patches are DRM/lease/HDR-on-KMS work for a native display, which this
 app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the runtime has.
+- `0126-explicit-sync-switch.patch`: `GAMESCOPE_DISABLE_EXPLICIT_SYNC=1` makes the nested
+  (Wayland and SDL) backends report no explicit sync, so gamescope does not offer
+  wp_linux_drm_syncobj_manager_v1 and clients use implicit sync. The app sets it on a GPU that is
+  not an Adreno when the kernel is older than 6.6 (no DRM_IOCTL_SYNCOBJ_EVENTFD: an Exynos 2400e
+  on 6.1 logged hundreds of "timeline: DRM_IOCTL_SYNCOBJ_EVENTFD failed" and a game hung at a
+  black screen) or when the render node is Mali's stand-in (/dev/mali0 has no DRM syncobjs).
