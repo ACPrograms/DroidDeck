@@ -43,9 +43,16 @@ public final class SystemVulkanDriver {
 
     private SystemVulkanDriver() {}
 
-    /** The first vendor HAL present, or null. */
+    /**
+     * The first vendor HAL present, or null. An Exynos with a Mali (Exynos 1280/1380: /dev/mali0)
+     * may name its HAL vulkan.samsung.so too; that is a Mali, not an Xclipse, and is not taken.
+     */
     public static String hal() {
-        for (String path : HALS) if (new File(path).isFile()) return path;
+        for (String path : HALS) {
+            if (!new File(path).isFile()) continue;
+            if (path.endsWith("/vulkan.samsung.so") && new File("/dev/mali0").exists()) continue;
+            return path;
+        }
         return null;
     }
 

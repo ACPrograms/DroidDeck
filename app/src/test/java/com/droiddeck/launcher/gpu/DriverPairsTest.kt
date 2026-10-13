@@ -225,6 +225,9 @@ class DriverPairsTest {
         assertEquals("Mali-G720 (by chip mt6989)", GpuInfo.maliOfSoc(listOf("", "mt6989")))
         assertEquals("Mali-G710 (by chip gs201)", GpuInfo.maliOfSoc(listOf("GS201")))
         assertEquals(null, GpuInfo.maliOfSoc(listOf("unknown-chip")))
+        // An Exynos with a Mali, and a Helio G99, by board name.
+        assertEquals(Family.MALI_JM, GpuInfo.familyOf(false, 0, mali = GpuInfo.maliOfSoc(listOf("s5e8835"))))
+        assertEquals(Family.MALI_JM, GpuInfo.familyOf(false, 0, mali = GpuInfo.maliOfSoc(listOf("MT6789"))))
         assertEquals(Family.MALI_G720, GpuInfo.familyOf(false, 0, mali = "Mali-G720 (by chip mt6989)"))
         assertEquals(Family.MALI_LATEST, GpuInfo.familyOf(false, 0, mali = "Mali-G925 (by chip mt6991)"))
         assertTrue(GpuInfo.maliKbaseCovered("Mali-G720 (by chip mt6989)"))
