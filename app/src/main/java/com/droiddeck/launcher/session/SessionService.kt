@@ -13,6 +13,7 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.hardware.display.DisplayManager
 import android.net.TrafficStats
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -22,6 +23,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.view.Display
 import com.droiddeck.launcher.R
 import com.droiddeck.launcher.SessionActivity
 import com.droiddeck.launcher.audio.DirectAudioRelayComponent
@@ -87,6 +89,7 @@ class SessionService : Service() {
     private var suspendPolicy = SessionPrefs.SUSPEND_MANUAL
     private var steamDownloadsInBackground = false
     private var activityVisible = true
+    private var activityDisplayId = Display.DEFAULT_DISPLAY
     private var screenOn = true
     private var manualPauseRequested = false
     /** An explicit Steam sleep request is independent of the background policy. */
@@ -175,6 +178,7 @@ class SessionService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_ACTIVITY_VISIBLE -> {
+                activityDisplayId = intent.getIntExtra(EXTRA_ACTIVITY_DISPLAY_ID, activityDisplayId)
                 if (!SessionState.pipActive) pipTask = false
                 activityVisible = true
                 suspendDownloadNow = false
@@ -184,7 +188,17 @@ class SessionService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_ACTIVITY_HIDDEN -> {
+                activityDisplayId = intent.getIntExtra(EXTRA_ACTIVITY_DISPLAY_ID, activityDisplayId)
                 activityVisible = false
+                suspendAttemptFailed = false
+                updateSuspendPolicy()
+                return START_NOT_STICKY
+            }
+            ACTION_ACTIVITY_DISPLAY_CHANGED -> {
+                activityDisplayId = intent.getIntExtra(EXTRA_ACTIVITY_DISPLAY_ID, activityDisplayId)
+                if (activityVisible && (SessionState.suspended || steamSleepToken != null || nativeSleepToken != null)) {
+                    resumeSteamSleepOnReturn()
+                }
                 suspendAttemptFailed = false
                 updateSuspendPolicy()
                 return START_NOT_STICKY
@@ -224,6 +238,7 @@ class SessionService : Service() {
         suspendPolicy = SessionPrefs.suspendPolicy(this, SessionState.mode)
         steamDownloadsInBackground = SessionPrefs.steamDownloadsInBackground(this)
         activityVisible = true
+        activityDisplayId = SessionState.activityDisplayId
         screenOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive ?: true
         manualPauseRequested = false
         suspendDownloadNow = false
@@ -1335,11 +1350,17 @@ class SessionService : Service() {
 
     private fun updateSuspendPolicy() {
         if (!SessionState.running) return
-        if (suspendPolicy == SessionPrefs.SUSPEND_MANUAL && (!activityVisible || !screenOn)) {
+        val activityDisplayOn = activityDisplayOn()
+        val hidden = SessionVisibilityPolicy.isHidden(
+            activityStarted = activityVisible,
+            screenOn = screenOn,
+            activityOnDefaultDisplay = activityDisplayId == Display.DEFAULT_DISPLAY,
+            activityDisplayOn = activityDisplayOn,
+        )
+        if (suspendPolicy == SessionPrefs.SUSPEND_MANUAL && hidden) {
             manualPauseRequested = true
         }
         val controller = suspendController ?: return
-        val hidden = !activityVisible || !screenOn
         val downloadsBlockingSuspend = steamDownloadsInBackground && SessionState.mode == MODE_STEAM &&
             suspendPolicy != SessionPrefs.SUSPEND_NEVER && hidden && downloadActive && !suspendDownloadNow
         if (downloadsBlockingSuspend) acquireLocks()
@@ -1360,7 +1381,9 @@ class SessionService : Service() {
         suspendOperationPending = true
         SessionEvents.record(if (shouldSuspend) "session.suspend_requested" else "session.resume_requested", mapOf(
             "policy" to suspendPolicy, "activityVisible" to activityVisible,
-            "screenOn" to screenOn, "steamSleep" to (steamSleepToken != null),
+            "screenOn" to screenOn, "activityDisplayId" to activityDisplayId,
+            "activityDisplayOn" to activityDisplayOn, "activityHidden" to hidden,
+            "steamSleep" to (steamSleepToken != null),
             "nativeSleep" to (nativeSleepToken != null),
         ))
         if (shouldSuspend) {
@@ -1420,11 +1443,23 @@ class SessionService : Service() {
     }
 
     private fun resumeSteamSleepOnReturn() {
-        if (suspendPolicy in setOf(SessionPrefs.SUSPEND_AUTO, SessionPrefs.SUSPEND_NATIVE) && activityVisible && screenOn) {
+        val visible = !SessionVisibilityPolicy.isHidden(
+            activityStarted = activityVisible,
+            screenOn = screenOn,
+            activityOnDefaultDisplay = activityDisplayId == Display.DEFAULT_DISPLAY,
+            activityDisplayOn = activityDisplayOn(),
+        )
+        if (suspendPolicy in setOf(SessionPrefs.SUSPEND_AUTO, SessionPrefs.SUSPEND_NATIVE) && visible) {
             if (steamSleepToken == null && (nativeSleepToken == null || nativeSleepFallback)) requestSteamWake()
             completeNativeSleep()
             completeSteamSleep()
         }
+    }
+
+    private fun activityDisplayOn(): Boolean {
+        if (activityDisplayId == Display.DEFAULT_DISPLAY) return screenOn
+        val displays = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return false
+        return displays.getDisplay(activityDisplayId)?.state == Display.STATE_ON
     }
 
     /** Let Steam prepare before freezing; retain the wake lock until that freeze completes. */
@@ -1833,6 +1868,7 @@ class SessionService : Service() {
         private const val ACTION_SUSPEND_POLICY_CHANGED = "com.droiddeck.launcher.SUSPEND_POLICY_CHANGED"
         private const val ACTION_ACTIVITY_VISIBLE = "com.droiddeck.launcher.ACTIVITY_VISIBLE"
         private const val ACTION_ACTIVITY_HIDDEN = "com.droiddeck.launcher.ACTIVITY_HIDDEN"
+        private const val ACTION_ACTIVITY_DISPLAY_CHANGED = "com.droiddeck.launcher.ACTIVITY_DISPLAY_CHANGED"
         private const val ACTION_TRACK_AUXILIARY = "com.droiddeck.launcher.TRACK_AUXILIARY"
         private const val ACTION_STOP_AUXILIARY = "com.droiddeck.launcher.STOP_AUXILIARY"
         private const val ACTION_AUXILIARY_EXITED = "com.droiddeck.launcher.AUXILIARY_EXITED"
@@ -1867,11 +1903,14 @@ class SessionService : Service() {
         const val EXTRA_STEAM_UI = "steamUi"
         const val EXTRA_STEAM_URL = "steamUrl"
         const val EXTRA_GAME_ID = "gameId"
+        private const val EXTRA_ACTIVITY_DISPLAY_ID = "activityDisplayId"
 
         fun start(
             context: Context, mode: String = MODE_STEAM, program: String? = null,
             steamUi: String? = null, steamUrl: String? = null, programArgs: Array<String>? = null,
+            activityDisplayId: Int = Display.DEFAULT_DISPLAY,
         ) {
+            SessionState.activityDisplayId = activityDisplayId
             val intent = Intent(context, SessionService::class.java).putExtra(EXTRA_MODE, mode)
             if (program != null) intent.putExtra(EXTRA_PROGRAM, program)
             if (programArgs != null) intent.putExtra(EXTRA_PROGRAM_ARGS, programArgs)
@@ -1893,10 +1932,31 @@ class SessionService : Service() {
             context.startService(Intent(context, SessionService::class.java).setAction(ACTION_PIP_BEGIN))
         }
 
-        fun setActivityVisible(context: Context, visible: Boolean) {
+        fun setActivityVisible(
+            context: Context,
+            visible: Boolean,
+            activityDisplayId: Int = currentActivityDisplayId(context),
+        ) {
+            SessionState.activityDisplayId = activityDisplayId
             if (!SessionState.running) return
             val action = if (visible) ACTION_ACTIVITY_VISIBLE else ACTION_ACTIVITY_HIDDEN
-            context.startService(Intent(context, SessionService::class.java).setAction(action))
+            context.startService(Intent(context, SessionService::class.java)
+                .setAction(action)
+                .putExtra(EXTRA_ACTIVITY_DISPLAY_ID, activityDisplayId))
+        }
+
+        fun activityDisplayChanged(context: Context, activityDisplayId: Int) {
+            SessionState.activityDisplayId = activityDisplayId
+            if (!SessionState.running) return
+            context.startService(Intent(context, SessionService::class.java)
+                .setAction(ACTION_ACTIVITY_DISPLAY_CHANGED)
+                .putExtra(EXTRA_ACTIVITY_DISPLAY_ID, activityDisplayId))
+        }
+
+        @Suppress("DEPRECATION")
+        private fun currentActivityDisplayId(context: Context): Int {
+            val activity = context as? android.app.Activity ?: return Display.DEFAULT_DISPLAY
+            return activity.display?.displayId ?: activity.windowManager.defaultDisplay.displayId
         }
 
         fun resume(context: Context) {

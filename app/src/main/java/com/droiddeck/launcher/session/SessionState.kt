@@ -46,6 +46,9 @@ object SessionState {
 
     @Volatile
     var running = false
+    /** Display currently hosting SessionActivity; the service uses it to interpret screen-off. */
+    @Volatile
+    var activityDisplayId = 0
     var suspended by mutableStateOf(false)
     @Volatile var pipActive = false
     /** MODE_RUN: the program inside the runtime the session was started for. */
