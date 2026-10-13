@@ -1,0 +1,54 @@
+diff --git a/src/steamcompmgr.cpp b/src/steamcompmgr.cpp
+index 5b0e300..7c85f0c 100644
+--- a/src/steamcompmgr.cpp
++++ b/src/steamcompmgr.cpp
+@@ -10391,6 +10391,40 @@ steamcompmgr_main(int argc, char **argv)
+ 		// application can commit a new frame that completes before we ever displayed
+ 		// the current pending commit.
+ 		static uint64_t vblank_idx = 0;
++		// The limiter shows a capped window's frames on every Nth refresh (vblank_idx % N). Count
++		// refreshes, not timer wakeups: nested in a host compositor the timer is re-armed from each
++		// presentation feedback, and it can wake twice for one refresh or sleep through one under
++		// load. Every such wakeup moved the cap's slot by a refresh, so a game capped at 30 on a
++		// 60 Hz host reached it 1 and 3 refreshes apart a quarter of the time.
++		// (With VRR the limiter schedules by time instead, and vblanks need not come from the timer.)
++		static uint64_t s_ulLastIndexedVBlank = 0;
++		if ( vblank && !bVRR )
++		{
++			const uint64_t ulTarget = g_SteamCompMgrVBlankTime.schedule.ulTargetVBlank;
++			const uint64_t ulCycle = gamescope::mHzToRefreshCycle( g_nNestedRefresh ? g_nNestedRefresh : g_nOutputRefresh );
++			if ( s_ulLastIndexedVBlank && ulCycle && ulTarget + ulCycle / 2 > s_ulLastIndexedVBlank )
++			{
++				const uint64_t ulRefreshes = ( ulTarget + ulCycle / 2 - s_ulLastIndexedVBlank ) / ulCycle;
++				if ( ulRefreshes == 0 )
++					vblank = false; // A second wakeup for a refresh already handled.
++				else
++				{
++					vblank_idx += ulRefreshes;
++					s_ulLastIndexedVBlank = ulTarget;
++				}
++			}
++			else
++			{
++				if ( s_ulLastIndexedVBlank )
++					vblank = false; // A refresh earlier than one already handled.
++				else
++					s_ulLastIndexedVBlank = ulTarget;
++			}
++		}
++		else if ( vblank )
++		{
++			vblank_idx++;
++		}
+ 		if ( vblank )
+ 		{
+ 			{
+@@ -10441,8 +10475,6 @@ steamcompmgr_main(int argc, char **argv)
+ 
+ 		if ( vblank )
+ 		{
+-			vblank_idx++;
+-
+ 			int nRealRefreshmHz = g_nNestedRefresh ? g_nNestedRefresh : g_nOutputRefresh;
+ 			g_SteamCompMgrAppRefreshCycle = gamescope::mHzToRefreshCycle( nRealRefreshmHz );
+ 			g_SteamCompMgrLimitedAppRefreshCycle = g_SteamCompMgrAppRefreshCycle;
