@@ -2017,7 +2017,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private fun refreshSecondScreenDisplays() {
         if (!::displayManager.isInitialized) return
-        val primaryId = display?.displayId ?: windowManager.defaultDisplay.displayId
+        val primaryId = windowManager.defaultDisplay.displayId
         val candidates = SecondScreenDisplays.available(displayManager, primaryId)
         val oldIds = secondScreenDisplays.map { it.id }.toSet()
         secondScreenDisplays = candidates
@@ -2033,7 +2033,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     @Suppress("DEPRECATION")
-    private fun currentActivityDisplayId(): Int = display?.displayId ?: windowManager.defaultDisplay.displayId
+    private fun currentActivityDisplayId(): Int = windowManager.defaultDisplay.displayId
 
     private fun refreshActivityDisplayId(): Boolean {
         val current = currentActivityDisplayId()

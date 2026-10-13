@@ -1958,7 +1958,7 @@ class SessionService : Service() {
         @Suppress("DEPRECATION")
         private fun currentActivityDisplayId(context: Context): Int {
             val activity = context as? android.app.Activity ?: return Display.DEFAULT_DISPLAY
-            return activity.display?.displayId ?: activity.windowManager.defaultDisplay.displayId
+            return activity.windowManager.defaultDisplay.displayId
         }
 
         fun resume(context: Context) {
