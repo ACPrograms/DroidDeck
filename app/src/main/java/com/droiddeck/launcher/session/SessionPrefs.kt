@@ -220,7 +220,11 @@ object SessionPrefs {
 
     /** Also called by direct session launches, which may never open the driver settings. */
     @JvmStatic
-    fun ensurePowerVrAutoDrivers(context: Context) = ensurePowerVrAutoDrivers(context, SystemVulkanDriver.isPowerVr())
+    fun ensurePowerVrAutoDrivers(context: Context) {
+        // An open driver pair Auto chose for this GPU (RADV on an Xclipse) is not undone here.
+        if (com.droiddeck.launcher.core.DeviceSupport.openDriverActive(context)) return
+        ensurePowerVrAutoDrivers(context, SystemVulkanDriver.isPowerVr())
+    }
 
     internal fun ensurePowerVrAutoDrivers(context: Context, powerVr: Boolean) {
         if (!powerVr || gpuDriverMode(context) != GPU_DRIVERS_AUTO) return

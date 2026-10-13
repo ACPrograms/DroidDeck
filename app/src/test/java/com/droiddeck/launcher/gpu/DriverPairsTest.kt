@@ -229,4 +229,10 @@ class DriverPairsTest {
         assertEquals(Family.MALI_LATEST, GpuInfo.familyOf(false, 0, mali = "Mali-G925 (by chip mt6991)"))
         assertTrue(GpuInfo.maliKbaseCovered("Mali-G720 (by chip mt6989)"))
     }
+
+    @Test
+    fun autoTakesRadvOnAnXclipseAndLeavesPowerVrOnTheSystemDriver() {
+        assertEquals(DriverPairs.NAD_RADV_XCLIPSE, DriverPairs.recommendedKey(GpuInfo("Samsung Xclipse 940", 0, Family.POWERVR, "", false), emptyList()))
+        assertNull(DriverPairs.recommendedKey(GpuInfo("PowerVR", 0, Family.POWERVR, "", false), emptyList()))
+    }
 }

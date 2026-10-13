@@ -157,7 +157,7 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
     fun ensureAuto(force: Boolean) {
         mode = SessionPrefs.gpuDriverMode(activity)
         if (mode != SessionPrefs.GPU_DRIVERS_AUTO || pairBusy != null || releaseChecking) return
-        if (gpu.family == GpuInfo.Family.POWERVR) {
+        if (gpu.family == GpuInfo.Family.POWERVR && !SystemVulkanDriver.isXclipse()) {
             // Auto owns both choices. Manual imports remain available when Manual is selected.
             SessionPrefs.ensurePowerVrAutoDrivers(activity)
             autoStatus = activity.getString(R.string.drivers_powervr_builtin)
@@ -211,6 +211,12 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                 when {
                     row?.active == true -> autoStatus = problem?.let { activity.getString(R.string.drivers_up_to_date_check_failed, it) }
                         ?: activity.getString(R.string.upd_current_status)
+                    gpu.family == GpuInfo.Family.POWERVR && (pair == null || !pair.complete) -> {
+                        // RADV is not published right now: the Xclipse falls back to the system route.
+                        SessionPrefs.ensurePowerVrAutoDrivers(activity)
+                        autoStatus = activity.getString(R.string.drivers_powervr_builtin)
+                        refreshDrivers()
+                    }
                     gpu.family.mali && (pair == null || !pair.complete) -> {
                         // No open driver for this Mali published yet: draw through the bridge.
                         useMaliBridge()

@@ -139,9 +139,11 @@ object DriverPairs {
      * the 710/720/722, and upstream Banners-Turnip for the rest. Null when nothing fits (not Adreno).
      */
     fun recommendedKey(gpu: GpuInfo, pairs: List<DriverPair>, sdk: Int = android.os.Build.VERSION.SDK_INT): String? = when (gpu.family) {
-        // PowerVR and Xclipse keep the system driver (RADV stays a manual choice); a Mali no open
-        // build covers draws through the Vulkan bridge instead (DriverMenus.ensureAuto).
-        Family.NOT_ADRENO, Family.POWERVR, Family.MALI_OTHER -> null
+        // Xclipse takes the RADV pair (testers: it boots to Steam where the system route's GL fails),
+        // with the system route as its fallback; PowerVR keeps the system driver. A Mali no open
+        // build covers draws through the Vulkan bridge (DriverMenus.ensureAuto).
+        Family.POWERVR -> NAD_RADV_XCLIPSE.takeIf { gpu.name.contains("Xclipse", ignoreCase = true) }
+        Family.NOT_ADRENO, Family.MALI_OTHER -> null
         Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST -> maliKey(gpu, pairs, sdk)
         Family.A8XX -> if (gpu.model == 840) newestDdTurnip(pairs) ?: WN_BALANCED else WN_BALANCED
         Family.A7XX_LOW -> BANNER_710
