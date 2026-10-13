@@ -59,6 +59,12 @@ object GraphicsReport {
         appendLine("display driver (compositor): " + SessionPrefs.androidDriver(context).ifEmpty {
             if (DeviceSupport.adreno()) "(auto: bundled Turnip)" else "(auto: the phone's own Vulkan driver, ${SystemVulkanDriver.hal() ?: "vendor HAL"})"
         })
+        val display = SessionPrefs.androidDriver(context)
+        appendLine("display driver chosen by: " + when {
+            display.isEmpty() -> "auto (or a pair on a non-Adreno GPU: the phone's own driver)"
+            DriverBundle.containing(context, display, false) != null -> "pair (its display half)"
+            else -> "user (picked on its own)"
+        })
         val linux = SessionPrefs.linuxDriver(context)
         appendLine("runtime driver: " + linux.ifEmpty { "(runtime default)" })
         if (linux.isNotEmpty()) {
