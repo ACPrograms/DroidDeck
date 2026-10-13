@@ -24,7 +24,7 @@
  
      void CWaylandPlane::Present( std::optional<WaylandPlaneState> oState )
      {
-+        if (m_pFrame && oState)
++        if (oState && oState->bOpaque && oState->flSrcWidth > 1)
 +            fprintf(stderr, "[dd-plane] now=%lu buffer=%p\n", get_time_in_nanos(), oState->pBuffer);
          {
              std::unique_lock lock( m_PlaneStateLock );
