@@ -61,6 +61,7 @@ object DeviceReport {
         runCatching {
             val info = context.packageManager.getPackageInfo(context.packageName, 0)
             k("Version", "${info.versionName} (${info.longVersionCode})")
+            k("App build", "${com.droiddeck.launcher.BuildConfig.BUILD_LABEL} (source ${com.droiddeck.launcher.BuildConfig.SOURCE_COMMIT})")
         }
         k("Package", context.packageName)
         k("targetSdk", context.applicationInfo.targetSdkVersion)

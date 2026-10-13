@@ -50,6 +50,7 @@ object GraphicsReport {
     private fun start(context: Context, guest: List<String>): String = buildString {
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         appendLine("== graphics report, session start $time")
+        appendLine("build: ${com.droiddeck.launcher.BuildConfig.BUILD_LABEL} (source ${com.droiddeck.launcher.BuildConfig.SOURCE_COMMIT})")
         appendLine()
         val gpu = runCatching { GpuInfo.detect() }.getOrNull()
         appendLine("-- path")
