@@ -292,12 +292,15 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                     // A Mali pair under Auto: the compositor draws on the phone's own Mali driver
                     // (dma-buf, modifiers and AHB all work there) and the guest runs the pair's
                     // PanVK. Its Android half stays installed for a manual pick.
-                    val displayId = if (auto && gpu.family.mali && DriverPairs.isNonAdreno(pair.key)) TurnipDriver.AUTO else pairDisplayId
+                    // The same when the pair is picked by hand: a PanVK Android half on the display
+                    // stalls Mali gralloc ("Waiting for Steam's first frame"); it stays a manual pick
+                    // under "Runtime and display drivers separately".
+                    val displayId = if (gpu.family.mali && DriverPairs.isNonAdreno(pair.key)) TurnipDriver.AUTO else pairDisplayId
                     val displayChanged = SessionPrefs.androidDriver(activity) != displayId
                     SessionPrefs.setAndroidDriver(activity, displayId)
                     SessionPrefs.setLinuxDriver(activity, linuxId)
-                    // An open Mali/Xclipse driver and the Mali bridge are alternatives: the pair wins.
-                    if (DriverPairs.isNonAdreno(pair.key)) SessionPrefs.setVkBridge(activity, false)
+                    // The Mali bridge switch is the user's and is left as it is: when it is on, the
+                    // bridge wins for the session (DeviceSupport.vkBridge) and the pair waits.
                     val restart = displayChanged && CompositorHost.isStarted
                     if (auto) {
                         val previous = SessionPrefs.gpuAutoInstalled(activity)

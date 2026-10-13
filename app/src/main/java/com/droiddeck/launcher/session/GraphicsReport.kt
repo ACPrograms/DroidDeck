@@ -59,7 +59,17 @@ object GraphicsReport {
         appendLine("display driver (compositor): " + SessionPrefs.androidDriver(context).ifEmpty {
             if (DeviceSupport.adreno()) "(auto: bundled Turnip)" else "(auto: the phone's own Vulkan driver, ${SystemVulkanDriver.hal() ?: "vendor HAL"})"
         })
-        appendLine("runtime driver: " + SessionPrefs.linuxDriver(context).ifEmpty { "(runtime default)" })
+        val linux = SessionPrefs.linuxDriver(context)
+        appendLine("runtime driver: " + linux.ifEmpty { "(runtime default)" })
+        if (linux.isNotEmpty()) {
+            val dir = com.droiddeck.launcher.gpu.LinuxVulkanDriverManager(context).getDriverDir(linux)
+            appendLine("runtime driver dir: ${dir.path} (" + (dir.listFiles()?.filter { it.name.endsWith(".so") }?.joinToString { it.name } ?: "missing") + ")")
+        }
+        val prefs = context.getSharedPreferences("graphics_report", Context.MODE_PRIVATE)
+        val previous = prefs.getString("lastDrivers", null)
+        val now = "display ${SessionPrefs.androidDriver(context).ifEmpty { "(auto)" }}, runtime ${linux.ifEmpty { "(default)" }}, bridge ${DeviceSupport.vkBridge(context)}, venus ${VenusComponent.wanted(context)}"
+        appendLine("previous session's drivers: " + (previous ?: "(none recorded)") + if (previous != null && previous != now) "  << CHANGED" else "")
+        prefs.edit().putString("lastDrivers", now).apply()
         DriverBundle.active(context)?.let { b ->
             appendLine("pair: ${b.name} ${b.version} (bundle ${b.id})")
             release(context, b.id)?.let { appendLine("pair release: $it") }
@@ -161,8 +171,10 @@ object GraphicsReport {
             val guestLines = File(dir, "session.log").takeIf { it.isFile }?.useLines { seq ->
                 seq.filter { GUEST.containsMatchIn(it) }.take(200).toList()
             }.orEmpty()
+            val limits = File(dir, "limits.txt").takeIf { it.isFile }?.readText()?.trim()
             val audio = File(dir, "audio.log").takeIf { it.isFile }?.readText().orEmpty()
             report.appendText(buildString {
+                limits?.let { appendLine("open files limit: $it") }
                 if (audio.contains("AAUDIO_ERROR_DISCONNECTED")) {
                     appendLine("!! SOUND: Android refused the audio output (AAUDIO_ERROR_DISCONNECTED) - rebooting the phone usually fixes this")
                 }

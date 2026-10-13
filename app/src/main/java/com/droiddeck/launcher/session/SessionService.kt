@@ -679,6 +679,10 @@ class SessionService : Service() {
             guest.add("XWAYLAND_NO_GLAMOR=1")
             Log.w(TAG, "xwayland: the last session's Xwayland crashed; glamor off for this one (XWAYLAND_NO_GLAMOR=1)")
         }
+        // A Mali PanVK session ran out of file descriptors after ten minutes (sync files and
+        // dma-bufs, "Too many open files"): the session script raises its open-files limit to the
+        // hard limit for the whole session tree. Never on an Adreno.
+        if (!com.droiddeck.launcher.core.DeviceSupport.adreno()) guest.add("BL_RAISE_NOFILE=1")
         // gamescope's explicit sync waits on DRM syncobj timelines through
         // DRM_IOCTL_SYNCOBJ_EVENTFD, which a kernel before 6.6 does not have (Exynos 2400e on 6.1:
         // hundreds of "timeline ... failed" and a game stuck at black), and Mali's stand-in node

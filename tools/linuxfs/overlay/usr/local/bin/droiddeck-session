@@ -7,6 +7,16 @@
 #   droiddeck-session lxqt               the KDE Plasma desktop (DroidDeck's desktop package)
 # BL_WIDTH / BL_HEIGHT size the output, BL_FPS limits it, BL_LOG collects everything said here.
 set -u
+# A GPU that is not an Adreno (BL_RAISE_NOFILE=1): the open-files limit goes up to the hard limit
+# for the whole session tree (gamescope, Steam, games). A Mali PanVK session ran out after ten
+# minutes ("Too many open files" importing sync files and dma-bufs) and froze.
+if [ "${BL_RAISE_NOFILE:-0}" = 1 ] && [ -z "${BL_INSIDE:-}" ]; then
+  bl_nofile_was="$(ulimit -Sn)/$(ulimit -Hn)"
+  ulimit -Sn "$(ulimit -Hn)" 2>/dev/null || true
+  echo "== open files: soft/hard $bl_nofile_was -> soft $(ulimit -Sn)"
+  [ -n "${BL_DEBUG_DIR:-}" ] && echo "soft/hard $bl_nofile_was -> soft $(ulimit -Sn) (session tree)" > "$BL_DEBUG_DIR/limits.txt" 2>/dev/null
+  unset bl_nofile_was
+fi
 export HOME=${HOME:-/root}
 mode=${1:-desktop}
 shift || true

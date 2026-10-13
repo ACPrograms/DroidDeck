@@ -23,9 +23,11 @@ object DeviceSupport {
      * Xclipse) already handles. An Adreno keeps Turnip whatever the setting says.
      */
     fun vkBridge(context: Context): Boolean =
-        !adreno() && !SystemVulkanDriver.isAvailable() && !openDriverActive(context) &&
-            !com.droiddeck.launcher.session.VenusComponent.wanted(context) &&
+        bridgeUsable() && !com.droiddeck.launcher.session.VenusComponent.wanted(context) &&
             com.droiddeck.launcher.session.SessionPrefs.vkBridge(context)
+
+    /** Whether this phone can use the Mali bridge at all: a Mali (kbase) without a system-driver route. */
+    fun bridgeUsable(): Boolean = !adreno() && !SystemVulkanDriver.isAvailable() && File("/dev/mali0").exists()
 
     /**
      * Whether an open non-Adreno driver pair (PanVK for Mali, RADV for Xclipse) is the one in use:
@@ -34,6 +36,8 @@ object DeviceSupport {
     fun openDriverActive(context: Context): Boolean {
         if (adreno()) return false
         if (com.droiddeck.launcher.session.VenusComponent.wanted(context)) return false
+        // The Mali bridge switch, when on and usable, wins over a pair (the user's choice in Setup).
+        if (bridgeUsable() && com.droiddeck.launcher.session.SessionPrefs.vkBridge(context)) return false
         // The runtime half is what counts: a Mali pair may run with the system driver as its display.
         val linux = com.droiddeck.launcher.session.SessionPrefs.linuxDriver(context).ifEmpty { return false }
         return com.droiddeck.launcher.gpu.DriverPairs.isNonAdreno(com.droiddeck.launcher.gpu.DriverBundle.containing(context, linux, true)?.id)
