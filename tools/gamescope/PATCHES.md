@@ -68,3 +68,9 @@ app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the
   not an Adreno when the kernel is older than 6.6 (no DRM_IOCTL_SYNCOBJ_EVENTFD: an Exynos 2400e
   on 6.1 logged hundreds of "timeline: DRM_IOCTL_SYNCOBJ_EVENTFD failed" and a game hung at a
   black screen) or when the render node is Mali's stand-in (/dev/mali0 has no DRM syncobjs).
+- `0127-shm-buffers-upload-every-commit.patch` (David Cimo, for Mali through Venus; his `0114`): with
+  no DRM node, Xwayland has no glamor and commits a few wl_shm buffers over and over with new pixels.
+  gamescope memoizes one texture per `wlr_buffer`, and a shm buffer's texture is a copy taken at
+  import, so the screen cycled through the first few frames forever while Steam ran on behind them.
+  Only dma-buf textures are memoized now; a shm buffer is uploaded on every commit. Adreno never
+  takes this path, since its Xwayland hands over dma-bufs. Also what XWAYLAND_NO_GLAMOR sessions need.
