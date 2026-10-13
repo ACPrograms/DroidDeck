@@ -1,31 +1,44 @@
 --- a/src/steamcompmgr.cpp
 +++ b/src/steamcompmgr.cpp
-@@ -8101,6 +8101,9 @@
- 
- 		// Only pace windows the FPS limiter covers.
- 		const bool entry_vblank = vblank && steamcompmgr_should_vblank_window( entry_win, vblank_idx, now );
+@@ -7979,6 +7979,18 @@
+ 		{
+ 			gpuvis_trace_printf( "commit %lu done", w->commit_queue[ j ]->commitID );
+ 			w->commit_queue[ j ]->done = true;
++            if (w->appID == 1794680) {
++        static uint64_t last=0, start=0; static unsigned h[12]={};
++        const uint64_t now=get_time_in_nanos();
++        if (last) h[std::min<uint64_t>((now-last)/4000000,11)]++;
++        last=now; if (!start) start=now;
++        if (now-start>=10000000000ULL) {
++            fprintf(stderr,"[dd-latch] span=%lu bins4ms:",now-start);
++            for (unsigned value:h) fprintf(stderr," %u",value);
++            fprintf(stderr,"\n"); memset(h,0,sizeof(h)); start=now;
++        }
 +
-+		if (entry_win && entry_win->appID == 1794680)
-+			fprintf(stderr, "[dd-cadence] commit=%lu fifo=%d vblank=%d idx=%lu slot=%d now=%lu target=%lu desired=%lu queued=%zu\n", entry.commitID, entry.fifo, vblank, vblank_idx, entry_vblank, now, next_refresh_time, entry.desiredPresentTime, entry_win->commit_queue.size());
- 
- 		if (entry.fifo && (!entry_vblank || fifo_win_seqs.count(entry.winSeq) > 0))
- 		{
-@@ -10393,6 +10396,7 @@
- 		static uint64_t vblank_idx = 0;
- 		if ( vblank )
- 		{
-+			fprintf(stderr, "[dd-vblank] idx=%lu now=%lu target=%lu\n", vblank_idx, get_time_in_nanos(), g_SteamCompMgrVBlankTime.schedule.ulTargetVBlank);
- 			{
- 				uint64_t now = get_time_in_nanos();
- 
++            }
+ 			w->commit_queue[ j ]->earliest_present_time = earliestPresentTime;
+ 			w->commit_queue[ j ]->present_margin = earliestPresentTime - earliestLatchTime;
+ 			bFoundWindow = true;
 --- a/src/Backends/WaylandBackend.cpp
 +++ b/src/Backends/WaylandBackend.cpp
-@@ -1473,6 +1473,8 @@
+@@ -1473,6 +1473,20 @@
  
      void CWaylandPlane::Present( std::optional<WaylandPlaneState> oState )
      {
-+        if (oState && oState->bOpaque && oState->flSrcWidth > 1)
-+            fprintf(stderr, "[dd-plane] now=%lu buffer=%p\n", get_time_in_nanos(), oState->pBuffer);
++        static wl_buffer *lastBuffer=nullptr;
++        if (oState && oState->bOpaque && oState->flSrcWidth>1 && oState->pBuffer!=lastBuffer) {
++            lastBuffer=oState->pBuffer;
++        static uint64_t last=0, start=0; static unsigned h[12]={};
++        const uint64_t now=get_time_in_nanos();
++        if (last) h[std::min<uint64_t>((now-last)/4000000,11)]++;
++        last=now; if (!start) start=now;
++        if (now-start>=10000000000ULL) {
++            fprintf(stderr,"[dd-plane-cadence] span=%lu bins4ms:",now-start);
++            for (unsigned value:h) fprintf(stderr," %u",value);
++            fprintf(stderr,"\n"); memset(h,0,sizeof(h)); start=now;
++        }
++
++        }
          {
              std::unique_lock lock( m_PlaneStateLock );
              m_oCurrentPlaneState = oState;
