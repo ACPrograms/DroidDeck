@@ -9,17 +9,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * The native half of an Epic install in `libdroiddeckstores.so`: [run] fills the chunk cache with
+ * The native batch APIs for Epic in `libdroiddeckstores.so`: [run] fills the chunk cache with
  * verified, decompressed chunks for the files the manager says are pending, [assemble] writes those
- * files from the cache. Everything around them (manifest, install tags, delta pass, post-install)
- * stays in the manager.
+ * files from the cache. The production installer intentionally uses one serial Java
+ * chunk-to-file path instead, so cache bounds and resume behavior do not depend on native
+ * availability. These APIs remain for callers that explicitly need batch fetch/assembly.
  *
  * The cache is `<installDir>/.chunks` when `chunkCacheDir` is `""`, else the scratch folder given -
  * the app's own cache when the game installs to a card, where the assembler drops each chunk right
  * after its last use and the folder at the end. Both calls take the same value for one install.
  *
- * Both block like the Java loops they replace and poll [AtomicBoolean] `cancel` every 250 ms: on
- * cancel they flip the native flag, wait up to 5 s for the run to wind down, then return.
+ * Both block while polling [AtomicBoolean] `cancel` every 250 ms: on cancel they flip the native
+ * flag, wait up to 5 s for the run to wind down, then return.
  */
 object EpicNative {
     private const val TAG = "EpicNative"
