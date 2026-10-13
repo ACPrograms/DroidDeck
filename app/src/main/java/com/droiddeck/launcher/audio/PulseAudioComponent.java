@@ -195,10 +195,23 @@ public class PulseAudioComponent extends SessionPart {
             } else if (sinks.contains("\tDirectAudio\t") || sinks.startsWith("DirectAudio\t") || sinks.contains("\tDirectAudio\n") || sinks.matches("(?s).*\\bDirectAudio\\b.*")) {
                 line = "== client sink: DirectAudio (module-directaudio-native-sink)";
             } else {
-                boolean loaded = pactl("load-module", "module-aaudio-sink", "sink_name=AAudioSink", "performance_mode=1", "adaptive=1", "volume=1.0") != null
-                        && pactl("set-default-sink", "AAudioSink") != null;
-                line = loaded ? "== client sink: DirectAudio did not come up; FALLBACK to the plain AAudio sink (AAudioSink)"
-                              : "== client sink: DirectAudio did not come up and the AAudio fallback failed too - no client sound";
+                // AAudio can refuse the first open with AAUDIO_ERROR_DISCONNECTED while Android is
+                // still switching the output route as the session starts (seen on a Galaxy S24 FE):
+                // try DirectAudio again, then the plain sink, a few times over ten seconds.
+                String loadedAs = null;
+                for (int attempt = 1; attempt <= 5 && loadedAs == null && pid > 1; attempt++) {
+                    try { Thread.sleep(2000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                    if (pactl("load-module", "module-directaudio-native-sink", "sink_name=DirectAudio", "performance_mode=1",
+                            "adaptive=1", "decay=0", "limiter=1", "watchdog=1", "volume=1.0") != null
+                            && pactl("set-default-sink", "DirectAudio") != null) {
+                        loadedAs = "DirectAudio on attempt " + attempt;
+                    } else if (pactl("load-module", "module-aaudio-sink", "sink_name=AAudioSink", "performance_mode=1", "adaptive=1", "volume=1.0") != null
+                            && pactl("set-default-sink", "AAudioSink") != null) {
+                        loadedAs = "the plain AAudio sink (AAudioSink) on attempt " + attempt;
+                    }
+                }
+                line = loadedAs != null ? "== client sink: DirectAudio did not come up at start; retried and got " + loadedAs
+                              : "== client sink: DirectAudio did not come up and the AAudio fallback failed too after 5 retries - no client sound";
                 Log.w(TAG, line);
             }
             Log.i(TAG, line);

@@ -142,7 +142,7 @@ object GraphicsReport {
     )
 
     /** The session script's driver lines: what it exported, the bridge's self-test, vulkaninfo, gamescope's Vulkan errors. */
-    private val GUEST = Regex("""== vulkan driver|== vkbridge|== vulkaninfo|vulkan:|panvk|PanVK|radv|primary node|No compatible|DRM format""", RegexOption.IGNORE_CASE)
+    private val GUEST = Regex("""== vulkan driver|== vkbridge|== vulkaninfo|vulkan:|panvk|PanVK|radv|primary node|No compatible|DRM format|kbase|AAUDIO|client sink""", RegexOption.IGNORE_CASE)
 
     /**
      * The end of the report, from the finished folder: the compositor's driver lines out of
@@ -160,6 +160,11 @@ object GraphicsReport {
             report.appendText(buildString {
                 if (guestLines.any { it.contains("vkbridge", ignoreCase = true) && it.contains("FAIL") }) {
                     appendLine("!! MALI BRIDGE SELF-TEST FAILED: this GPU's driver did not pass the bridge's checks (see below)")
+                }
+                if (guestLines.any { it.contains("MEM_EXEC_INIT") }) {
+                    appendLine("note: kbase refused KBASE_IOCTL_MEM_EXEC_INIT with EPERM. That answer comes from the kbase driver")
+                    appendLine("      itself (proot does not filter ioctls; Android's seccomp would kill or return ENOSYS; SELinux")
+                    appendLine("      would return EACCES), so it is the kernel's policy for this context, not the session's.")
                 }
                 appendLine("-- driver lines from the session log (${guestLines.size})")
                 guestLines.forEach { appendLine(it) }
