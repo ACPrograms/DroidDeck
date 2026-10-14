@@ -18,6 +18,9 @@
 //! - [`assemble`] — the files from the cache, one sequential write each, SHA-1 checked as they
 //!   are written; with a scratch cache (one the caller placed apart from the install) each chunk
 //!   is deleted as soon as the last file that uses it is done.
+//! - [`stream`] — the adaptive install the manager uses by default: the chunks fetched in
+//!   parallel through the fetch core and written straight into staging files as they arrive,
+//!   shared chunks kept in a budgeted cache, each file verified and swapped in safely.
 //! - [`jni`] — `Java_com_droiddeck_launcher_stores_epic_EpicNative_native*` exports.
 //!
 //! The selective-install-tag, delta/resume and chunk verification rules mirrored here were ported
@@ -31,6 +34,7 @@ pub mod driver;
 pub mod jni;
 pub mod manifest;
 pub mod plan;
+pub mod stream;
 
 /// User-Agent the Java manager sends on every chunk request (`EpicDownloadManager.UA`).
 pub const USER_AGENT: &str =
