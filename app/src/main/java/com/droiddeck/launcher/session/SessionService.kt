@@ -99,7 +99,7 @@ class SessionService : Service() {
                 else -> return
             }
             suspendAttemptFailed = false
-            updateSuspendPolicy(resumeOnReturn = screenOn)
+            updateSuspendPolicy()
         }
     }
     @Volatile private var sessionGen = 0
@@ -164,7 +164,7 @@ class SessionService : Service() {
                 activityVisible = true
                 suspendDownloadNow = false
                 suspendAttemptFailed = false
-                updateSuspendPolicy(resumeOnReturn = true)
+                updateSuspendPolicy()
                 return START_NOT_STICKY
             }
             ACTION_ACTIVITY_HIDDEN -> {
@@ -1115,7 +1115,7 @@ class SessionService : Service() {
         syncWatcher = watcher
     }
 
-    private fun updateSuspendPolicy(resumeOnReturn: Boolean = false) {
+    private fun updateSuspendPolicy() {
         if (!SessionState.running) return
         val activityDisplayOn = activityDisplayOn()
         val hidden = SessionVisibilityPolicy.isHidden(
@@ -1126,9 +1126,7 @@ class SessionService : Service() {
         )
         val wasHidden = previouslyHidden
         previouslyHidden = hidden
-        val resumedOnTransition = SessionVisibilityPolicy.shouldResumeOnVisibleTransition(wasHidden, hidden, suspendPolicy)
-        val resumedOnExplicitReturn = resumeOnReturn && wasHidden == null && !hidden
-        if (resumedOnTransition || resumedOnExplicitReturn) {
+        if (SessionVisibilityPolicy.shouldResumeOnVisibleTransition(wasHidden, hidden, suspendPolicy)) {
             resumeSteamSleepOnReturn()
         }
         if (suspendPolicy == SessionPrefs.SUSPEND_MANUAL && hidden) {
