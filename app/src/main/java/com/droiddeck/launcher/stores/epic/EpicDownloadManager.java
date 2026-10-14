@@ -51,10 +51,12 @@ import java.util.zip.Inflater;
  * set plus the device's language, a delta pass that skips files already on disk with the right
  * size and SHA-1, then the writer. When the native library loads, the writer is the adaptive
  * native install ({@link EpicNative#stream}: chunks fetched in parallel and written straight into
- * staged files, shared chunks in a budgeted cache); otherwise, or when its space plan does not
- * fit, the bounded-cache Java writer, one chunk at a time. Both replace each file the same safe
- * way. A hidden preference ({@code storesEpicMode}) can pick the older whole-cache native batch
- * engine or the Java writer instead, for side-by-side benchmarks.
+ * staged files, shared chunks in a budgeted cache); when its space plan does not fit, the native
+ * lookahead install ({@link EpicNative#installAdaptive}), which sizes its window to the free space.
+ * Builds without the library use the bounded Java writer (parallel prefetch, one staged writer).
+ * Once the library is loaded, an engine failure fails the install; it never silently switches to
+ * Java downloads. A hidden preference ({@code storesEpicMode}) picks a mode explicitly for
+ * side-by-side benchmarks: adaptive, lookahead, batch (the older whole-cache engine) or java.
  *
  * Chunk URLs carry no auth tokens; the subfolder is the decimal group number; the Cloudflare
  * mirror is skipped (it refuses chunks). Blocking; the download queue runs it on its own thread.
@@ -87,10 +89,11 @@ public final class EpicDownloadManager {
     static final long ADAPTIVE_OPEN_WINDOW_BYTES = 256L * 1024 * 1024;
 
     static final String MODE_ADAPTIVE = "adaptive";
+    static final String MODE_LOOKAHEAD = "lookahead";
     static final String MODE_BATCH = "batch";
     static final String MODE_JAVA = "java";
 
-    /** How {@link #install} may use the native engine; null = the bounded Java writer only. */
+    /** Which writer {@link #install} asks for and how wide the native fetch may go. */
     static final class NativeOptions {
         final String mode;
         final int maxWorkers, processWorkers;
@@ -98,6 +101,8 @@ public final class EpicDownloadManager {
         NativeOptions(String mode, int maxWorkers, int processWorkers, String tierId) {
             this.mode = mode; this.maxWorkers = maxWorkers; this.processWorkers = processWorkers; this.tierId = tierId;
         }
+        /** The default: the adaptive engine at the Fast tier's window. */
+        static NativeOptions defaults() { return new NativeOptions(MODE_ADAPTIVE, 32, 2, "fast"); }
     }
 
     public interface Callback {
@@ -220,7 +225,7 @@ public final class EpicDownloadManager {
 
     static Result installManifest(Manifest manifest, String installDirPath, String chunkCacheDirPath,
                                   List<String> installTags, AtomicBoolean cancel, Callback cb) throws InstallException {
-        return installManifest(manifest, installDirPath, chunkCacheDirPath, installTags, cancel, cb, null);
+        return installManifest(manifest, installDirPath, chunkCacheDirPath, installTags, cancel, cb, NativeOptions.defaults());
     }
 
     static Result installManifest(Manifest manifest, String installDirPath, String chunkCacheDirPath,
@@ -275,32 +280,43 @@ public final class EpicDownloadManager {
                 File output = new File(installDir, f.filename.replace("\\", "/"));
                 if (output.isFile()) oldFileBytes.put(f.filename, output.length());
             }
-            if (nativeOptions != null && !MODE_JAVA.equals(nativeOptions.mode)) {
-                NativeAttempt attempt = MODE_BATCH.equals(nativeOptions.mode)
-                        ? installBatch(manifest, pending, needed, pendingBytes, planned, installDir, cachePath, chunkCacheDir, nativeOptions, cancel, cb)
-                        : installAdaptive(manifest, pending, pendingBytes, oldFileBytes, planned, installDir, cachePath, chunkCacheDir, nativeOptions, cancel, cb);
-                if (attempt.handled) return attempt.result;
-            } else if (nativeOptions != null) {
+            NativeOptions options = nativeOptions != null ? nativeOptions : NativeOptions.defaults();
+            String mode = options.mode;
+            if (!MODE_LOOKAHEAD.equals(mode) && !MODE_BATCH.equals(mode) && !MODE_JAVA.equals(mode)) mode = MODE_ADAPTIVE;
+            boolean nativeAvailable = StoresNative.INSTANCE.ensureLoaded();
+            if (!nativeAvailable && !MODE_JAVA.equals(mode)) {
+                cb.onLog("epic: native engine unavailable; mode=java-bounded");
+                mode = MODE_JAVA;
+            } else if (MODE_JAVA.equals(mode)) {
                 cb.onLog("epic: mode=java-bounded chosen by storesEpicMode");
             }
+            if (MODE_ADAPTIVE.equals(mode)) {
+                NativeAttempt attempt = installAdaptive(manifest, pending, pendingBytes, oldFileBytes, planned, installDir, cachePath, chunkCacheDir, stagingDir, options, cancel, cb);
+                if (attempt.handled) return attempt.result;
+                // Its space plan did not fit: the lookahead engine sizes its window to what is free.
+                mode = MODE_LOOKAHEAD;
+            } else if (MODE_BATCH.equals(mode)) {
+                return installBatch(manifest, pending, needed, pendingBytes, planned, installDir, cachePath, chunkCacheDir, options, cancel, cb);
+            }
+            boolean lookahead = MODE_LOOKAHEAD.equals(mode);
             Map<String, Long> cachedChunkBytes = prepareBoundedCache(chunkCacheDir, needed);
             boolean cacheOnInstallVolume = cachePath.isEmpty();
-            boolean nativeAvailable = StoresNative.INSTANCE.ensureLoaded();
-            long peakGameAdditional = nativeAvailable ? 0 : cacheOnInstallVolume
+            long peakGameAdditional = lookahead ? 0 : cacheOnInstallVolume
                     ? estimatePeakAdditionalBytes(pending, chunksByGuid, cachedChunkBytes, true, oldFileBytes)
                     : estimateStagedFilePeak(pending, oldFileBytes);
-            long peakCacheAdditional = nativeAvailable || cacheOnInstallVolume
+            long peakCacheAdditional = lookahead || cacheOnInstallVolume
                     ? 0 : estimatePeakAdditionalBytes(pending, chunksByGuid, cachedChunkBytes, false);
             long freeGame = StoreInstallRoot.availableBytes(installDir);
-            if (!nativeAvailable && cacheOnInstallVolume) {
+            // The lookahead engine plans its own window against both free-space readings.
+            if (!lookahead && cacheOnInstallVolume) {
                 if (StoreInstallRoot.insufficientSpace(peakGameAdditional, freeGame)) throw new InstallException("Not enough free space for safe staged Epic replacement: need up to " + fmt(peakGameAdditional) + " additional, only " + fmt(freeGame) + " free");
-            } else if (!nativeAvailable) {
+            } else if (!lookahead) {
                 long freeCache = StoreInstallRoot.availableBytes(chunkCacheDir);
                 if (StoreInstallRoot.insufficientSpace(peakCacheAdditional, freeCache)) throw new InstallException("Not enough internal space for the bounded Epic download cache: need up to " + fmt(peakCacheAdditional) + " additional, only " + fmt(freeCache) + " free");
                 if (StoreInstallRoot.insufficientSpace(peakGameAdditional, freeGame)) throw new InstallException("Not enough free space for safe staged Epic replacement: need " + fmt(peakGameAdditional) + ", only " + fmt(freeGame) + " free");
             }
             if (cancel.get()) return null;
-            if (nativeAvailable) {
+            if (lookahead) {
                 JSONObject request = nativeRequest(manifest, pending, chunksByGuid, cachedChunkBytes,
                         oldFileBytes, installDir, chunkCacheDir, stagingDir, cacheOnInstallVolume);
                 request.put("free_game", StoreInstallRoot.availableBytes(installDir));
@@ -310,8 +326,8 @@ public final class EpicDownloadManager {
                 cb.onSizes(nativeTotal, planned);
                 cb.onBytes(0, nativeTotal, 0);
                 EpicNative.Result outcome = EpicNative.installAdaptive(request.toString(), cancel, new EpicNative.InstallListener() {
-                    @Override public void onPlan(int chunks, long bytes, String mode) {
-                        cb.onLog("epic: engine=adaptive-rust " + mode);
+                    @Override public void onPlan(int chunks, long bytes, String plan) {
+                        cb.onLog("epic: mode=lookahead engine=lookahead-rust " + plan);
                     }
                     @Override public void onProgress(long done, long total, int files, int filesTotal) {
                         long elapsedMs = Math.max(1, (System.nanoTime() - nativeStarted) / 1_000_000);
@@ -334,6 +350,9 @@ public final class EpicDownloadManager {
                 });
                 if (outcome.cancelled || cancel.get()) return null;
                 if (!outcome.success) throw new InstallException("Native Epic install failed: " + outcome.error);
+                long lookaheadMs = Math.max(1, (System.nanoTime() - nativeStarted) / 1_000_000);
+                cb.onLog("epic: summary mode=lookahead files=" + pending.size() + " bytes_written=" + nativeTotal + " elapsed_ms=" + lookaheadMs
+                        + " avg_MBps=" + String.format(java.util.Locale.ROOT, "%.2f", nativeTotal * 1000.0 / lookaheadMs / 1048576.0));
                 cb.onStage("install", nativeTotal, nativeTotal, pending.size(), pending.size());
                 cb.onProgress("Complete", 100);
                 return new Result(manifest.launchExe, manifest.buildVersion, planned).withPrereq(manifest);
@@ -501,17 +520,16 @@ public final class EpicDownloadManager {
     }
 
     /**
-     * The adaptive native install. Falls back (nothing fetched or written) when the engine is not
-     * there, refuses the plan, or its space plan does not fit while the bounded writer's might.
+     * The adaptive native install; the library is loaded. Hands back {@code FALLBACK} (nothing
+     * fetched or written) only when its space plan does not fit, so the caller can run the
+     * lookahead engine, which narrows its window to the free space. Any other failure is final.
      */
     private static NativeAttempt installAdaptive(Manifest manifest, List<FileInfo> pending, long pendingBytes, Map<String, Long> oldFileBytes,
-                                                 long planned, File installDir, String cachePath, File chunkCacheDir, NativeOptions options,
-                                                 AtomicBoolean cancel, Callback cb) throws InstallException {
+                                                 long planned, File installDir, String cachePath, File chunkCacheDir, File stagingDir,
+                                                 NativeOptions options, AtomicBoolean cancel, Callback cb) throws Exception {
         int[] pendingIdx = pendingIndices(manifest, pending);
-        if (manifest.rawBytes == null || pendingIdx == null) return NativeAttempt.FALLBACK;
-        if (!StoresNative.INSTANCE.getAvailable()) {
-            cb.onLog("epic: native engine unavailable; mode=java-bounded");
-            return NativeAttempt.FALLBACK;
+        if (manifest.rawBytes == null || pendingIdx == null) {
+            throw new InstallException("Native Epic install failed: the manifest is not available to the native engine");
         }
         long stagedPeak = estimateStagedFilePeak(pending, oldFileBytes);
         long openAllowance = adaptiveOpenStagingAllowance(oldFileBytes);
@@ -520,8 +538,7 @@ public final class EpicDownloadManager {
         long freeScratch = scratchRequested ? StoreInstallRoot.availableBytes(chunkCacheDir) : -1;
         AdaptiveSpacePlan space = planAdaptiveSpace(stagedPeak, openAllowance, freeGame, scratchRequested, freeScratch);
         if (space.error != null) {
-            // The bounded writer needs less (one chunk at a time, sequential swaps): let it decide.
-            cb.onLog("epic: adaptive space plan does not fit (" + space.error + "); mode=java-bounded");
+            cb.onLog("epic: adaptive space plan does not fit (" + space.error + "); mode=lookahead");
             return NativeAttempt.FALLBACK;
         }
         String engineCache = space.cacheBesideGame ? "" : cachePath;
@@ -540,7 +557,7 @@ public final class EpicDownloadManager {
         final Object lock = new Object();
         final long started = System.nanoTime();
         final long[] state = new long[] {0, 0, System.currentTimeMillis(), 0, 0}; // bytes, files, speed ms, speed bytes, speed bps
-        EpicNative.Result res = EpicNative.stream(manifest.rawBytes, installDir.getPath(), engineCache, cdnPrefixes(manifest.cdnUrls), pendingIdx, pendingBytes,
+        EpicNative.Result res = EpicNative.stream(manifest.rawBytes, installDir.getPath(), engineCache, stagingDir.getCanonicalPath(), cdnPrefixes(manifest.cdnUrls), pendingIdx, pendingBytes,
                 space.cacheBudget, "", options.maxWorkers, options.processWorkers, cancel, new EpicNative.StreamListener() {
                     @Override public void onStreamProgress(long bytesWritten, long bytesTotal, int filesDone, int filesTotal, long filesBytes) {
                         synchronized (lock) {
@@ -574,13 +591,10 @@ public final class EpicDownloadManager {
                     }
                     @Override public void onComplete(boolean success, String error, long bytes) {}
                 });
-        if (!res.started) {
-            cb.onLog("epic: adaptive engine not started (" + res.error + "); mode=java-bounded");
-            return NativeAttempt.FALLBACK;
-        }
+        if (!res.started) throw new InstallException("Native Epic install failed: " + res.error);
         long elapsedMs = Math.max(1, (System.nanoTime() - started) / 1_000_000);
         if (res.cancelled) return NativeAttempt.done(null);
-        if (!res.success) throw new InstallException(res.error == null || res.error.isEmpty() ? "Epic download failed" : res.error);
+        if (!res.success) throw new InstallException("Native Epic install failed: " + res.error);
         deleteDir(engineCacheDir);
         deleteDir(chunkCacheDir);
         cb.onLog("epic: summary mode=adaptive files=" + totalFiles + " bytes_written=" + pendingBytes + " elapsed_ms=" + elapsedMs
@@ -596,14 +610,12 @@ public final class EpicDownloadManager {
      * once (about twice the game), and it writes files in place rather than staged, so an
      * existing install is marked updating before anything is fetched.
      */
-    private static NativeAttempt installBatch(Manifest manifest, List<FileInfo> pending, List<ChunkInfo> needed, long pendingBytes,
-                                              long planned, File installDir, String cachePath, File chunkCacheDir, NativeOptions options,
-                                              AtomicBoolean cancel, Callback cb) throws InstallException {
+    private static Result installBatch(Manifest manifest, List<FileInfo> pending, List<ChunkInfo> needed, long pendingBytes,
+                                       long planned, File installDir, String cachePath, File chunkCacheDir, NativeOptions options,
+                                       AtomicBoolean cancel, Callback cb) throws InstallException {
         int[] pendingIdx = pendingIndices(manifest, pending);
-        if (manifest.rawBytes == null || pendingIdx == null) return NativeAttempt.FALLBACK;
-        if (!StoresNative.INSTANCE.getAvailable()) {
-            cb.onLog("epic: native engine unavailable; mode=java-bounded");
-            return NativeAttempt.FALLBACK;
+        if (manifest.rawBytes == null || pendingIdx == null) {
+            throw new InstallException("Native Epic install failed: the manifest is not available to the native engine");
         }
         long cacheMissing = 0, totalBytes = 0;
         for (ChunkInfo c : needed) {
@@ -619,7 +631,7 @@ public final class EpicDownloadManager {
             if (StoreInstallRoot.insufficientSpace(cacheMissing, freeCache)) throw new InstallException("Not enough internal space for the batch download cache: need " + fmt(cacheMissing) + ", only " + fmt(freeCache) + " free (short by " + fmt(cacheMissing - freeCache) + ")");
             if (StoreInstallRoot.insufficientSpace(pendingBytes, freeGame)) throw new InstallException("Not enough free space on the game's storage: need " + fmt(pendingBytes) + ", only " + fmt(freeGame) + " free (short by " + fmt(pendingBytes - freeGame) + ")");
         }
-        if (cancel.get()) return NativeAttempt.done(null);
+        if (cancel.get()) return null;
         final long fTotal = totalBytes;
         final int totalChunks = needed.size();
         final int totalFiles = pending.size();
@@ -638,11 +650,8 @@ public final class EpicDownloadManager {
                     @Override public void onLog(String line) { cb.onLog(line); }
                     @Override public void onComplete(boolean success, String error, long bytes) {}
                 });
-        if (!fetch.started) {
-            cb.onLog("epic: batch engine not started (" + fetch.error + "); mode=java-bounded");
-            return NativeAttempt.FALLBACK;
-        }
-        if (fetch.cancelled) return NativeAttempt.done(null);
+        if (!fetch.started) throw new InstallException("Native Epic install failed: " + fetch.error);
+        if (fetch.cancelled) return null;
         if (!fetch.success) throw new InstallException("Epic batch download failed: " + fetch.error);
         // Assembly overwrites files in place: the old installed record stops being truthful now.
         try { StoreInstalls.markUpdating(installDir); } catch (Exception e) { throw new InstallException("Could not mark the install as updating: " + e.getMessage()); }
@@ -655,7 +664,7 @@ public final class EpicDownloadManager {
             @Override public void onLog(String line) { cb.onLog(line); }
             @Override public void onComplete(boolean success, String error, long bytes) {}
         });
-        if (asm.cancelled) return NativeAttempt.done(null);
+        if (asm.cancelled) return null;
         if (!asm.started || !asm.success) throw new InstallException(asm.error == null || asm.error.isEmpty() ? "Epic batch assembly failed" : asm.error);
         long elapsedMs = Math.max(1, (System.nanoTime() - started) / 1_000_000);
         cb.onLog("epic: summary mode=batch files=" + totalFiles + " bytes_written=" + pendingBytes + " elapsed_ms=" + elapsedMs
@@ -663,7 +672,7 @@ public final class EpicDownloadManager {
         deleteDir(chunkCacheDir);
         cb.onStage("install", pendingBytes, pendingBytes, totalFiles, totalFiles);
         cb.onProgress("Complete", 100);
-        return NativeAttempt.done(new Result(manifest.launchExe, manifest.buildVersion, planned).withPrereq(manifest));
+        return new Result(manifest.launchExe, manifest.buildVersion, planned).withPrereq(manifest);
     }
 
     private static void sampleSpeed(long done, AtomicLong lastSpeedMs, AtomicLong lastSpeedBytes, AtomicLong speedBps) {

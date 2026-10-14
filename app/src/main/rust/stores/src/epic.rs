@@ -1,11 +1,15 @@
 //! Epic Games Store download adapter for the shared fetch core (`crate::fetch_core`).
 //!
-//! Production installs use [`adaptive`]: the Java manifest/delta pass supplies a versioned
-//! snapshot, the shared pure storage schedule selects an ordered lookahead, and fetch_core
-//! runs concurrently with verified staged assembly. Old outputs survive until atomic swap;
-//! a synchronous JNI callback marks the sidecar updating before the first replacement.
-//! Legacy manifest/batch APIs remain available. A missing library uses the bounded Java
-//! installer; native plan/runtime failures never silently switch engines.
+//! Production installs use [`stream`] (mode `adaptive`): the manager hands over the manifest
+//! bytes and the pending files, fetch_core downloads the chunks in first-use order, and each chunk
+//! is written straight into the staged files that use it (shared ones kept in a budgeted cache).
+//! [`adaptive`] (mode `lookahead`) is the fallback when the stream engine's space plan does not
+//! fit: the Java manifest/delta pass supplies a versioned snapshot, the shared pure storage
+//! schedule selects an ordered lookahead, and fetch_core runs concurrently with verified staged
+//! assembly. Both keep old outputs until their atomic swap; a synchronous JNI callback marks the
+//! sidecar updating before the first replacement. Legacy batch APIs remain available. A missing
+//! library uses the bounded Java installer; native plan/runtime failures never silently switch
+//! engines.
 //!
 //! Submodules:
 //! - [`adaptive`] — budget planner and bounded overlapping fetch/assembly coordinator.

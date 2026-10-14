@@ -7,7 +7,8 @@
 //!             listener: EpicNative.Listener) -> long handle (0 = not started)
 //! nativeAssemble(manifest: byte[], installDir: String, chunkCacheDir: String, fileIdx: int[],
 //!             listener: EpicNative.Listener) -> long handle (0 = not started)
-//! nativeStream(manifest: byte[], installDir: String, chunkCacheDir: String, cdnPrefixes: String[],
+//! nativeStream(manifest: byte[], installDir: String, chunkCacheDir: String, stagingDir: String,
+//!             cdnPrefixes: String[],
 //!             pendingFileIdx: int[], expectedBytes: long, cacheBudget: long, caBundlePath: String,
 //!             maxWorkers: int, processWorkers: int, listener: EpicNative.StreamListener)
 //!             -> long handle (0 = not started)
@@ -515,6 +516,7 @@ pub extern "system" fn Java_com_droiddeck_launcher_stores_epic_EpicNative_native
     manifest: JByteArray,
     install_dir: JString,
     chunk_cache_dir: JString,
+    staging_dir: JString,
     cdn_prefixes: JObjectArray,
     pending_file_idx: JIntArray,
     expected_bytes: jlong,
@@ -535,6 +537,7 @@ pub extern "system" fn Java_com_droiddeck_launcher_stores_epic_EpicNative_native
     };
     let install_dir = jstring_to_string(&mut env, &install_dir).unwrap_or_default();
     let chunk_cache_dir = jstring_to_string(&mut env, &chunk_cache_dir).unwrap_or_default();
+    let staging_dir = jstring_to_string(&mut env, &staging_dir).unwrap_or_default();
     let cdn_prefixes = string_array_to_vec(&mut env, &cdn_prefixes);
     let pending_file_indices: Vec<usize> = int_array_to_vec(&env, &pending_file_idx)
         .into_iter()
@@ -567,6 +570,7 @@ pub extern "system" fn Java_com_droiddeck_launcher_stores_epic_EpicNative_native
         manifest_bytes,
         install_dir,
         chunk_cache_dir,
+        staging_dir,
         cdn_prefixes,
         pending_file_indices,
         expected_bytes: if expected_bytes >= 0 {
@@ -601,9 +605,7 @@ pub extern "system" fn Java_com_droiddeck_launcher_stores_epic_EpicNative_native
 
     let cancel = Arc::new(AtomicBool::new(false));
     let thread_cancel = Arc::clone(&cancel);
-    let handle = Box::new(EpicDownloadHandle { cancel });
-
-    thread::spawn(move || {
+    let worker = thread::spawn(move || {
         crate::priority::background();
         let progress = |p: &StreamProgress| {
             let Ok(mut env) = vm.attach_current_thread_as_daemon() else {
@@ -641,6 +643,7 @@ pub extern "system" fn Java_com_droiddeck_launcher_stores_epic_EpicNative_native
             outcome.bytes_written,
         );
     });
+    let handle = Box::new(EpicDownloadHandle { cancel, worker: Some(worker) });
 
     Box::into_raw(handle) as jlong
 }
