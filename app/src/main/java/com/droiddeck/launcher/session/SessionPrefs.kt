@@ -87,6 +87,14 @@ object SessionPrefs {
         prefs(context).edit().putString("gameStoresSpeedTier", tier).apply()
     }
 
+    /**
+     * Hidden A/B switch for the Epic installer: "adaptive" (default: native parallel fetch written
+     * straight into staged files), "batch" (the older whole-cache native fetch, then native
+     * assembly; needs about twice the game's size free) or "java" (the bounded one-chunk-at-a-time
+     * Java writer). No UI; set it in the `session` preferences for benchmarks.
+     */
+    fun storesEpicMode(context: Context): String = prefs(context).getString("storesEpicMode", "adaptive") ?: "adaptive"
+
     /** Which tab a signed-in store opens on when its chip is picked: [STORES_OPEN_LIBRARY] or [STORES_OPEN_STORE]. */
     fun storesOpenTab(context: Context): String =
         prefs(context).getString("storesOpenTab", STORES_OPEN_LIBRARY)?.takeIf { it == STORES_OPEN_STORE } ?: STORES_OPEN_LIBRARY

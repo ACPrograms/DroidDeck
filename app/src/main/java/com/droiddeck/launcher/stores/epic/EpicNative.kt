@@ -9,18 +9,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * The native batch APIs for Epic in `libdroiddeckstores.so`: [run] fills the chunk cache with
- * verified, decompressed chunks for the files the manager says are pending, [assemble] writes those
- * files from the cache. The production installer intentionally uses one serial Java
- * chunk-to-file path instead, so cache bounds and resume behavior do not depend on native
- * availability. These APIs remain for callers that explicitly need batch fetch/assembly.
+ * The native Epic engines in `libdroiddeckstores.so`. [stream] is the install the manager uses
+ * whenever the library loads: chunks fetched in parallel by the adaptive fetch core and written
+ * straight into each file's staging file as they arrive, shared chunks kept in a cache of at most
+ * the given budget, every file verified and swapped in with the same rules as the bounded Java
+ * writer (see `stream.rs`). [run] and [assemble] are the older batch pair: [run] fills the chunk
+ * cache with verified, decompressed chunks for the pending files, [assemble] writes the files from
+ * it. They stay for callers that explicitly want a whole-game cache.
  *
  * The cache is `<installDir>/.chunks` when `chunkCacheDir` is `""`, else the scratch folder given -
- * the app's own cache when the game installs to a card, where the assembler drops each chunk right
- * after its last use and the folder at the end. Both calls take the same value for one install.
+ * the app's own cache when the game installs to a card.
  *
- * Both block while polling [AtomicBoolean] `cancel` every 250 ms: on cancel they flip the native
- * flag, wait up to 5 s for the run to wind down, then return.
+ * All block while polling [AtomicBoolean] `cancel` every 250 ms. [run] and [assemble] flip the
+ * native flag on cancel and wait up to 5 s; [stream] waits for the run to finish, because its
+ * cleanup (removing unfinished staging files) must be done before the manager returns.
  */
 object EpicNative {
     private const val TAG = "EpicNative"
@@ -34,6 +36,18 @@ object EpicNative {
         /** Engine log line (already in logcat under `EpicNative`). */
         fun onLog(line: String)
         /** Terminal. Fetch: bytes credited; assembly: bytes written. */
+        fun onComplete(success: Boolean, error: String, bytes: Long)
+    }
+
+    /** Callbacks from a [stream] run; every method is called on a native thread. */
+    interface StreamListener {
+        /** File bytes written so far (staging included), and the files verified and swapped in so far. */
+        fun onStreamProgress(bytesWritten: Long, bytesTotal: Long, filesDone: Int, filesTotal: Int, filesBytes: Long)
+        /** Engine log line (already in logcat under `EpicNative`). */
+        fun onLog(line: String)
+        /** Once, before the first file replaces its destination; false (or a throw) fails the run with nothing replaced. */
+        fun onBeforeReplace(): Boolean
+        /** Terminal; `bytes` = file bytes written. */
         fun onComplete(success: Boolean, error: String, bytes: Long)
     }
 
@@ -58,6 +72,59 @@ object EpicNative {
     @JvmStatic
     fun assemble(manifest: ByteArray, installDir: String, chunkCacheDir: String, fileIdx: IntArray, cancel: AtomicBoolean?, listener: Listener): Result =
         drive("nativeAssemble", cancel, listener) { inner -> nativeAssemble(manifest, installDir, chunkCacheDir, fileIdx, inner) }
+
+    /**
+     * The adaptive install of the files [pendingFileIdx] (indices into the manifest's file list),
+     * with at most [cacheBudget] bytes of shared chunks cached. `started == false` means nothing
+     * was fetched or written and the caller runs the bounded Java writer.
+     */
+    @JvmStatic
+    fun stream(
+        manifest: ByteArray, installDir: String, chunkCacheDir: String, cdnPrefixes: Array<String>, pendingFileIdx: IntArray, expectedBytes: Long,
+        cacheBudget: Long, caBundlePath: String, maxWorkers: Int, processWorkers: Int, cancel: AtomicBoolean?, listener: StreamListener,
+    ): Result {
+        if (!StoresNative.ensureLoaded()) return Result(false, false, false, "engine not built", 0L, 0, 0)
+        val latch = CountDownLatch(1)
+        val completion = AtomicReference<Completion?>(null)
+        val doneRef = AtomicReference(0)
+        val totalRef = AtomicReference(pendingFileIdx.size)
+        val inner = object : StreamListener {
+            override fun onStreamProgress(bytesWritten: Long, bytesTotal: Long, filesDone: Int, filesTotal: Int, filesBytes: Long) {
+                doneRef.set(filesDone); totalRef.set(filesTotal)
+                listener.onStreamProgress(bytesWritten, bytesTotal, filesDone, filesTotal, filesBytes)
+            }
+            override fun onLog(line: String) = listener.onLog(line)
+            override fun onBeforeReplace(): Boolean = runCatching { listener.onBeforeReplace() }.getOrDefault(false)
+            override fun onComplete(success: Boolean, error: String, bytes: Long) {
+                completion.set(Completion(success, error, bytes))
+                latch.countDown()
+                runCatching { listener.onComplete(success, error, bytes) }
+            }
+        }
+        val handle: Long = try {
+            nativeStream(manifest, installDir, chunkCacheDir, cdnPrefixes, pendingFileIdx, expectedBytes, cacheBudget, caBundlePath, maxWorkers, processWorkers, inner)
+        } catch (t: Throwable) {
+            Log.w(TAG, "engine unavailable: ${t.javaClass.simpleName}: ${t.message}")
+            return Result(false, false, false, "nativeStream: ${t.javaClass.simpleName}", 0L, 0, 0)
+        }
+        if (handle == 0L) return Result(false, false, false, completion.get()?.error ?: "not started", 0L, 0, totalRef.get())
+        var cancelSent = false
+        try {
+            while (!latch.await(250, TimeUnit.MILLISECONDS)) {
+                if (!cancelSent && cancel != null && cancel.get()) {
+                    nativeCancel(handle)
+                    cancelSent = true
+                }
+            }
+        } finally {
+            nativeRelease(handle)
+        }
+        val c = completion.get()
+        val cancelled = cancelSent || (c != null && !c.success && c.error == "cancelled")
+        val success = !cancelled && c != null && c.success
+        val error = when { cancelled -> "cancelled"; c == null -> "no completion"; else -> c.error }
+        return Result(true, success, cancelled, error, c?.bytes ?: 0L, doneRef.get(), totalRef.get())
+    }
 
     private fun drive(what: String, cancel: AtomicBoolean?, listener: Listener, start: (Listener) -> Long): Result {
         if (!StoresNative.ensureLoaded()) return Result(false, false, false, "engine not built", 0L, 0, 0)
@@ -109,6 +176,12 @@ object EpicNative {
 
     @JvmStatic
     private external fun nativeAssemble(manifest: ByteArray, installDir: String, chunkCacheDir: String, fileIdx: IntArray, listener: Listener): Long
+
+    @JvmStatic
+    private external fun nativeStream(
+        manifest: ByteArray, installDir: String, chunkCacheDir: String, cdnPrefixes: Array<String>, pendingFileIdx: IntArray, expectedBytes: Long,
+        cacheBudget: Long, caBundlePath: String, maxWorkers: Int, processWorkers: Int, listener: StreamListener,
+    ): Long
 
     @JvmStatic
     private external fun nativeCancel(handle: Long)
