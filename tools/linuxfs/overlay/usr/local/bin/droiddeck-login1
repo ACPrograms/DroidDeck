@@ -21,13 +21,22 @@ ROOT = "/org/freedesktop/login1"
 INTERFACE = NAME + ".Manager"
 UPOWER = "org.freedesktop.UPower"
 UPOWER_ROOT = "/org/freedesktop/UPower"
-NATIVE_PREPARE_MS = 1500
+NATIVE_HOST_ACK_MS = 12000  # Android falls back after ten seconds; allow its freeze to finish.
 INTROSPECTION = """
 <node>
   <interface name="org.freedesktop.login1.Manager">
     <method name="Suspend"><arg type="b" direction="in"/></method>
     <method name="SuspendWithFlags"><arg type="t" direction="in"/></method>
     <method name="CanSuspend"><arg type="s" direction="out"/></method>
+    <method name="Inhibit">
+      <arg type="s" direction="in"/><arg type="s" direction="in"/>
+      <arg type="s" direction="in"/><arg type="s" direction="in"/>
+      <arg type="h" direction="out"/>
+    </method>
+    <method name="ListInhibitors"><arg type="a(ssssuu)" direction="out"/></method>
+    <property name="BlockInhibited" type="s" access="read"/>
+    <property name="DelayInhibited" type="s" access="read"/>
+    <property name="InhibitDelayMaxUSec" type="t" access="read"/>
     <property name="PreparingForSleep" type="b" access="read"/>
     <signal name="PrepareForSleep"><arg type="b"/></signal>
   </interface>
@@ -53,7 +62,13 @@ class LoginManager:
         self.native_ready = self.directory / "steam-native-ready"
         self.pending = None
         self.timeout = None
-        self.preparation = None
+        self.inhibitors = {}
+        self.next_inhibitor = 0
+        self.native = False
+        self.waiting = set()
+        self.steam_participated = False
+        self.preparation_failed = False
+        self.preparation_flushed = False
         info = Gio.DBusNodeInfo.new_for_xml(INTROSPECTION).interfaces[0]
         self.registration = bus.register_object(ROOT, info, self.method, self.property, None)
         # Steam can issue its suspend command through the legacy UPower service even
@@ -66,6 +81,13 @@ class LoginManager:
     def property(self, connection, sender, path, interface, name):
         if name == "PreparingForSleep":
             return GLib.Variant("b", self.pending is not None)
+        if name == "InhibitDelayMaxUSec":
+            return GLib.Variant("t", 10000000)
+        if name in ("BlockInhibited", "DelayInhibited"):
+            mode = "block" if name == "BlockInhibited" else "delay"
+            kinds = {kind for item in self.inhibitors.values() if item[3] == mode
+                     for kind in item[0].split(":")}
+            return GLib.Variant("s", ":".join(sorted(kinds)))
         return None
 
     def notify(self, sleeping):
@@ -79,6 +101,10 @@ class LoginManager:
     def method(self, connection, sender, path, interface, name, args, reply):
         if name == "CanSuspend":
             reply.return_value(GLib.Variant("(s)", ("yes",)))
+        elif name == "Inhibit":
+            self.inhibit(sender, args.unpack(), reply)
+        elif name == "ListInhibitors":
+            reply.return_value(GLib.Variant("(a(ssssuu))", ([item[:6] for item in self.inhibitors.values()],)))
         elif name in ("Suspend", "SuspendWithFlags"):
             if self.pending:
                 reply.return_dbus_error(NAME + ".OperationInProgress", "The session is already pausing")
@@ -89,6 +115,57 @@ class LoginManager:
             # Flush the signal and method reply without blocking this D-Bus callback. Once both are
             # on the wire, publishing the request lets the host safely freeze this service.
             self.bus.flush(None, self.publish_after_flush, self.pending)
+
+    def peer(self, sender, method, signature):
+        return self.bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                  "org.freedesktop.DBus", method, GLib.Variant("(s)", (sender,)),
+                                  GLib.VariantType.new(signature), Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
+
+    def inhibit(self, sender, args, reply):
+        what, who, why, mode = args
+        kinds = set(what.split(":"))
+        valid = {"sleep", "shutdown", "idle", "handle-power-key", "handle-suspend-key",
+                 "handle-hibernate-key", "handle-lid-switch"}
+        if mode not in ("block", "delay") or not kinds <= valid or (mode == "delay" and not kinds <= {"sleep", "shutdown"}):
+            reply.return_dbus_error("org.freedesktop.DBus.Error.InvalidArgs", "Invalid inhibitor type or mode")
+            return
+        try:
+            uid = self.peer(sender, "GetConnectionUnixUser", "(u)")
+            pid = self.peer(sender, "GetConnectionUnixProcessID", "(u)")
+            read_fd, write_fd = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
+            descriptors = Gio.UnixFDList.new()
+            try:
+                index = descriptors.append(write_fd)
+            finally:
+                os.close(write_fd)
+            self.next_inhibitor += 1
+            key = self.next_inhibitor
+            self.inhibitors[key] = (what, who, why, mode, uid, pid, sender, read_fd)
+            GLib.io_add_watch(read_fd, GLib.IOCondition.HUP | GLib.IOCondition.ERR,
+                              self.release_inhibitor, key)
+            if self.native and mode == "delay" and "sleep" in kinds:
+                self.waiting.add(key)
+                self.steam_participated |= who.lower() == "steam"
+            reply.return_value_with_unix_fd_list(GLib.Variant("(h)", (index,)), descriptors)
+            print("== login1: inhibitor acquired: " + who + " " + what + " " + mode, flush=True)
+        except (GLib.Error, OSError) as error:
+            reply.return_dbus_error(NAME + ".Failed", str(error))
+
+    def release_inhibitor(self, fd, condition, key):
+        item = self.inhibitors.pop(key)
+        os.close(fd)
+        print("== login1: inhibitor released: " + item[1], flush=True)
+        if key in self.waiting:
+            self.waiting.remove(key)
+            # A disconnected/crashed client is not a preparation acknowledgement.
+            try:
+                alive = self.peer(item[6], "NameHasOwner", "(b)")
+                os.kill(item[5], 0)
+            except (GLib.Error, OSError):
+                alive = False
+            self.preparation_failed |= not alive
+            self.finish_preparation()
+        return False
 
     def publish_after_flush(self, connection, result, token):
         try:
@@ -108,6 +185,8 @@ class LoginManager:
             staged = request.with_suffix(".tmp")
             staged.write_text(self.pending + "\n")
             staged.replace(request)
+            if self.timeout is not None:
+                GLib.source_remove(self.timeout)
             self.timeout = GLib.timeout_add_seconds(5, self.check_ack)
         except OSError as error:
             print("== login1: cannot request pause: " + str(error), file=sys.stderr)
@@ -126,6 +205,13 @@ class LoginManager:
         if self.read_state() == token + ":awake":
             return
         self.pending = token
+        self.native = True
+        self.waiting = {key for key, item in self.inhibitors.items()
+                        if item[3] == "delay" and "sleep" in item[0].split(":")}
+        self.steam_participated = any(self.inhibitors[key][1].lower() == "steam" for key in self.waiting)
+        self.preparation_failed = False
+        self.preparation_flushed = False
+        self.timeout = GLib.timeout_add(NATIVE_HOST_ACK_MS, self.check_ack)
         self.notify(True)
         self.bus.flush(None, self.prepare_after_flush, token)
 
@@ -138,13 +224,15 @@ class LoginManager:
             return
         self.check_state()
         if self.pending == token:
-            # Keep Steam runnable while it handles the system sleep notification.
-            # This is a bounded grace period, not a claim that every game has saved.
-            self.preparation = GLib.timeout_add(NATIVE_PREPARE_MS, self.finish_preparation, token)
+            self.preparation_flushed = True
+            self.finish_preparation()
 
-    def finish_preparation(self, token):
-        self.preparation = None
-        if self.pending == token:
+    def finish_preparation(self):
+        self.check_state()
+        if (self.native and self.pending and self.preparation_flushed and self.steam_participated
+                and not self.waiting and not self.preparation_failed):
+            self.native = False
+            print("== login1: Steam acknowledged sleep preparation", flush=True)
             self.publish(self.native_ready)
         return False
 
@@ -186,9 +274,8 @@ class LoginManager:
                 self.bus.flush(None, self.finish_recovery, None)
             return
         self.pending = None
-        if self.preparation is not None:
-            GLib.source_remove(self.preparation)
-            self.preparation = None
+        self.native = False
+        self.waiting.clear()
         if self.timeout is not None:
             GLib.source_remove(self.timeout)
             self.timeout = None

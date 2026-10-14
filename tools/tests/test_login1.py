@@ -140,15 +140,23 @@ class SleepHandshakeTest(unittest.TestCase):
         staged.replace(self.dir / "steam-native-sleep")
         return token
 
+    def inhibitor(self, who="Steam", mode="delay", what="sleep"):
+        result, descriptors = self.bus.call_with_unix_fd_list_sync(
+            NAME, ROOT, IFACE, "Inhibit", GLib.Variant("(ssss)", (what, who, "Preparing sleep", mode)),
+            GLib.VariantType.new("(h)"), Gio.DBusCallFlags.NONE, 2000, None, None)
+        return descriptors.get(result.unpack()[0])
+
     def test_native_sleep_prepares_before_host_can_freeze(self):
-        started = time.monotonic()
+        descriptor = self.inhibitor()
         token = self.request_native()
         self.wait_for(lambda: self.signals == [True])
         self.assertTrue(self.preparing())
         self.assertFalse((self.dir / "steam-native-ready").exists())
         self.assertFalse((self.dir / "steam-sleep").exists())
+        time.sleep(1.7)
+        self.assertFalse((self.dir / "steam-native-ready").exists())
+        os.close(descriptor)
         self.wait_for(lambda: (self.dir / "steam-native-ready").exists())
-        self.assertGreaterEqual(time.monotonic() - started, 1.4)
         self.assertEqual((self.dir / "steam-native-ready").read_text().strip(), token)
         self.state(token, "paused")
         self.state(token, "awake")
@@ -156,10 +164,12 @@ class SleepHandshakeTest(unittest.TestCase):
         self.assertFalse(self.preparing())
 
     def test_return_during_native_preparation_cancels_late_pause(self):
+        descriptor = self.inhibitor()
         token = self.request_native()
         self.wait_for(lambda: self.signals == [True])
         self.state(token, "awake")
         self.wait_for(lambda: self.signals == [True, False])
+        os.close(descriptor)
         time.sleep(1.7)
         self.assertFalse((self.dir / "steam-native-ready").exists())
         self.assertFalse(self.preparing())
@@ -176,12 +186,19 @@ class SleepHandshakeTest(unittest.TestCase):
         self.assertEqual(self.signals, [])
 
     def test_second_native_sleep_cannot_receive_first_preparation_callback(self):
+        stale = self.inhibitor()
         first = self.request_native()
         self.wait_for(lambda: self.signals == [True])
         self.state(first, "awake")
         self.wait_for(lambda: self.signals == [True, False])
+        current = self.inhibitor()
         self.signals.clear()
         second = self.request_native("2" * 32)
+        self.wait_for(lambda: self.signals == [True])
+        os.close(stale)
+        time.sleep(0.1)
+        self.assertFalse((self.dir / "steam-native-ready").exists())
+        os.close(current)
         self.wait_for(lambda: (self.dir / "steam-native-ready").exists())
         self.assertEqual((self.dir / "steam-native-ready").read_text().strip(), second)
         self.state(second, "awake")
@@ -189,9 +206,61 @@ class SleepHandshakeTest(unittest.TestCase):
 
     def test_native_sleep_with_missing_host_recovers(self):
         self.request_native()
-        self.wait_for(lambda: self.signals == [True, False], timeout=9)
+        self.wait_for(lambda: self.signals == [True, False], timeout=14)
         self.assertFalse(self.preparing())
         self.assertFalse((self.dir / "steam-native-ready").exists())
+
+    def test_no_steam_acknowledgement_does_not_publish_ready(self):
+        descriptor = self.inhibitor(who="Other client")
+        token = self.request_native()
+        self.wait_for(lambda: self.signals == [True])
+        os.close(descriptor)
+        time.sleep(1.7)
+        self.assertFalse((self.dir / "steam-native-ready").exists())
+        self.state(token, "paused")  # host's ten-second fallback
+        self.state(token, "awake")
+        self.wait_for(lambda: self.signals == [True, False])
+
+    def test_block_inhibitor_is_not_a_steam_acknowledgement(self):
+        descriptor = self.inhibitor(mode="block")
+        token = self.request_native()
+        self.wait_for(lambda: self.signals == [True])
+        os.close(descriptor)
+        time.sleep(0.1)
+        self.assertFalse((self.dir / "steam-native-ready").exists())
+        self.state(token, "awake")
+        self.wait_for(lambda: self.signals == [True, False])
+
+    def test_delay_fd_duplicates_must_all_be_closed(self):
+        descriptor = self.inhibitor()
+        duplicate = os.dup(descriptor)
+        token = self.request_native()
+        self.wait_for(lambda: self.signals == [True])
+        os.close(descriptor)
+        time.sleep(0.1)
+        self.assertFalse((self.dir / "steam-native-ready").exists())
+        os.close(duplicate)
+        self.wait_for(lambda: (self.dir / "steam-native-ready").exists())
+        self.state(token, "awake")
+        self.wait_for(lambda: self.signals == [True, False])
+
+    def test_disconnected_steam_client_does_not_confirm_preparation(self):
+        original = self.bus
+        client = Gio.DBusConnection.new_for_address_sync(
+            os.environ["DBUS_SESSION_BUS_ADDRESS"],
+            Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+            None, None)
+        self.bus = client
+        descriptor = self.inhibitor()
+        self.bus = original
+        token = self.request_native()
+        self.wait_for(lambda: self.signals == [True])
+        client.close_sync(None)
+        os.close(descriptor)
+        time.sleep(0.2)
+        self.assertFalse((self.dir / "steam-native-ready").exists())
+        self.state(token, "awake")
+        self.wait_for(lambda: self.signals == [True, False])
 
     def test_host_resume_recovers_without_a_sleep_request(self):
         self.assertFalse(self.preparing())

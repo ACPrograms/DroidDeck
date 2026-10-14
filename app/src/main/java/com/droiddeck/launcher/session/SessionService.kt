@@ -1278,7 +1278,7 @@ class SessionService : Service() {
         }
         nativeSleepTimeout = timeout
         // A missing or stalled guest helper must not keep the device awake indefinitely.
-        mainHandler.postDelayed(timeout, 4000L)
+        mainHandler.postDelayed(timeout, 10000L)
     }
 
     private fun completeNativeSleep() {
