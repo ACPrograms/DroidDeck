@@ -97,8 +97,6 @@ Steam is signed out and both Touch controllers remain inactive. These block
 guest command diagnostics and actual game/controller/haptic validation, but do
 not block native rendering or independent engineering. No guard was bypassed.
 
-## Remaining stages
-
 ## Milestone 4: full build and deployment
 
 Full CI run 38641552327 passed at `e1d09612`, including APK compilation, tracking

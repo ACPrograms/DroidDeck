@@ -16,7 +16,6 @@ class QuestXrActivity : NativeActivity() {
     @Volatile private var steamVrStatus = SteamVr.Status.UNAVAILABLE
     override fun onCreate(savedInstanceState: Bundle?) {
         if (intent.getBooleanExtra("guest_surface", false)) {
-            require(CompositorHost.isStarted) { "Start a DroidDeck session before attaching XR" }
             intent.putExtra("surface_test", true)
             SessionService.resume(this)
         }
