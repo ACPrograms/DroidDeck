@@ -130,6 +130,56 @@ conversion on the headset.
 
 ## Remaining stages
 
+## Milestone 5: owned image and original render-pose protocol
+
+The opt-in `DROIDDECK_VR_PRESENT=questframes` presenter captures an owned RGBA
+side-by-side image and its original SteamVR render geometry. The driver retains
+each submitted `mHmdPose` and `mProjection` and composes the same eye-to-head rig
+configured at HMD activation. It does not substitute the newest tracked pose
+for an older image. The versioned 264-byte header and pixels travel together
+over a private, same-UID Unix socket. Acknowledgement means the receiver owns a
+complete CPU copy, not that an XR layer was displayed.
+
+The capture path holds `Present` until its Vulkan copy fence completes. It
+refuses missing, empty, errored or timed-out producer DMA fences, unsupported
+multiple layers and malformed render geometry. It never substitutes the old
+4 ms delay for synchronization. **Kernel producer-fence registration on the
+Quest graphics chain is not yet established**, and KGSL may reject the export
+entirely. Consequently this is an experimental correctness-first path, not a
+verified synchronization solution. The existing compatibility Vulkan layer
+still drops some imported semaphore waits; that also needs resolution before
+gameplay correctness can be claimed.
+
+With `frame_input=true`, the native frontend uses explicitly acquired GLES XR
+swapchain images, uploads receiver-owned pixels, and submits the captured
+per-eye poses/FOV. It omits stale images. `frame_verify=true` reads uploaded
+pixels back from the GPU and compares every byte. This mode is separate from
+the asynchronous Android Surface diagnostic. It is not yet the normal Quest
+Start flow and does not provide a zero-copy/performance-ready bridge.
+
+Host tests cover image/pose pairing, rotation and asymmetric projection math,
+latest-frame replacement, copying before acknowledgement, private socket
+ownership, restart/stale-socket recovery, replay rejection, malformed/truncated
+input and deadlines. Address/undefined-behavior sanitizer tests pass. A separate
+test confirms eight concurrent blocking presenters exit when Vulkan cannot
+initialize. Android test executables compile with NDK 27.2.12479018; the main
+native target and companion APK also compile. These are host/build results,
+not headset GPU evidence. The Quest subsequently disappeared from ADB, so the
+new path cannot yet be deployed or validated on-device.
+
+`tools/test_quest_frame_channel.py --adb <adb> --native-tests <directory>` runs
+the Android protocol test and a known-pattern sender under the companion's own
+UID. It checks the final source frame ID and GPU checksum. Add
+`--require-rendering` to additionally require sustained tracked projection.
+Without that option it proves only private image transport/GLES upload, not
+6DoF, SteamVR or games. It never enables the main app's protected Debugging tools.
+
+The failed full build at `7277386c` was a Debian archive HTTP package 404. CI now
+bootstraps CA certificates, uses HTTPS for compiler packages and retries
+downloads while retaining APT signature/package-hash verification.
+
+## Remaining stages
+
 - Android/Linux eye-image bridge and frame ownership/synchronization.
 - OpenVR driver IPC for predicted 6DoF head, per-eye views and tracked hands.
 - Real Touch input mapping and haptics returning through the bridge.

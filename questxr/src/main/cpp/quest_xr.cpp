@@ -23,6 +23,8 @@
 #include <cstddef>
 #include <ctime>
 #include "../../../../tools/vr/src/xr_tracking.h"
+#include "../../../../tools/vr/src/xr_frame_channel.h"
+#include "../../../../tools/vr/src/xr_frame_math.h"
 
 static void check(XrResult result, const char *operation) {
     if (XR_FAILED(result)) throw std::runtime_error(std::string(operation) + ": " + std::to_string(result));
@@ -102,6 +104,7 @@ public:
                 if (app_->destroyRequested) break;
                 pollTimeout = 0;
             }
+            receiveFrame();
             pollEvents();
             if (running_ && !app_->destroyRequested) frame();
         }
@@ -121,12 +124,17 @@ public:
         std::fprintf(file,
             "{\"frames\":%llu,\"rendered\":%llu,\"sessionState\":%d,\"headFlags\":%llu,"
             "\"headPosition\":[%.6f,%.6f,%.6f],\"controllersActive\":[%s,%s],"
-            "\"periodNs\":%lld,\"surfaceSwapchain\":%s,\"source\":\"%s\",\"guestFrames\":%lld,\"steamvrState\":%d,\"error\":\"%s\"}\n",
+            "\"periodNs\":%lld,\"surfaceSwapchain\":%s,\"source\":\"%s\",\"guestFrames\":%lld,\"steamvrState\":%d,"
+            "\"receivedFrames\":%llu,\"rejectedFrames\":%llu,\"uploadedFrames\":%llu,\"sourceFrameId\":%llu,"
+            "\"gpuVerifiedFrameId\":%llu,\"gpuChecksum\":%u,\"error\":\"%s\"}\n",
             (unsigned long long)frames_, (unsigned long long)rendered_, state_,
             (unsigned long long)head_.locationFlags,
             head_.pose.position.x, head_.pose.position.y, head_.pose.position.z,
             handActive_[0] ? "true" : "false", handActive_[1] ? "true" : "false",
-            (long long)period_, surfaceSupported_ ? "true" : "false", guestSurface_ ? "guest" : surfaceTest_ ? "surface" : "native", (long long)guestFrames_, steamvrState, error);
+            (long long)period_, surfaceSupported_ ? "true" : "false", frameInput_ ? "frames" : guestSurface_ ? "guest" : surfaceTest_ ? "surface" : "native",
+            (long long)guestFrames_, steamvrState, (unsigned long long)receiver_.Received(), (unsigned long long)receiver_.Rejected(),
+            (unsigned long long)uploadedFrames_, (unsigned long long)sourceHeader_.frame_id,
+            (unsigned long long)verifiedFrame_, gpuChecksum_, error);
         std::fclose(file);
         std::rename(temp.c_str(), path.c_str());
     }
@@ -153,6 +161,12 @@ private:
     bool running_ = false, exit_ = false, surfaceSupported_ = false, quitRequested_ = false;
     bool surfaceTest_ = false;
     bool guestSurface_ = false, guestAttached_ = false;
+    bool frameInput_ = false, verifyPixels_ = false;
+    XrFrameReceiver receiver_;
+    DroidDeckXrFrameHeader sourceHeader_{};
+    uint64_t uploadedFrames_ = 0, verifiedFrame_ = 0;
+    uint32_t gpuChecksum_ = 0;
+    GLuint sourceTexture_ = 0, sourceProgram_ = 0;
     jmethodID surfaceCallback_ = nullptr, frameCallback_ = nullptr;
     jmethodID statusCallback_ = nullptr;
     jobject androidJavaSurface_ = nullptr;
@@ -201,6 +215,12 @@ private:
         jstring extra = env_->NewStringUTF("surface_test");
         surfaceTest_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
         env_->DeleteLocalRef(extra);
+        extra = env_->NewStringUTF("frame_input");
+        frameInput_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
+        env_->DeleteLocalRef(extra);
+        extra = env_->NewStringUTF("frame_verify");
+        verifyPixels_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
+        env_->DeleteLocalRef(extra);
         extra = env_->NewStringUTF("guest_surface");
         guestSurface_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
         if (guestSurface_) {
@@ -210,6 +230,7 @@ private:
             statusCallback_ = env_->GetMethodID(activityClass, "onXrStatus", "()I");
             if (env_->ExceptionCheck()) { env_->ExceptionClear(); throw std::runtime_error("XR activity bridge methods unavailable"); }
         }
+        if (frameInput_ && (surfaceTest_ || guestSurface_)) throw std::runtime_error("Frame input cannot use an asynchronous surface projection");
         env_->DeleteLocalRef(extra); env_->DeleteLocalRef(intentClass);
         env_->DeleteLocalRef(intent); env_->DeleteLocalRef(activityClass);
         PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
@@ -292,6 +313,10 @@ private:
         if (surfaceTest_) initializeAndroidSurface(config);
         initializeGraphics();
         initializeTracking();
+        if (frameInput_) {
+            std::string filename = std::string(app_->activity->internalDataPath) + "/.wayland-rt/" DROIDDECK_XR_FRAME_SOCKET;
+            if (!receiver_.Start(filename)) throw std::runtime_error("XR frame receiver unavailable");
+        }
         __android_log_print(ANDROID_LOG_INFO, "DroidDeckXR", "initialized GLES; Android surface swapchain supported=%d", surfaceSupported_);
         health();
     }
@@ -526,6 +551,51 @@ private:
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr); glEnableVertexAttribArray(0);
         glGenFramebuffers(1, &framebuffer_);
+        if (frameInput_) {
+            vertex = shader(GL_VERTEX_SHADER,
+                "#version 300 es\nout vec2 uv; uniform float eye; void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=vec2(p.x*0.5+eye*0.5,1.0-p.y);gl_Position=vec4(p*2.0-1.0,0.0,1.0);}");
+            fragment = shader(GL_FRAGMENT_SHADER,
+                "#version 300 es\nprecision highp float; in vec2 uv; uniform sampler2D source; uniform float eye; out vec4 outputColor; void main(){float edge=0.5/float(textureSize(source,0).x);vec2 p=vec2(clamp(uv.x,eye*0.5+edge,(eye+1.0)*0.5-edge),uv.y);outputColor=texture(source,p);}");
+            sourceProgram_ = glCreateProgram(); glAttachShader(sourceProgram_, vertex); glAttachShader(sourceProgram_, fragment);
+            glLinkProgram(sourceProgram_); glDeleteShader(vertex); glDeleteShader(fragment);
+            glGetProgramiv(sourceProgram_, GL_LINK_STATUS, &linked);
+            if (!linked) throw std::runtime_error("Frame shader link failed");
+            glGenTextures(1, &sourceTexture_); glBindTexture(GL_TEXTURE_2D, sourceTexture_);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+    }
+
+    void receiveFrame() {
+        if (!frameInput_) return;
+        DroidDeckXrPixels frame;
+        if (!receiver_.Take(&frame)) return;
+        GLint maximum = 0; glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum);
+        if (frame.header.width > static_cast<uint32_t>(maximum) || frame.header.height > static_cast<uint32_t>(maximum))
+            throw std::runtime_error("XR source exceeds GPU texture limit");
+        glBindTexture(GL_TEXTURE_2D, sourceTexture_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, frame.header.width, frame.header.height, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
+        if (verifyPixels_) {
+            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sourceTexture_, 0);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                throw std::runtime_error("Frame readback framebuffer incomplete");
+            std::vector<unsigned char> readback(frame.header.bytes);
+            glReadPixels(0, 0, frame.header.width, frame.header.height, GL_RGBA, GL_UNSIGNED_BYTE, readback.data());
+            if (readback != frame.pixels) throw std::runtime_error("Frame GPU readback does not match owned pixels");
+            gpuChecksum_ = 2166136261u;
+            for (unsigned char value : readback) gpuChecksum_ = (gpuChecksum_ ^ value) * 16777619u;
+            verifiedFrame_ = frame.header.frame_id;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+        if (glGetError() != GL_NO_ERROR) throw std::runtime_error("Frame texture upload failed");
+        sourceHeader_ = frame.header;
+        uploadedFrames_++;
+        if (verifyPixels_ || uploadedFrames_ % 72 == 1) health();
     }
 
     void cube(const Matrix &camera, const XrPosef &pose, float size, float red, float green, float blue) {
@@ -543,7 +613,14 @@ private:
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, eye.depth);
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
             throw std::runtime_error("Incomplete eye framebuffer");
-        scene(view, eye.width, eye.height, 0);
+        if (frameInput_) {
+            glViewport(0, 0, eye.width, eye.height); glDisable(GL_DEPTH_TEST);
+            glUseProgram(sourceProgram_); glBindVertexArray(vertexArray_);
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, sourceTexture_);
+            glUniform1i(glGetUniformLocation(sourceProgram_, "source"), 0);
+            glUniform1f(glGetUniformLocation(sourceProgram_, "eye"), &eye == &eyes_[1] ? 1.f : 0.f);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        } else scene(view, eye.width, eye.height, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         if (glGetError() != GL_NO_ERROR) throw std::runtime_error("OpenGL render error");
         glFlush();
@@ -649,6 +726,15 @@ private:
         bool valid = frameState.shouldRender && (!surfaceTest_ || state_ == XR_SESSION_STATE_VISIBLE || state_ == XR_SESSION_STATE_FOCUSED) && count == 2 &&
             (viewState.viewStateFlags & (XR_VIEW_STATE_ORIENTATION_VALID_BIT | XR_VIEW_STATE_POSITION_VALID_BIT))
             == (XR_VIEW_STATE_ORIENTATION_VALID_BIT | XR_VIEW_STATE_POSITION_VALID_BIT);
+        if (frameInput_) {
+            valid = valid && sourceHeader_.frame_id && xr_frame_now() - sourceHeader_.captured_ns < 500000000LL;
+            if (valid) for (int eye = 0; eye < 2; eye++) {
+                auto source = xr_frame_view(sourceHeader_, eye);
+                views[eye].pose.orientation = {source.orientation[0], source.orientation[1], source.orientation[2], source.orientation[3]};
+                views[eye].pose.position = {source.position[0], source.position[1], source.position[2]};
+                views[eye].fov = {source.fov[0], source.fov[1], source.fov[2], source.fov[3]};
+            }
+        }
         if (valid && surfaceTest_) {
             if (!guestSurface_ && !eglMakeCurrent(display_, androidSurface_, androidSurface_, context_))
                 throw std::runtime_error("Surface context binding failed");
@@ -691,6 +777,7 @@ private:
     }
 
     void cleanup() {
+        receiver_.Stop();
         try { attachGuest(false); } catch (const std::exception &error) {
             __android_log_print(ANDROID_LOG_ERROR, "DroidDeckXR", "cleanup: %s", error.what());
         }
@@ -702,6 +789,7 @@ private:
         if (display_ != EGL_NO_DISPLAY && context_ != EGL_NO_CONTEXT) {
             glDeleteFramebuffers(1, &framebuffer_); glDeleteProgram(program_);
             glDeleteBuffers(1, &buffer_); glDeleteVertexArrays(1, &vertexArray_);
+            glDeleteTextures(1, &sourceTexture_); glDeleteProgram(sourceProgram_);
             for (auto &eye : eyes_) glDeleteRenderbuffers(1, &eye.depth);
         }
         if (androidSurface_ != EGL_NO_SURFACE) {

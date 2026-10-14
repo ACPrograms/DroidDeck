@@ -314,8 +314,11 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src public.ecr.aws/docker/library/debian:bullseye bash -c '
             set -euo pipefail
             printf "deb http://archive.debian.org/debian bullseye main\ndeb http://archive.debian.org/debian-security bullseye-security main\n" > /etc/apt/sources.list
-            apt-get -o Acquire::Check-Valid-Until=false update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gcc g++ gcc-multilib g++-multilib binutils >/dev/null
+            apt-get -o Acquire::Retries=3 -o Acquire::Check-Valid-Until=false update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends ca-certificates >/dev/null
+            sed -i "s|http://archive.debian.org|https://archive.debian.org|g" /etc/apt/sources.list
+            apt-get -o Acquire::Retries=3 -o Acquire::Check-Valid-Until=false update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends gcc g++ gcc-multilib g++-multilib binutils >/dev/null
             tools/linuxfs/build-x86-preloads.sh app/src/main/assets/linuxfs
           '
           sudo chown -R "$(id -u):$(id -g)" app/src/main/assets/linuxfs
@@ -400,6 +403,15 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -pthread tools/vr/tests/test_xr_tracking.cpp -o /tmp/test-xr-tracking
           /tmp/test-xr-tracking
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread tools/vr/tests/test_xr_frames.cpp -o /tmp/test-xr-frames
+          /tmp/test-xr-frames
+          cc -Itools/vr/third_party/wayland -c tools/vr/src/wayland_client_stub.c -o /tmp/test-wayland-stub.o
+          cc -Itools/vr/third_party/wayland -c app/src/main/cpp/waylandcomp/generated/xdg-shell-protocol.c -o /tmp/test-xdg-shell.o
+          g++ -std=c++17 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-missing-field-initializers -pthread -Ibuild/vr/include \
+            -Itools/vr/third_party/wayland -Iapp/src/main/cpp/waylandcomp/generated \
+            tools/vr/tests/test_presenter_shutdown.cpp tools/vr/src/presenter.cpp /tmp/test-wayland-stub.o /tmp/test-xdg-shell.o \
+            -ldl -o /tmp/test-presenter-shutdown
+          timeout 10 /tmp/test-presenter-shutdown
 
       - name: Rust toolchain for the store engines (aarch64-linux-android)
         id: rust
@@ -434,7 +446,7 @@ jobs:
           path: |
             app/.cxx
             app/build/intermediates/cxx
-          key: cxx-${{ env.NDK_VERSION }}-${{ hashFiles('app/src/main/cpp/**', 'questxr/src/main/cpp/**', 'tools/vr/src/xr_tracking.h') }}
+          key: cxx-${{ env.NDK_VERSION }}-${{ hashFiles('app/src/main/cpp/**', 'questxr/src/main/cpp/**', 'tools/vr/src/xr_*.h') }}
           restore-keys: |
             cxx-${{ env.NDK_VERSION }}-
 

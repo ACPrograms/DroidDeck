@@ -18,6 +18,7 @@
 #include "../../../app/src/main/cpp/waylandcomp/src/headpose_shm.h"
 #include "presenter.h"
 #include "xr_tracking_file.h"
+#include "xr_frame_math.h"
 
 #define DD_EXPORT extern "C" __attribute__((visibility("default")))
 
@@ -186,6 +187,10 @@ private:
 
 class DirectMode : public IVRDriverDirectModeComponent {
 public:
+    void ConfigureXr(const DroidDeckXrTracking &tracking) {
+        xrWidth_ = tracking.eyes[0].width * 2; xrHeight_ = tracking.eyes[0].height;
+        for (int eye = 0; eye < 2; eye++) eyeToHead_[eye] = XrEyeToHead(tracking.head, tracking.eyes[eye].pose);
+    }
     struct Set {
         SharedTextureHandle_t handles[3] = {};
         int fds[3] = {-1, -1, -1};
@@ -254,10 +259,18 @@ public:
     void SubmitLayer(const SubmitLayerPerEye_t (&eyes)[2]) override {
         layers_++;
         if (layerInFrame_++ == 0) {
+            frame_.render = {};
+            if (xrWidth_) {
+                frame_.render.magic = DROIDDECK_XR_FRAME_MAGIC; frame_.render.version = DROIDDECK_XR_FRAME_VERSION;
+                frame_.render.width = xrWidth_; frame_.render.height = xrHeight_;
+                frame_.render.bytes = xrWidth_ * xrHeight_ * 4; frame_.render.color_space = 1;
+            }
             for (int e = 0; e < 2; e++) {
                 frame_.texture[e] = eyes[e].hTexture;
                 frame_.bounds[e][0] = eyes[e].bounds.uMin; frame_.bounds[e][1] = eyes[e].bounds.vMin;
                 frame_.bounds[e][2] = eyes[e].bounds.uMax; frame_.bounds[e][3] = eyes[e].bounds.vMax;
+                std::memcpy(frame_.render.projection[e], eyes[e].mProjection.m, sizeof(eyes[e].mProjection.m));
+                xr_frame_eye_pose(frame_.render.eye_pose[e], eyes[e].mHmdPose.m, eyeToHead_[e].m);
             }
         }
         if (frames_ < 3)
@@ -268,6 +281,8 @@ public:
 
     void Present(SharedTextureHandle_t sync) override {
         frames_++;
+        frame_.render.frame_id = frames_; frame_.render.captured_ns = XrTrackingFile::Now();
+        frame_.layers = layerInFrame_;
         if (layerInFrame_) droiddeck::Presenter::Submit(frame_);
         if (layerInFrame_ != lastLayerCount_) {
             static int said;
@@ -308,6 +323,8 @@ private:
     uint64_t frames_ = 0, layers_ = 0;
     int layerInFrame_ = 0, lastLayerCount_ = -1;
     droiddeck::EyeFrame frame_{};
+    uint32_t xrWidth_ = 0, xrHeight_ = 0;
+    HmdMatrix34_t eyeToHead_[2]{};
 };
 
 struct PadState {
@@ -500,6 +517,7 @@ public:
         VRProperties()->SetFloatProperty(c, Prop_UserIpdMeters_Float, 0.064f);
         if (xrMode_) {
             VRServerDriverHost()->SetDisplayEyeToHead(id_, XrEyeToHead(xr.head, xr.eyes[0].pose), XrEyeToHead(xr.head, xr.eyes[1].pose));
+            dm_.ConfigureXr(xr);
             float distanceSquared = 0;
             for (int axis = 0; axis < 3; axis++) {
                 float difference = xr.eyes[0].pose.position[axis] - xr.eyes[1].pose.position[axis];
