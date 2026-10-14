@@ -2,6 +2,7 @@
 #include "xr_tracking.h"
 #include <cstring>
 #include <mutex>
+#include <string>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -10,11 +11,12 @@
 
 class XrTrackingFile {
 public:
+    explicit XrTrackingFile(const char *path = "/run/droiddeck/" DROIDDECK_XR_FILE) : path_(path) {}
     ~XrTrackingFile() { if (mapping_) munmap(mapping_, sizeof(*mapping_)); }
     bool Read(DroidDeckXrTracking *packet) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!mapping_) {
-            int descriptor = open("/run/droiddeck/" DROIDDECK_XR_FILE, O_RDONLY | O_CLOEXEC);
+            int descriptor = open(path_.c_str(), O_RDONLY | O_CLOEXEC);
             if (descriptor < 0) return false;
             struct stat status{};
             if (fstat(descriptor, &status) != 0 || status.st_size != sizeof(*mapping_)) {
@@ -48,4 +50,5 @@ public:
 private:
     DroidDeckXrTracking *mapping_ = nullptr;
     std::mutex mutex_;
+    std::string path_;
 };

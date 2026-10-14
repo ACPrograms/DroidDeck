@@ -88,6 +88,27 @@ HmdQuaternion_t QuatFromMatrix(const float m[9]) {
     return q;
 }
 
+HmdMatrix34_t XrPoseMatrix(const DroidDeckXrPose &pose) {
+    const float qx = pose.orientation[0], qy = pose.orientation[1], qz = pose.orientation[2], qw = pose.orientation[3];
+    HmdMatrix34_t matrix{};
+    matrix.m[0][0] = 1 - 2 * (qy * qy + qz * qz); matrix.m[0][1] = 2 * (qx * qy - qw * qz); matrix.m[0][2] = 2 * (qx * qz + qw * qy);
+    matrix.m[1][0] = 2 * (qx * qy + qw * qz); matrix.m[1][1] = 1 - 2 * (qx * qx + qz * qz); matrix.m[1][2] = 2 * (qy * qz - qw * qx);
+    matrix.m[2][0] = 2 * (qx * qz - qw * qy); matrix.m[2][1] = 2 * (qy * qz + qw * qx); matrix.m[2][2] = 1 - 2 * (qx * qx + qy * qy);
+    for (int axis = 0; axis < 3; axis++) matrix.m[axis][3] = pose.position[axis];
+    return matrix;
+}
+
+HmdMatrix34_t XrEyeToHead(const DroidDeckXrPose &head, const DroidDeckXrPose &eye) {
+    HmdMatrix34_t headMatrix = XrPoseMatrix(head), eyeMatrix = XrPoseMatrix(eye), result{};
+    for (int row = 0; row < 3; row++) {
+        for (int column = 0; column < 3; column++)
+            for (int inner = 0; inner < 3; inner++) result.m[row][column] += headMatrix.m[inner][row] * eyeMatrix.m[inner][column];
+        for (int inner = 0; inner < 3; inner++)
+            result.m[row][3] += headMatrix.m[inner][row] * (eyeMatrix.m[inner][3] - headMatrix.m[inner][3]);
+    }
+    return result;
+}
+
 class VirtualDisplay : public IVRVirtualDisplay {
 public:
     void Present(const PresentInfo_t *info, uint32_t size) override {
@@ -121,20 +142,29 @@ public:
     static void Start() {
         if (running_.exchange(true)) return;
         thread_ = std::thread([] {
+            XrTrackingFile xrFile;
             auto next = std::chrono::steady_clock::now() + kInterval;
             while (running_) {
+                auto interval = kInterval;
+                DroidDeckXrTracking xr;
+                if (xrFile.Read(&xr) && XrTrackingFile::Fresh(xr)) {
+                    interval = std::chrono::nanoseconds(xr.period_ns);
+                    auto tick = std::chrono::steady_clock::time_point(std::chrono::nanoseconds(xr.predicted_ns));
+                    auto now = std::chrono::steady_clock::now();
+                    if (xr.predicted_ns > 0 && tick > now && tick < now + interval * 3) next = tick;
+                }
                 auto announce = next - kLead;
                 std::this_thread::sleep_until(announce);
                 auto now = std::chrono::steady_clock::now();
-                double offset = std::chrono::duration<double>(announce - now).count();
+                double offset = std::chrono::duration<double>(next - now).count();
                 VRServerDriverHost()->VsyncEvent(offset);
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     last_ = next;
                 }
-                next += kInterval;
+                next += interval;
                 now = std::chrono::steady_clock::now();
-                while (next <= now) next += kInterval;
+                while (next <= now) next += interval;
             }
         });
     }
@@ -372,6 +402,7 @@ public:
     void DebugRequest(const char *, char *resp, uint32_t size) override { if (size) resp[0] = 0; }
 
     DriverPose_t GetPose() override { return pose_; }
+    VRInputComponentHandle_t HapticHandle() const { return haptic_; }
 
     void UpdateXr(const DroidDeckXrHand &hand) {
         if (id_ == k_unTrackedDeviceIndexInvalid) return;
@@ -389,6 +420,11 @@ public:
         VRDriverInput()->UpdateBooleanComponent(grip_, hand.active && hand.squeeze > 0.6f, 0);
         VRDriverInput()->UpdateScalarComponent(padX_, hand.active ? hand.stick[0] : 0, 0);
         VRDriverInput()->UpdateScalarComponent(padY_, hand.active ? hand.stick[1] : 0, 0);
+        VRDriverInput()->UpdateBooleanComponent(padClick_, hand.active && (hand.buttons & 3u), 0);
+        VRDriverInput()->UpdateBooleanComponent(padTouch_, hand.active &&
+            (std::abs(hand.stick[0]) + std::abs(hand.stick[1]) > 0.01f || (hand.buttons & 1u)), 0);
+        VRDriverInput()->UpdateBooleanComponent(menu_, hand.active && (hand.buttons & 12u), 0);
+        VRDriverInput()->UpdateBooleanComponent(system_, false, 0);
     }
 
     void Update(const HmdQuaternion_t &head, const PadState *pad) {
@@ -462,6 +498,15 @@ public:
         VRProperties()->SetStringProperty(c, Prop_ManufacturerName_String, "DroidDeck");
         VRProperties()->SetStringProperty(c, Prop_TrackingSystemName_String, "droiddeck");
         VRProperties()->SetFloatProperty(c, Prop_UserIpdMeters_Float, 0.064f);
+        if (xrMode_) {
+            VRServerDriverHost()->SetDisplayEyeToHead(id_, XrEyeToHead(xr.head, xr.eyes[0].pose), XrEyeToHead(xr.head, xr.eyes[1].pose));
+            float distanceSquared = 0;
+            for (int axis = 0; axis < 3; axis++) {
+                float difference = xr.eyes[0].pose.position[axis] - xr.eyes[1].pose.position[axis];
+                distanceSquared += difference * difference;
+            }
+            VRProperties()->SetFloatProperty(c, Prop_UserIpdMeters_Float, std::sqrt(distanceSquared));
+        }
         VRProperties()->SetFloatProperty(c, Prop_UserHeadToEyeDepthMeters_Float, 0.0f);
         VRProperties()->SetFloatProperty(c, Prop_DisplayFrequency_Float, hz);
         VRProperties()->SetFloatProperty(c, Prop_SecondsFromVsyncToPhotons_Float, 0.011f);
@@ -522,6 +567,7 @@ public:
             if (p.poseIsValid) {
                 p.qRotation = {xr.head.orientation[3], xr.head.orientation[0], xr.head.orientation[1], xr.head.orientation[2]};
                 for (int axis = 0; axis < 3; axis++) p.vecPosition[axis] = xr.head.position[axis];
+                if (xr.predicted_ns > 0) p.poseTimeOffset = (xr.predicted_ns - XrTrackingFile::Now()) / 1000000000.0;
             }
             return p;
         }
@@ -656,17 +702,49 @@ public:
         }
         return VRInitError_None;
     }
-    void Cleanup() override { VR_CLEANUP_SERVER_DRIVER_CONTEXT(); }
+    void Cleanup() override {
+        if (haptics_) { munmap(haptics_, sizeof(*haptics_)); haptics_ = nullptr; }
+        VR_CLEANUP_SERVER_DRIVER_CONTEXT();
+    }
     const char *const *GetInterfaceVersions() override { return k_InterfaceVersions; }
     void RunFrame() override {
         VREvent_t e;
-        while (VRServerDriverHost()->PollNextEvent(&e, sizeof(e))) {}
+        while (VRServerDriverHost()->PollNextEvent(&e, sizeof(e))) {
+            if (e.eventType == VREvent_Input_HapticVibration) {
+                const auto &pulse = e.data.hapticVibration;
+                int hand = pulse.componentHandle == left_.HapticHandle() ? 0 : pulse.componentHandle == right_.HapticHandle() ? 1 : -1;
+                if (hand >= 0) SendHaptic(hand, pulse);
+            }
+        }
     }
     bool ShouldBlockStandbyMode() override { return false; }
     void EnterStandby() override {}
     void LeaveStandby() override {}
 
 private:
+    DroidDeckXrHaptics *haptics_ = nullptr;
+    void SendHaptic(int hand, const VREvent_HapticVibration_t &pulse) {
+        if (!std::isfinite(pulse.fAmplitude) || !std::isfinite(pulse.fFrequency) || !std::isfinite(pulse.fDurationSeconds)) return;
+        if (!haptics_) {
+            int descriptor = open("/run/droiddeck/" DROIDDECK_XR_HAPTIC_FILE, O_RDWR | O_CLOEXEC);
+            if (descriptor < 0) return;
+            struct stat status{};
+            if (fstat(descriptor, &status) != 0 || status.st_size != sizeof(*haptics_)) { close(descriptor); return; }
+            void *mapping = mmap(nullptr, sizeof(*haptics_), PROT_READ | PROT_WRITE, MAP_SHARED, descriptor, 0);
+            close(descriptor);
+            if (mapping == MAP_FAILED) return;
+            haptics_ = static_cast<DroidDeckXrHaptics *>(mapping);
+        }
+        uint32_t sequence = __atomic_load_n(&haptics_->seq, __ATOMIC_RELAXED);
+        __atomic_store_n(&haptics_->seq, sequence | 1u, __ATOMIC_SEQ_CST);
+        __atomic_thread_fence(__ATOMIC_SEQ_CST);
+        auto &target = haptics_->hands[hand];
+        target.id++;
+        target.duration_ns = (int64_t)(std::clamp(pulse.fDurationSeconds, 0.001f, 1.f) * 1000000000.0);
+        target.amplitude = std::clamp(pulse.fAmplitude, 0.f, 1.f);
+        target.frequency = std::max(pulse.fFrequency, 0.f);
+        __atomic_store_n(&haptics_->seq, (sequence | 1u) + 1u, __ATOMIC_RELEASE);
+    }
     CardboardHmd hmd_;
     CardboardController left_{false}, right_{true};
 };

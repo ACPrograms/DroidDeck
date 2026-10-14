@@ -46,8 +46,6 @@ After declaring optional controller/hand capability and restarting VR Shell,
 the app launched. Automated tests should report launch blockers rather than
 treating a successful `am start` as successful rendering.
 
-## Remaining stages
-
 ## Milestone 2: Android projection surface and guest integration
 
 The Android Surface producer test passed repeatedly, including 1,079 submitted
@@ -74,6 +72,30 @@ Driver timing, eye-to-head transforms, input completeness, render-pose/image
 association and return haptics still need implementation/validation.
 
 The companion's release build now targets Android 14 and passes release lint.
+
+## Milestone 3: input, timing and return haptics
+
+The driver now supplies eye-to-head transforms and runtime-derived IPD, consumes
+Touch trigger/squeeze/stick/button state, reports predicted pose timestamps and
+paces vsync against converted OpenXR display timing. Vive-profile compatibility
+maps primary buttons to trackpad click and secondary/menu buttons to application
+menu. A versioned 64-byte feedback channel carries bounded driver haptic events
+back to OpenXR. Repeated surface tests still submit 1,079 stereo frames at 72 Hz.
+The native and Kotlin targets compile, release lint passes, and the ARM64 Linux
+driver links with no undefined symbols. IPC tests cover valid packets, odd
+seqlocks, version mismatch, stale/future timestamps, inactive state, excessive
+dimensions and truncated files; they run in CI as well.
+
+The first full integration CI APK compiled successfully but failed the ELF
+closure check because its system-library list omitted `libGLESv3.so`. The list
+now recognizes that Android system dependency. A subsequent full CI run is
+required before deployment of the integrated main-app build.
+
+On-device prerequisites: the installed app's Debugging tools toggle explicitly
+rejects agent UI activation (`PROTECTED_CONTROL`); it must be switched on-device.
+Steam is signed out and both Touch controllers remain inactive. These block
+guest command diagnostics and actual game/controller/haptic validation, but do
+not block native rendering or independent engineering. No guard was bypassed.
 
 ## Remaining stages
 

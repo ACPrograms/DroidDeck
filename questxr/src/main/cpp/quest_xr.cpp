@@ -148,6 +148,8 @@ private:
     jmethodID surfaceCallback_ = nullptr, frameCallback_ = nullptr;
     jobject androidJavaSurface_ = nullptr;
     DroidDeckXrTracking *tracking_ = nullptr;
+    DroidDeckXrHaptics *haptics_ = nullptr;
+    uint64_t lastPulse_[2]{};
     XrSwapchain androidSwapchain_ = XR_NULL_HANDLE;
     ANativeWindow *androidWindow_ = nullptr;
     EGLSurface androidSurface_ = EGL_NO_SURFACE;
@@ -380,16 +382,22 @@ private:
         std::string directory = std::string(app_->activity->internalDataPath) + "/.wayland-rt";
         if (mkdir(directory.c_str(), 0700) != 0 && errno != EEXIST)
             throw std::runtime_error("XR tracking directory unavailable");
-        std::string filename = directory + "/" DROIDDECK_XR_FILE;
-        int descriptor = open(filename.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
-        if (descriptor < 0) throw std::runtime_error("XR tracking file unavailable");
-        if (ftruncate(descriptor, sizeof(DroidDeckXrTracking)) != 0) {
-            close(descriptor); throw std::runtime_error("XR tracking file size failed");
-        }
-        void *mapping = mmap(nullptr, sizeof(DroidDeckXrTracking), PROT_READ | PROT_WRITE, MAP_SHARED, descriptor, 0);
-        close(descriptor);
-        if (mapping == MAP_FAILED) throw std::runtime_error("XR tracking map failed");
-        tracking_ = static_cast<DroidDeckXrTracking *>(mapping);
+        auto mapFile = [&](const char *name, size_t size) {
+            std::string filename = directory + "/" + name;
+            int descriptor = open(filename.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+            if (descriptor < 0) throw std::runtime_error("XR IPC file unavailable");
+            if (ftruncate(descriptor, size) != 0) {
+                close(descriptor); throw std::runtime_error("XR IPC file size failed");
+            }
+            void *mapping = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, descriptor, 0);
+            close(descriptor);
+            if (mapping == MAP_FAILED) throw std::runtime_error("XR IPC map failed");
+            return mapping;
+        };
+        tracking_ = static_cast<DroidDeckXrTracking *>(mapFile(DROIDDECK_XR_FILE, sizeof(DroidDeckXrTracking)));
+        haptics_ = static_cast<DroidDeckXrHaptics *>(mapFile(DROIDDECK_XR_HAPTIC_FILE, sizeof(DroidDeckXrHaptics)));
+        haptics_->magic = DROIDDECK_XR_HAPTIC_MAGIC; haptics_->version = DROIDDECK_XR_VERSION;
+        for (int hand = 0; hand < 2; hand++) lastPulse_[hand] = haptics_->hands[hand].id;
     }
 
     static DroidDeckXrPose posePacket(const XrPosef &pose, XrSpaceLocationFlags flags) {
@@ -440,6 +448,30 @@ private:
             env_->ExceptionDescribe(); env_->ExceptionClear(); throw std::runtime_error("Guest surface handshake failed");
         }
         guestAttached_ = attach;
+    }
+
+    void pollHaptics() {
+        if (!haptics_) return;
+        DroidDeckXrHaptics packet{};
+        uint32_t sequence = __atomic_load_n(&haptics_->seq, __ATOMIC_ACQUIRE);
+        if (sequence & 1u) return;
+        std::memcpy(&packet, haptics_, sizeof(packet));
+        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+        if (__atomic_load_n(&haptics_->seq, __ATOMIC_RELAXED) != sequence
+            || packet.magic != DROIDDECK_XR_HAPTIC_MAGIC || packet.version != DROIDDECK_XR_VERSION) return;
+        for (int hand = 0; hand < 2; hand++) {
+            const auto &pulse = packet.hands[hand];
+            if (pulse.id == lastPulse_[hand]) continue;
+            lastPulse_[hand] = pulse.id;
+            if (state_ != XR_SESSION_STATE_FOCUSED || !handActive_[hand]
+                || pulse.duration_ns < 1000000 || pulse.duration_ns > 1000000000
+                || !std::isfinite(pulse.amplitude) || pulse.amplitude < 0 || pulse.amplitude > 1
+                || !std::isfinite(pulse.frequency) || pulse.frequency < 0) continue;
+            XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO}; info.action = vibration_; info.subactionPath = hands_[hand];
+            XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
+            vibration.duration = pulse.duration_ns; vibration.amplitude = pulse.amplitude; vibration.frequency = pulse.frequency;
+            check(xrApplyHapticFeedback(session_, &info, reinterpret_cast<XrHapticBaseHeader *>(&vibration)), "guest haptics");
+        }
     }
 
     GLuint shader(GLenum type, const char *text) {
@@ -577,6 +609,7 @@ private:
                 pressed_[hand] = pressed;
             }
         } else handActive_[0] = handActive_[1] = false;
+        pollHaptics();
         XrViewLocateInfo locate{XR_TYPE_VIEW_LOCATE_INFO}; locate.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
         locate.displayTime = frameState.predictedDisplayTime; locate.space = world_;
         XrViewState viewState{XR_TYPE_VIEW_STATE}; uint32_t count = 0;
@@ -641,6 +674,7 @@ private:
             __atomic_store_n(&tracking_->active, 0u, __ATOMIC_RELEASE);
             munmap(tracking_, sizeof(DroidDeckXrTracking));
         }
+        if (haptics_) munmap(haptics_, sizeof(DroidDeckXrHaptics));
         if (display_ != EGL_NO_DISPLAY && context_ != EGL_NO_CONTEXT) {
             glDeleteFramebuffers(1, &framebuffer_); glDeleteProgram(program_);
             glDeleteBuffers(1, &buffer_); glDeleteVertexArrays(1, &vertexArray_);

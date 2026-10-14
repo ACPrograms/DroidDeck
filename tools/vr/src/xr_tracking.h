@@ -32,3 +32,19 @@ struct DroidDeckXrTracking {
 };
 
 static_assert(sizeof(DroidDeckXrTracking) == 296, "XR tracking IPC layout");
+
+#define DROIDDECK_XR_HAPTIC_MAGIC 0x48584444u
+#define DROIDDECK_XR_HAPTIC_FILE "droiddeck-xr-haptics"
+
+struct DroidDeckXrPulse {
+    uint64_t id;
+    int64_t duration_ns;
+    float amplitude, frequency;
+};
+
+struct DroidDeckXrHaptics {
+    uint32_t magic, version, seq, reserved;
+    DroidDeckXrPulse hands[2];
+};
+
+static_assert(sizeof(DroidDeckXrHaptics) == 64, "XR haptics IPC layout");
