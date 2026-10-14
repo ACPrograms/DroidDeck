@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DroidDeck"
 include ':app'
+include ':questxr'

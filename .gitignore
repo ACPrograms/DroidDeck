@@ -33,3 +33,5 @@ __pycache__/
 .signing.env
 app/src/main/assets/directaudio/
 /tools/vr/out/
+/questxr-build.log
+/questxr-validation/
