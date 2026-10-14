@@ -990,6 +990,8 @@ BUSCONF
       fi
       [ "${BL_VKBRIDGE_CEF_LOG:-0}" = 1 ] && _bl_cef+=(-cef-enable-logging=stderr -cef-v=1)
       [ -n "${BL_VKBRIDGE_CEF_EXTRA:-}" ] && read -r -a _bl_cef_extra <<<"$BL_VKBRIDGE_CEF_EXTRA" && _bl_cef+=("${_bl_cef_extra[@]}")
+      export BL_WEBHELPER_ARGS="${BL_VKBRIDGE_WEBHELPER_ARGS:-stock}"
+      echo "== steam: web helper process layout: $BL_WEBHELPER_ARGS (Mali bridge)"
     fi
     if [ "${BL_STEAM_UI:-}" != desktop ]; then
       if [ "$steam_x64" = 0 ] || [ "${BL_X64_DECK:-1}" != 0 ]; then
