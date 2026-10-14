@@ -898,7 +898,10 @@ static void take_dmabuf(struct surface *s, struct dmabuf_buffer *b, struct wl_re
      * the display layer draws on screen while the counter sat at 0.0 fps and 1000.0 ms. */
     if (s == g_hud_surface) {
         g_hud_alive_ns = now_ns();
-        if (!repeat) { g_hud_last_ns = g_hud_alive_ns; g_hud_fresh = 1; droiddeck_on_game_frame(); }
+        if (!repeat) { g_hud_last_ns = g_hud_alive_ns; g_hud_fresh = 1; droiddeck_on_game_frame();
+            droiddeck_log("dd-source", "recv=%lld tick=%lld buffer=%u", (long long)g_hud_last_ns,
+                          (long long)g_tick_vsync_ns, wl_resource_get_id(buffer));
+        }
     }
 }
 
@@ -2337,6 +2340,7 @@ static void on_vsync(int64_t frame_time_ns) {
     }
     g_last_vsync_ns = now;
     g_tick_vsync_ns = frame_time_ns;
+    droiddeck_log("dd-vtick", "frame=%lld dispatch=%lld", (long long)frame_time_ns, (long long)now);
     /* The app's surface may have been replaced or taken away since the last frame: apply that now
      * (the app never waits for us), and redraw the scene onto a new one. */
     if (vkp_apply_window_request()) g_dirty = 1;
