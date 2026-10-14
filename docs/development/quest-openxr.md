@@ -107,12 +107,12 @@ certificate matched the expected release certificate. Updating the standard
 previous APK is retained locally under ignored `build/installed-original.apk`.
 No uninstall or data reset was performed.
 
-The latest source adds the Quest-specific SteamVR Start flow, ongoing SteamVR
+At that stage, source added the Quest-specific SteamVR Start flow, ongoing SteamVR
 status telemetry, a clean native Back/exit path, and bounded Android event
 draining. It removes UI-thread waits from native surface handoff to avoid a
 NativeActivity destruction deadlock, and restores proximity after tests unless
-`--keep-awake` is specified. These changes compile locally but require a fresh
-integrated APK before their device validation.
+`--keep-awake` is specified. These changes compiled locally and subsequently
+shipped in the integrated APK described in the final build evidence.
 
 Later device runs stopped rendering because the OS displayed **Finding position
 in room**, saying it cannot detect headset movement. Logs show the XR session
@@ -212,6 +212,28 @@ as out-of-range and rejects nonfinite or non-unit poses. The importer requests
 Vulkan 1.2 for its core image-format-list use. Focused Kotlin tests and the new
 validation classifier tests pass. The broad Linux suite had one unrelated
 AppImage log-tail failure under WSL; the full CI suite passed at `040d31c1`.
+
+### Final build and requested pause
+
+Full CI run 38652176155 passed at `2ef2d4b5`, including the expanded IPC tests,
+Kotlin/Python tests and ELF checks. The APK was downloaded, release-signed with
+the external key and installed over the standard package with `adb install -r`.
+The device provider confirms `remote clean · feat/quest-openxr at 2ef2d4b`,
+version 0.4.0, retained r9 runtime and an idle session. MainActivity launches
+without an AndroidRuntime error. No uninstall or data reset was used.
+
+A final cosmetic shader-variable cleanup compiled for both native targets and
+was deployed in the companion. Its repeated device test passed both Android IPC
+executables and the known-pattern GPU upload: 144 received, zero rejected,
+126 uploaded, source/GPU-verified ID 144 and checksum 1815165381. The earlier
+interrupted repeat remains a recorded failure; sustained tracked rendering and
+guest SteamVR remain unverified. The unrelated AppImage test suite passed all
+eight cases on a focused rerun without code changes.
+
+The diagnostic companion is stopped, simulated proximity is restored to far,
+and the USB stay-awake setting introduced during testing is restored to off.
+The user requested pausing the goal until they can help with Steam sign-in,
+on-device Debugging tools, tracking and controllers. The goal is not complete.
 
 ## Remaining stages
 

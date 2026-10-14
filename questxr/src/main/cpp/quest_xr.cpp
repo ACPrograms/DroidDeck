@@ -561,9 +561,9 @@ private:
         glGenFramebuffers(1, &framebuffer_);
         if (frameInput_) {
             vertex = shader(GL_VERTEX_SHADER,
-                "#version 300 es\nout vec2 uv; uniform float eye; void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=vec2(p.x*0.5+eye*0.5,1.0-p.y);gl_Position=vec4(p*2.0-1.0,0.0,1.0);}");
+                "#version 300 es\nout vec2 uv; uniform float eye; void main(){vec2 coordinate=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));uv=vec2(coordinate.x*0.5+eye*0.5,1.0-coordinate.y);gl_Position=vec4(coordinate*2.0-1.0,0.0,1.0);}");
             fragment = shader(GL_FRAGMENT_SHADER,
-                "#version 300 es\nprecision highp float; in vec2 uv; uniform sampler2D source; uniform float eye; out vec4 outputColor; void main(){float edge=0.5/float(textureSize(source,0).x);vec2 p=vec2(clamp(uv.x,eye*0.5+edge,(eye+1.0)*0.5-edge),uv.y);outputColor=texture(source,p);}");
+                "#version 300 es\nprecision highp float; in vec2 uv; uniform sampler2D source; uniform float eye; out vec4 outputColor; void main(){float edge=0.5/float(textureSize(source,0).x);vec2 coordinate=vec2(clamp(uv.x,eye*0.5+edge,(eye+1.0)*0.5-edge),uv.y);outputColor=texture(source,coordinate);}");
             sourceProgram_ = glCreateProgram(); glAttachShader(sourceProgram_, vertex); glAttachShader(sourceProgram_, fragment);
             glLinkProgram(sourceProgram_); glDeleteShader(vertex); glDeleteShader(fragment);
             glGetProgramiv(sourceProgram_, GL_LINK_STATUS, &linked);
