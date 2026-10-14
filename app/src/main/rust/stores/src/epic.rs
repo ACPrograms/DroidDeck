@@ -1,15 +1,14 @@
 //! Epic Games Store download adapter for the shared fetch core (`crate::fetch_core`).
 //!
-//! Scope = the chunk-fetch inner loop of `EpicDownloadManager.java` (the fixed 8-thread pool that
-//! fills `<installDir>/.chunks/<GUID>`), nothing more. The Java manager still parses the manifest
-//! API JSON, downloads the manifest, selects files (install tags), runs the delta/verify pass,
-//! assembles files from the chunk cache and does every post-install step. The adapter re-parses
-//! the same manifest bytes, rebuilds the same chunk plan for the pending files Java hands it,
-//! skips chunks already in the cache and writes verified chunks with the same `.part` + rename
-//! protocol, so the on-disk state is identical whichever engine ran (see
-//! Bannerlator's `docs/RUST_EPIC_PARITY.md` for the rule-by-rule table).
+//! Production installs use [`adaptive`]: the Java manifest/delta pass supplies a versioned
+//! snapshot, the shared pure storage schedule selects an ordered lookahead, and fetch_core
+//! runs concurrently with verified staged assembly. Old outputs survive until atomic swap;
+//! a synchronous JNI callback marks the sidecar updating before the first replacement.
+//! Legacy manifest/batch APIs remain available. A missing library uses the bounded Java
+//! installer; native plan/runtime failures never silently switch engines.
 //!
 //! Submodules:
+//! - [`adaptive`] — budget planner and bounded overlapping fetch/assembly coordinator.
 //! - [`manifest`] — ChunksV4 binary manifest + legacy JSON manifest parsers (1:1 with the Java
 //!   `parseManifest` / `parseJsonManifest`).
 //! - [`plan`] — install-tag selection, unique-chunk plan, chunk paths / CDN URLs.
@@ -26,6 +25,7 @@
 //! carries the same licence (see `Cargo.toml`).
 
 pub mod assemble;
+pub mod adaptive;
 pub mod chunk;
 pub mod driver;
 pub mod jni;

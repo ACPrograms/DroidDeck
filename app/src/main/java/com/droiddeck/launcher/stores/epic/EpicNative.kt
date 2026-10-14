@@ -9,18 +9,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * The native batch APIs for Epic in `libdroiddeckstores.so`: [run] fills the chunk cache with
- * verified, decompressed chunks for the files the manager says are pending, [assemble] writes those
- * files from the cache. The production installer intentionally uses one serial Java
- * chunk-to-file path instead, so cache bounds and resume behavior do not depend on native
- * availability. These APIs remain for callers that explicitly need batch fetch/assembly.
+ * [installAdaptive] is the production native Epic fetch/assembly engine. Its snapshot is the
+ * manager's delta-selected pending files, verified cache and old output sizes. Rust chooses a
+ * storage-safe ordered lookahead, overlaps fetch_core with staged assembly and calls beforeSwap
+ * before the first verified replacement. A loaded-engine error fails explicitly.
  *
  * The cache is `<installDir>/.chunks` when `chunkCacheDir` is `""`, else the scratch folder given -
- * the app's own cache when the game installs to a card, where the assembler drops each chunk right
- * after its last use and the folder at the end. Both calls take the same value for one install.
+ * the app's own cache when the game installs to a card. Adaptive installs release last-use chunks
+ * in both layouts and remove the cache on success. [run]/[assemble] are legacy batch APIs.
  *
- * Both block while polling [AtomicBoolean] `cancel` every 250 ms: on cancel they flip the native
- * flag, wait up to 5 s for the run to wind down, then return.
+ * Cancellation flips the native flag; the native handle is joined before returning, so no
+ * cache/staging writer survives completion or cache cleanup.
  */
 object EpicNative {
     private const val TAG = "EpicNative"
@@ -36,6 +35,18 @@ object EpicNative {
         /** Terminal. Fetch: bytes credited; assembly: bytes written. */
         fun onComplete(success: Boolean, error: String, bytes: Long)
     }
+
+    interface InstallListener : Listener {
+        /** Synchronous approval before the first verified atomic replacement. False aborts. */
+        fun beforeSwap(): Boolean
+    }
+
+    /** One native budgeted fetch/assembly run. A loaded-engine failure is never a Java retry. */
+    @JvmStatic
+    fun installAdaptive(request: String, cancel: AtomicBoolean, listener: InstallListener): Result =
+        drive("nativeInstallAdaptive", cancel, listener, strict = true) { inner ->
+            nativeInstallAdaptive(request, inner)
+        }
 
     /** Outcome of a run. `started == false`: nothing happened on disk, the caller runs its own loop. */
     class Result(
@@ -59,13 +70,14 @@ object EpicNative {
     fun assemble(manifest: ByteArray, installDir: String, chunkCacheDir: String, fileIdx: IntArray, cancel: AtomicBoolean?, listener: Listener): Result =
         drive("nativeAssemble", cancel, listener) { inner -> nativeAssemble(manifest, installDir, chunkCacheDir, fileIdx, inner) }
 
-    private fun drive(what: String, cancel: AtomicBoolean?, listener: Listener, start: (Listener) -> Long): Result {
+    private fun drive(what: String, cancel: AtomicBoolean?, listener: Listener, strict: Boolean = false, start: (Listener) -> Long): Result {
         if (!StoresNative.ensureLoaded()) return Result(false, false, false, "engine not built", 0L, 0, 0)
         val latch = CountDownLatch(1)
         val completion = AtomicReference<Completion?>(null)
         val doneRef = AtomicReference(0)
         val totalRef = AtomicReference(0)
-        val inner = object : Listener {
+        val inner = object : InstallListener {
+            override fun beforeSwap(): Boolean = (listener as? InstallListener)?.beforeSwap() ?: false
             override fun onPlan(chunksTotal: Int, bytesTotal: Long, chunkDir: String) { totalRef.set(chunksTotal); listener.onPlan(chunksTotal, bytesTotal, chunkDir) }
             override fun onProgress(bytesDone: Long, bytesTotal: Long, done: Int, total: Int) { doneRef.set(done); totalRef.set(total); listener.onProgress(bytesDone, bytesTotal, done, total) }
             override fun onLog(line: String) = listener.onLog(line)
@@ -78,21 +90,26 @@ object EpicNative {
         val handle: Long = try {
             start(inner)
         } catch (t: Throwable) {
-            Log.w(TAG, "engine unavailable: ${t.javaClass.simpleName}: ${t.message}")
-            return Result(false, false, false, "$what: ${t.javaClass.simpleName}", 0L, 0, 0)
+            Log.w(TAG, "${if (strict) "engine start failed (no fallback)" else "engine unavailable"}: ${t.javaClass.simpleName}: ${t.message}")
+            return Result(strict, false, false, "$what: ${t.javaClass.simpleName}: ${t.message}", 0L, 0, 0)
         }
-        if (handle == 0L) return Result(false, false, false, completion.get()?.error ?: "not started", 0L, 0, totalRef.get())
+        if (handle == 0L) return Result(strict, false, false, completion.get()?.error ?: "not started", 0L, 0, totalRef.get())
         var cancelSent = false
         try {
             while (!latch.await(250, TimeUnit.MILLISECONDS)) {
                 if (cancel != null && cancel.get()) {
                     nativeCancel(handle)
                     cancelSent = true
-                    latch.await(5, TimeUnit.SECONDS)
+                    if (strict) {
+                        while (!latch.await(250, TimeUnit.MILLISECONDS)) { }
+                    } else {
+                        latch.await(5, TimeUnit.SECONDS)
+                    }
                     break
                 }
             }
         } finally {
+            if (completion.get() == null) nativeCancel(handle)
             nativeRelease(handle)
         }
         val c = completion.get()
@@ -100,6 +117,9 @@ object EpicNative {
         val error = when { cancelSent -> "cancelled"; c == null -> "no completion"; else -> c.error }
         return Result(true, success, cancelSent, error, c?.bytes ?: 0L, doneRef.get(), totalRef.get())
     }
+
+    @JvmStatic
+    private external fun nativeInstallAdaptive(request: String, listener: Listener): Long
 
     @JvmStatic
     private external fun nativeStart(
