@@ -27,7 +27,6 @@ class SessionVisibilityPolicyTest {
     }
 
     @Test fun startedButUnfocusedMultiwindowActivityRemainsVisible() {
-        // SessionActivity reports onStart/onStop; a focus-only onPause does not mark it hidden.
         assertFalse(SessionVisibilityPolicy.isHidden(true, true, true, true))
     }
 
