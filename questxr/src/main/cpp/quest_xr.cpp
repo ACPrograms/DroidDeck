@@ -2,7 +2,9 @@
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <android/log.h>
+#include <android/native_window_jni.h>
 #include <android_native_app_glue.h>
+#include <time.h>
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 #include <array>
@@ -13,6 +15,14 @@
 #include <cstring>
 #include <cmath>
 #include <chrono>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstddef>
+#include <ctime>
+#include "../../../../tools/vr/src/xr_tracking.h"
 
 static void check(XrResult result, const char *operation) {
     if (XR_FAILED(result)) throw std::runtime_error(std::string(operation) + ": " + std::to_string(result));
@@ -103,12 +113,12 @@ public:
         std::fprintf(file,
             "{\"frames\":%llu,\"rendered\":%llu,\"sessionState\":%d,\"headFlags\":%llu,"
             "\"headPosition\":[%.6f,%.6f,%.6f],\"controllersActive\":[%s,%s],"
-            "\"periodNs\":%lld,\"surfaceSwapchain\":%s,\"error\":\"%s\"}\n",
+            "\"periodNs\":%lld,\"surfaceSwapchain\":%s,\"source\":\"%s\",\"guestFrames\":%lld,\"error\":\"%s\"}\n",
             (unsigned long long)frames_, (unsigned long long)rendered_, state_,
             (unsigned long long)head_.locationFlags,
             head_.pose.position.x, head_.pose.position.y, head_.pose.position.z,
             handActive_[0] ? "true" : "false", handActive_[1] ? "true" : "false",
-            (long long)period_, surfaceSupported_ ? "true" : "false", error);
+            (long long)period_, surfaceSupported_ ? "true" : "false", guestSurface_ ? "guest" : surfaceTest_ ? "surface" : "native", (long long)guestFrames_, error);
         std::fclose(file);
         std::rename(temp.c_str(), path.c_str());
     }
@@ -122,14 +132,28 @@ private:
     XrSpace world_ = XR_NULL_HANDLE, view_ = XR_NULL_HANDLE;
     XrActionSet actions_ = XR_NULL_HANDLE;
     XrAction grip_ = XR_NULL_HANDLE, trigger_ = XR_NULL_HANDLE, vibration_ = XR_NULL_HANDLE;
+    XrAction squeeze_ = XR_NULL_HANDLE, stick_ = XR_NULL_HANDLE, stickClick_ = XR_NULL_HANDLE;
+    XrAction primary_ = XR_NULL_HANDLE, secondary_ = XR_NULL_HANDLE, menu_ = XR_NULL_HANDLE;
+    DroidDeckXrHand inputs_[2]{};
+    PFN_xrConvertTimeToTimespecTimeKHR convertTime_ = nullptr;
+    bool timespecSupported_ = false;
     XrPath hands_[2]{};
     XrSpace handSpaces_[2]{};
     XrSpaceLocation head_{XR_TYPE_SPACE_LOCATION};
     XrSpaceLocation handLocations_[2]{{XR_TYPE_SPACE_LOCATION}, {XR_TYPE_SPACE_LOCATION}};
     bool handActive_[2]{}, pressed_[2]{};
     bool running_ = false, exit_ = false, surfaceSupported_ = false;
+    bool surfaceTest_ = false;
+    bool guestSurface_ = false, guestAttached_ = false;
+    jmethodID surfaceCallback_ = nullptr, frameCallback_ = nullptr;
+    jobject androidJavaSurface_ = nullptr;
+    DroidDeckXrTracking *tracking_ = nullptr;
+    XrSwapchain androidSwapchain_ = XR_NULL_HANDLE;
+    ANativeWindow *androidWindow_ = nullptr;
+    EGLSurface androidSurface_ = EGL_NO_SURFACE;
     XrSessionState state_ = XR_SESSION_STATE_UNKNOWN;
     uint64_t frames_ = 0, rendered_ = 0;
+    int64_t guestFrames_ = 0;
     XrDuration period_ = 0;
     EGLDisplay display_ = EGL_NO_DISPLAY;
     EGLContext context_ = EGL_NO_CONTEXT;
@@ -146,6 +170,24 @@ private:
 
     void initialize() {
         app_->activity->vm->AttachCurrentThread(&env_, nullptr);
+        jclass activityClass = env_->GetObjectClass(app_->activity->clazz);
+        jmethodID getIntent = env_->GetMethodID(activityClass, "getIntent", "()Landroid/content/Intent;");
+        jobject intent = env_->CallObjectMethod(app_->activity->clazz, getIntent);
+        jclass intentClass = env_->GetObjectClass(intent);
+        jmethodID getBoolean = env_->GetMethodID(intentClass, "getBooleanExtra", "(Ljava/lang/String;Z)Z");
+        jstring extra = env_->NewStringUTF("surface_test");
+        surfaceTest_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
+        env_->DeleteLocalRef(extra);
+        extra = env_->NewStringUTF("guest_surface");
+        guestSurface_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
+        if (guestSurface_) {
+            surfaceTest_ = true;
+            surfaceCallback_ = env_->GetMethodID(activityClass, "onXrSurface", "(Landroid/view/Surface;II)V");
+            frameCallback_ = env_->GetMethodID(activityClass, "onXrFrame", "(J)J");
+            if (env_->ExceptionCheck()) { env_->ExceptionClear(); throw std::runtime_error("XR activity bridge methods unavailable"); }
+        }
+        env_->DeleteLocalRef(extra); env_->DeleteLocalRef(intentClass);
+        env_->DeleteLocalRef(intent); env_->DeleteLocalRef(activityClass);
         PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
         check(xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR",
             reinterpret_cast<PFN_xrVoidFunction *>(&initializeLoader)), "loader init entrypoint");
@@ -160,8 +202,13 @@ private:
         for (const auto &extension : extensions) {
             if (!std::strcmp(extension.extensionName, XR_KHR_ANDROID_SURFACE_SWAPCHAIN_EXTENSION_NAME))
                 surfaceSupported_ = true;
+            if (!std::strcmp(extension.extensionName, XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME))
+                timespecSupported_ = true;
         }
-        const char *enabled[] = {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME, XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
+        if (surfaceTest_ && !surfaceSupported_) throw std::runtime_error("Android surface swapchains unavailable");
+        std::vector<const char *> enabled{XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME, XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
+        if (surfaceSupported_) enabled.push_back(XR_KHR_ANDROID_SURFACE_SWAPCHAIN_EXTENSION_NAME);
+        if (timespecSupported_) enabled.push_back(XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME);
         XrInstanceCreateInfoAndroidKHR androidInfo{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
         androidInfo.applicationVM = app_->activity->vm;
         androidInfo.applicationActivity = app_->activity->clazz;
@@ -170,9 +217,11 @@ private:
         std::strcpy(create.applicationInfo.applicationName, "DroidDeck XR");
         create.applicationInfo.applicationVersion = 1;
         create.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
-        create.enabledExtensionCount = 2;
-        create.enabledExtensionNames = enabled;
+        create.enabledExtensionCount = enabled.size();
+        create.enabledExtensionNames = enabled.data();
         check(xrCreateInstance(&create, &instance_), "xrCreateInstance");
+        if (timespecSupported_) check(xrGetInstanceProcAddr(instance_, "xrConvertTimeToTimespecTimeKHR",
+            reinterpret_cast<PFN_xrVoidFunction *>(&convertTime_)), "time conversion entrypoint");
         XrSystemGetInfo systemInfo{XR_TYPE_SYSTEM_GET_INFO};
         systemInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
         check(xrGetSystem(instance_, &systemInfo, &system_), "xrGetSystem");
@@ -186,8 +235,8 @@ private:
             throw std::runtime_error("Runtime does not support GLES 3.0");
         display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         if (!eglInitialize(display_, nullptr, nullptr)) throw std::runtime_error("eglInitialize failed");
-        const EGLint attributes[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-            EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_NONE};
+        const EGLint attributes[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_SURFACE_TYPE, EGL_PBUFFER_BIT | EGL_WINDOW_BIT,
+            EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_DEPTH_SIZE, 24, EGL_NONE};
         EGLConfig config{};
         EGLint found = 0;
         if (!eglChooseConfig(display_, attributes, &config, 1, &found) || found != 1)
@@ -204,13 +253,21 @@ private:
         check(xrCreateSession(instance_, &sessionInfo, &session_), "xrCreateSession");
         XrReferenceSpaceCreateInfo reference{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
         reference.poseInReferenceSpace.orientation.w = 1;
-        reference.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
-        check(xrCreateReferenceSpace(session_, &reference, &world_), "local space");
+        reference.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+        XrResult referenceResult = xrCreateReferenceSpace(session_, &reference, &world_);
+        if (referenceResult == XR_ERROR_REFERENCE_SPACE_UNSUPPORTED) {
+            reference.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+            reference.poseInReferenceSpace.position.y = -1.6f;
+            check(xrCreateReferenceSpace(session_, &reference, &world_), "local standing space");
+        } else check(referenceResult, "stage space");
         reference.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+        reference.poseInReferenceSpace.position.y = 0;
         check(xrCreateReferenceSpace(session_, &reference, &view_), "view space");
         initializeActions();
         initializeImages();
+        if (surfaceTest_) initializeAndroidSurface(config);
         initializeGraphics();
+        initializeTracking();
         __android_log_print(ANDROID_LOG_INFO, "DroidDeckXR", "initialized GLES; Android surface swapchain supported=%d", surfaceSupported_);
         health();
     }
@@ -228,14 +285,26 @@ private:
         };
         action("grip_pose", XR_ACTION_TYPE_POSE_INPUT, &grip_);
         action("trigger", XR_ACTION_TYPE_FLOAT_INPUT, &trigger_);
+        action("squeeze", XR_ACTION_TYPE_FLOAT_INPUT, &squeeze_);
+        action("stick", XR_ACTION_TYPE_VECTOR2F_INPUT, &stick_);
+        action("stick_click", XR_ACTION_TYPE_BOOLEAN_INPUT, &stickClick_);
+        action("primary", XR_ACTION_TYPE_BOOLEAN_INPUT, &primary_);
+        action("secondary", XR_ACTION_TYPE_BOOLEAN_INPUT, &secondary_);
+        action("menu", XR_ACTION_TYPE_BOOLEAN_INPUT, &menu_);
         action("vibration", XR_ACTION_TYPE_VIBRATION_OUTPUT, &vibration_);
         std::vector<XrActionSuggestedBinding> bindings;
         for (const char *hand : {"left", "right"}) {
             std::string root = std::string("/user/hand/") + hand;
             bindings.push_back({grip_, path((root + "/input/grip/pose").c_str())});
             bindings.push_back({trigger_, path((root + "/input/trigger/value").c_str())});
+            bindings.push_back({squeeze_, path((root + "/input/squeeze/value").c_str())});
+            bindings.push_back({stick_, path((root + "/input/thumbstick").c_str())});
+            bindings.push_back({stickClick_, path((root + "/input/thumbstick/click").c_str())});
+            bindings.push_back({primary_, path((root + (std::strcmp(hand, "left") == 0 ? "/input/x/click" : "/input/a/click")).c_str())});
+            bindings.push_back({secondary_, path((root + (std::strcmp(hand, "left") == 0 ? "/input/y/click" : "/input/b/click")).c_str())});
             bindings.push_back({vibration_, path((root + "/output/haptic").c_str())});
         }
+        bindings.push_back({menu_, path("/user/hand/left/input/menu/click")});
         XrInteractionProfileSuggestedBinding suggestion{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
         suggestion.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
         suggestion.countSuggestedBindings = bindings.size(); suggestion.suggestedBindings = bindings.data();
@@ -268,6 +337,7 @@ private:
             Eye &target = eyes_[eye];
             target.width = views[eye].recommendedImageRectWidth;
             target.height = views[eye].recommendedImageRectHeight;
+            if (surfaceTest_) continue;
             XrSwapchainCreateInfo create{XR_TYPE_SWAPCHAIN_CREATE_INFO};
             create.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
             create.format = format; create.sampleCount = 1;
@@ -282,6 +352,94 @@ private:
             glBindRenderbuffer(GL_RENDERBUFFER, target.depth);
             glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, target.width, target.height);
         }
+    }
+
+    void initializeAndroidSurface(EGLConfig config) {
+        PFN_xrCreateSwapchainAndroidSurfaceKHR createSurface = nullptr;
+        check(xrGetInstanceProcAddr(instance_, "xrCreateSwapchainAndroidSurfaceKHR",
+            reinterpret_cast<PFN_xrVoidFunction *>(&createSurface)), "surface swapchain entrypoint");
+        if (eyes_[0].width != eyes_[1].width || eyes_[0].height != eyes_[1].height)
+            throw std::runtime_error("Surface path requires matching eye dimensions");
+        XrSwapchainCreateInfo info{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+        info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+        info.width = eyes_[0].width * 2; info.height = eyes_[0].height;
+        jobject surface = nullptr;
+        check(createSurface(session_, &info, &androidSwapchain_, &surface), "Android surface swapchain");
+        androidWindow_ = ANativeWindow_fromSurface(env_, surface);
+        androidJavaSurface_ = env_->NewGlobalRef(surface);
+        if (env_->GetObjectRefType(surface) == JNILocalRefType) env_->DeleteLocalRef(surface);
+        if (!androidWindow_) throw std::runtime_error("Android swapchain has no native window");
+        if (!guestSurface_) {
+            androidSurface_ = eglCreateWindowSurface(display_, config, androidWindow_, nullptr);
+            if (androidSurface_ == EGL_NO_SURFACE) throw std::runtime_error("Android EGL window surface failed");
+        }
+        __android_log_print(ANDROID_LOG_INFO, "DroidDeckXR", "Android projection surface %ux%u", info.width, info.height);
+    }
+
+    void initializeTracking() {
+        std::string directory = std::string(app_->activity->internalDataPath) + "/.wayland-rt";
+        if (mkdir(directory.c_str(), 0700) != 0 && errno != EEXIST)
+            throw std::runtime_error("XR tracking directory unavailable");
+        std::string filename = directory + "/" DROIDDECK_XR_FILE;
+        int descriptor = open(filename.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+        if (descriptor < 0) throw std::runtime_error("XR tracking file unavailable");
+        if (ftruncate(descriptor, sizeof(DroidDeckXrTracking)) != 0) {
+            close(descriptor); throw std::runtime_error("XR tracking file size failed");
+        }
+        void *mapping = mmap(nullptr, sizeof(DroidDeckXrTracking), PROT_READ | PROT_WRITE, MAP_SHARED, descriptor, 0);
+        close(descriptor);
+        if (mapping == MAP_FAILED) throw std::runtime_error("XR tracking map failed");
+        tracking_ = static_cast<DroidDeckXrTracking *>(mapping);
+    }
+
+    static DroidDeckXrPose posePacket(const XrPosef &pose, XrSpaceLocationFlags flags) {
+        return {{pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w},
+                {pose.position.x, pose.position.y, pose.position.z}, (uint32_t)flags};
+    }
+
+    void publishTracking(const XrView views[2], XrTime predicted) {
+        if (!tracking_) return;
+        timespec now{}; clock_gettime(CLOCK_MONOTONIC, &now);
+        DroidDeckXrTracking packet{};
+        packet.magic = DROIDDECK_XR_MAGIC; packet.version = DROIDDECK_XR_VERSION;
+        packet.active = state_ == XR_SESSION_STATE_VISIBLE || state_ == XR_SESSION_STATE_FOCUSED;
+        packet.sampled_ns = (int64_t)now.tv_sec * 1000000000LL + now.tv_nsec;
+        if (convertTime_) {
+            timespec displayTime{};
+            check(convertTime_(instance_, predicted, &displayTime), "display time conversion");
+            packet.predicted_ns = (int64_t)displayTime.tv_sec * 1000000000LL + displayTime.tv_nsec;
+        }
+        packet.period_ns = period_;
+        packet.head = posePacket(head_.pose, head_.locationFlags);
+        for (int eye = 0; eye < 2; eye++) {
+            packet.eyes[eye].pose = posePacket(views[eye].pose, head_.locationFlags);
+            packet.eyes[eye].fov[0] = views[eye].fov.angleLeft;
+            packet.eyes[eye].fov[1] = views[eye].fov.angleRight;
+            packet.eyes[eye].fov[2] = views[eye].fov.angleUp;
+            packet.eyes[eye].fov[3] = views[eye].fov.angleDown;
+            packet.eyes[eye].width = eyes_[eye].width; packet.eyes[eye].height = eyes_[eye].height;
+            packet.hands[eye] = inputs_[eye];
+            packet.hands[eye].pose = posePacket(handLocations_[eye].pose, handLocations_[eye].locationFlags);
+            packet.hands[eye].active = handActive_[eye];
+        }
+        uint32_t sequence = __atomic_load_n(&tracking_->seq, __ATOMIC_RELAXED);
+        __atomic_store_n(&tracking_->seq, sequence | 1u, __ATOMIC_SEQ_CST);
+        __atomic_thread_fence(__ATOMIC_SEQ_CST);
+        std::memcpy(tracking_, &packet, offsetof(DroidDeckXrTracking, seq));
+        std::memcpy(reinterpret_cast<char *>(tracking_) + offsetof(DroidDeckXrTracking, active),
+            reinterpret_cast<const char *>(&packet) + offsetof(DroidDeckXrTracking, active),
+            sizeof(packet) - offsetof(DroidDeckXrTracking, active));
+        __atomic_store_n(&tracking_->seq, (sequence | 1u) + 1u, __ATOMIC_RELEASE);
+    }
+
+    void attachGuest(bool attach) {
+        if (!guestSurface_ || attach == guestAttached_) return;
+        env_->CallVoidMethod(app_->activity->clazz, surfaceCallback_, attach ? androidJavaSurface_ : nullptr,
+                            eyes_[0].width * 2, eyes_[0].height);
+        if (env_->ExceptionCheck()) {
+            env_->ExceptionDescribe(); env_->ExceptionClear(); throw std::runtime_error("Guest surface handshake failed");
+        }
+        guestAttached_ = attach;
     }
 
     GLuint shader(GLenum type, const char *text) {
@@ -331,23 +489,29 @@ private:
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, eye.depth);
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
             throw std::runtime_error("Incomplete eye framebuffer");
-        glViewport(0, 0, eye.width, eye.height);
+        scene(view, eye.width, eye.height, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        if (glGetError() != GL_NO_ERROR) throw std::runtime_error("OpenGL render error");
+        glFlush();
+    }
+
+    void scene(const XrView &view, int width, int height, int offset) {
+        glViewport(offset, 0, width, height);
+        glEnable(GL_SCISSOR_TEST); glScissor(offset, 0, width, height);
         glEnable(GL_DEPTH_TEST); glClearColor(0.015f, 0.025f, 0.06f, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(program_); glBindVertexArray(vertexArray_);
         Matrix camera = viewProjection(view);
         XrPosef pose{}; pose.orientation.w = 1;
         for (int column = -4; column <= 4; column++) {
-            pose.position = {column * 0.6f, -1.2f, -3};
+            pose.position = {column * 0.6f, 0.2f, -3};
             cube(camera, pose, 0.08f, 0.1f, 0.3f, 0.8f);
         }
-        pose.position = {0, 0, -2}; cube(camera, pose, 0.2f, 0.1f, 0.9f, 0.4f);
+        pose.position = {0, 1.4f, -2}; cube(camera, pose, 0.2f, 0.1f, 0.9f, 0.4f);
         for (int hand = 0; hand < 2; hand++)
             if (handActive_[hand] && (handLocations_[hand].locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT))
                 cube(camera, handLocations_[hand].pose, 0.06f, hand == 0 ? 0.9f : 0.2f, 0.3f, hand == 1 ? 0.9f : 0.2f);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        if (glGetError() != GL_NO_ERROR) throw std::runtime_error("OpenGL render error");
-        glFlush();
+        glDisable(GL_SCISSOR_TEST);
     }
 
     void pollEvents() {
@@ -357,6 +521,7 @@ private:
             if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
                 state_ = reinterpret_cast<XrEventDataSessionStateChanged *>(&event)->state;
                 __android_log_print(ANDROID_LOG_INFO, "DroidDeckXR", "session state=%d", state_);
+                attachGuest(state_ == XR_SESSION_STATE_VISIBLE || state_ == XR_SESSION_STATE_FOCUSED);
                 if (state_ == XR_SESSION_STATE_READY) {
                     XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
                     begin.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -388,6 +553,21 @@ private:
                 check(xrLocateSpace(handSpaces_[hand], world_, frameState.predictedDisplayTime, &handLocations_[hand]), "hand pose");
                 get.action = trigger_;
                 XrActionStateFloat trigger{XR_TYPE_ACTION_STATE_FLOAT}; check(xrGetActionStateFloat(session_, &get, &trigger), "trigger state");
+                inputs_[hand].trigger = trigger.isActive ? trigger.currentState : 0;
+                get.action = squeeze_;
+                XrActionStateFloat squeeze{XR_TYPE_ACTION_STATE_FLOAT}; check(xrGetActionStateFloat(session_, &get, &squeeze), "squeeze state");
+                inputs_[hand].squeeze = squeeze.isActive ? squeeze.currentState : 0;
+                get.action = stick_;
+                XrActionStateVector2f stick{XR_TYPE_ACTION_STATE_VECTOR2F}; check(xrGetActionStateVector2f(session_, &get, &stick), "stick state");
+                inputs_[hand].stick[0] = stick.isActive ? stick.currentState.x : 0;
+                inputs_[hand].stick[1] = stick.isActive ? stick.currentState.y : 0;
+                inputs_[hand].buttons = 0;
+                XrAction buttons[] = {stickClick_, primary_, secondary_, menu_};
+                for (int button = 0; button < 4; button++) {
+                    get.action = buttons[button];
+                    XrActionStateBoolean value{XR_TYPE_ACTION_STATE_BOOLEAN}; check(xrGetActionStateBoolean(session_, &get, &value), "button state");
+                    if (value.isActive && value.currentState) inputs_[hand].buttons |= 1u << button;
+                }
                 bool pressed = trigger.isActive && trigger.currentState > 0.8f;
                 if (pressed && !pressed_[hand]) {
                     XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO}; info.action = vibration_; info.subactionPath = hands_[hand];
@@ -402,11 +582,30 @@ private:
         XrViewState viewState{XR_TYPE_VIEW_STATE}; uint32_t count = 0;
         XrView views[2]{{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
         check(xrLocateViews(session_, &locate, &viewState, 2, &count, views), "xrLocateViews");
+        publishTracking(views, frameState.predictedDisplayTime);
+        if (guestSurface_ && guestAttached_) {
+            timespec now{}; clock_gettime(CLOCK_MONOTONIC, &now);
+            guestFrames_ = env_->CallLongMethod(app_->activity->clazz, frameCallback_, (jlong)now.tv_sec * 1000000000LL + now.tv_nsec);
+            if (env_->ExceptionCheck()) { env_->ExceptionClear(); throw std::runtime_error("Guest frame callback failed"); }
+        }
         XrCompositionLayerProjectionView projection[2]{{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}, {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW}};
-        bool valid = frameState.shouldRender && count == 2 &&
+        bool valid = frameState.shouldRender && (!surfaceTest_ || state_ == XR_SESSION_STATE_VISIBLE || state_ == XR_SESSION_STATE_FOCUSED) && count == 2 &&
             (viewState.viewStateFlags & (XR_VIEW_STATE_ORIENTATION_VALID_BIT | XR_VIEW_STATE_POSITION_VALID_BIT))
             == (XR_VIEW_STATE_ORIENTATION_VALID_BIT | XR_VIEW_STATE_POSITION_VALID_BIT);
-        if (valid) for (int eye = 0; eye < 2; eye++) {
+        if (valid && surfaceTest_) {
+            if (!guestSurface_ && !eglMakeCurrent(display_, androidSurface_, androidSurface_, context_))
+                throw std::runtime_error("Surface context binding failed");
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            for (int eye = 0; eye < 2; eye++) {
+                if (!guestSurface_) scene(views[eye], eyes_[eye].width, eyes_[eye].height, eye * eyes_[eye].width);
+                projection[eye].pose = views[eye].pose; projection[eye].fov = views[eye].fov;
+                projection[eye].subImage.swapchain = androidSwapchain_;
+                projection[eye].subImage.imageRect.offset = {eye * eyes_[eye].width, 0};
+                projection[eye].subImage.imageRect.extent = {eyes_[eye].width, eyes_[eye].height};
+            }
+            if (glGetError() != GL_NO_ERROR) throw std::runtime_error("Surface rendering error");
+            if (!guestSurface_ && !eglSwapBuffers(display_, androidSurface_)) throw std::runtime_error("Surface presentation failed");
+        } else if (valid) for (int eye = 0; eye < 2; eye++) {
             uint32_t image = 0;
             XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
             check(xrAcquireSwapchainImage(eyes_[eye].swapchain, &acquire, &image), "acquire image");
@@ -435,11 +634,25 @@ private:
     }
 
     void cleanup() {
+        try { attachGuest(false); } catch (const std::exception &error) {
+            __android_log_print(ANDROID_LOG_ERROR, "DroidDeckXR", "cleanup: %s", error.what());
+        }
+        if (tracking_) {
+            __atomic_store_n(&tracking_->active, 0u, __ATOMIC_RELEASE);
+            munmap(tracking_, sizeof(DroidDeckXrTracking));
+        }
         if (display_ != EGL_NO_DISPLAY && context_ != EGL_NO_CONTEXT) {
             glDeleteFramebuffers(1, &framebuffer_); glDeleteProgram(program_);
             glDeleteBuffers(1, &buffer_); glDeleteVertexArrays(1, &vertexArray_);
             for (auto &eye : eyes_) glDeleteRenderbuffers(1, &eye.depth);
         }
+        if (androidSurface_ != EGL_NO_SURFACE) {
+            eglMakeCurrent(display_, surface_, surface_, context_);
+            eglDestroySurface(display_, androidSurface_);
+        }
+        if (androidWindow_) ANativeWindow_release(androidWindow_);
+        if (androidSwapchain_) xrDestroySwapchain(androidSwapchain_);
+        if (androidJavaSurface_) env_->DeleteGlobalRef(androidJavaSurface_);
         for (auto &eye : eyes_) if (eye.swapchain) xrDestroySwapchain(eye.swapchain);
         for (auto space : handSpaces_) if (space) xrDestroySpace(space);
         if (view_) xrDestroySpace(view_); if (world_) xrDestroySpace(world_);

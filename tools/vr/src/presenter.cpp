@@ -9,6 +9,7 @@ typedef unsigned long VisualID;
 #include "xdg-shell-client-protocol.h"
 
 #include "presenter.h"
+#include "xr_tracking_file.h"
 
 #include <atomic>
 #include <chrono>
@@ -267,6 +268,11 @@ private:
             uint32_t eye[2] = {0, 0};
             if (pread(fd, eye, sizeof(eye), 72) == (ssize_t)sizeof(eye) && eye[0] && eye[1]) { width_ = eye[0] * 2; height_ = eye[1]; }
             close(fd);
+        }
+        XrTrackingFile xrFile;
+        DroidDeckXrTracking tracking;
+        if (xrFile.Read(&tracking) && XrTrackingFile::Fresh(tracking)) {
+            width_ = tracking.eyes[0].width * 2; height_ = tracking.eyes[0].height;
         }
         if (!width_ && cfgW_ > 0 && cfgH_ > 0) { width_ = (uint32_t)cfgW_; height_ = (uint32_t)cfgH_; }
         if (!width_) { width_ = 1920; height_ = 1080; }

@@ -72,6 +72,14 @@ object CompositorHost {
     private var attached: Surface? = null
 
     @Synchronized
+    fun attachXr(surface: Surface?) {
+        check(started) { "DroidDeck compositor is not running" }
+        pauseVsync()
+        attached = surface
+        WaylandCompositor.nativeSetSurface(surface)
+    }
+
+    @Synchronized
     fun detach(surface: Surface?) {
         if (!started) return
         if (surface != null && attached != null && attached !== surface) return

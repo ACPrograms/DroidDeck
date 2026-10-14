@@ -48,6 +48,35 @@ treating a successful `am start` as successful rendering.
 
 ## Remaining stages
 
+## Milestone 2: Android projection surface and guest integration
+
+The Android Surface producer test passed repeatedly, including 1,079 submitted
+stereo frames in a 15-second test at 72 Hz. The new stage-space test reports
+tracked floor-relative position, and the runtime supports monotonic-time
+conversion. A JNI abort during the first surface test was traced to treating
+the runtime's global Surface reference as a local reference and corrected.
+
+The same native frontend is now compiled into the main app behind the explicit
+`QuestXrActivity` entrypoint. With `guest_surface=true`, it hands its Android
+projection Surface to the existing compositor. Surface transitions wait for a
+compositor acknowledgement after the old Vulkan swapchain's GPU work drains.
+Successful guest GPU presentations are counted separately from XR submissions.
+The main app's Kotlin and native targets compile locally; an on-device main-app
+guest test is still required before considering this bridge functional.
+
+The frontend publishes a versioned 296-byte seqlock tracking record under the
+session runtime directory. It contains floor-relative head/controller poses,
+per-eye view geometry, predicted display time converted to CLOCK_MONOTONIC,
+display period, and Touch action values. The OpenVR driver consumes fresh
+records for real head/controller poses and asymmetric FOV; it marks stale
+tracking invalid. The modified ARM64 Linux driver links successfully in WSL.
+Driver timing, eye-to-head transforms, input completeness, render-pose/image
+association and return haptics still need implementation/validation.
+
+The companion's release build now targets Android 14 and passes release lint.
+
+## Remaining stages
+
 - Android/Linux eye-image bridge and frame ownership/synchronization.
 - OpenVR driver IPC for predicted 6DoF head, per-eye views and tracked hands.
 - Real Touch input mapping and haptics returning through the bridge.

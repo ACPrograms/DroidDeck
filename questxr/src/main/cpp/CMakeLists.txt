@@ -5,7 +5,7 @@ add_library(native_app_glue STATIC ${ANDROID_NDK}/sources/android/native_app_glu
 target_include_directories(native_app_glue PUBLIC ${ANDROID_NDK}/sources/android/native_app_glue)
 add_library(droiddeckxr SHARED quest_xr.cpp)
 target_compile_features(droiddeckxr PRIVATE cxx_std_17)
-target_compile_definitions(droiddeckxr PRIVATE XR_USE_PLATFORM_ANDROID XR_USE_GRAPHICS_API_OPENGL_ES)
+target_compile_definitions(droiddeckxr PRIVATE XR_USE_PLATFORM_ANDROID XR_USE_GRAPHICS_API_OPENGL_ES XR_USE_TIMESPEC)
 target_compile_options(droiddeckxr PRIVATE -Wall -Wextra -Wno-missing-field-initializers -Werror=return-type)
 target_link_options(droiddeckxr PRIVATE -Wl,-z,max-page-size=16384 -uANativeActivity_onCreate)
 target_link_libraries(droiddeckxr PRIVATE native_app_glue OpenXR::openxr_loader EGL GLESv3 android log)

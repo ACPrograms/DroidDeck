@@ -17,6 +17,7 @@
 
 #include "../../../app/src/main/cpp/waylandcomp/src/headpose_shm.h"
 #include "presenter.h"
+#include "xr_tracking_file.h"
 
 #define DD_EXPORT extern "C" __attribute__((visibility("default")))
 
@@ -372,6 +373,24 @@ public:
 
     DriverPose_t GetPose() override { return pose_; }
 
+    void UpdateXr(const DroidDeckXrHand &hand) {
+        if (id_ == k_unTrackedDeviceIndexInvalid) return;
+        DriverPose_t pose{};
+        pose.qWorldFromDriverRotation.w = pose.qDriverFromHeadRotation.w = 1;
+        pose.qRotation = {hand.pose.orientation[3], hand.pose.orientation[0], hand.pose.orientation[1], hand.pose.orientation[2]};
+        for (int axis = 0; axis < 3; axis++) pose.vecPosition[axis] = hand.pose.position[axis];
+        pose.deviceIsConnected = hand.active;
+        pose.poseIsValid = hand.active && (hand.pose.flags & 3u) == 3u;
+        pose.result = pose.poseIsValid ? TrackingResult_Running_OK : TrackingResult_Running_OutOfRange;
+        pose_ = pose;
+        VRServerDriverHost()->TrackedDevicePoseUpdated(id_, pose, sizeof(pose));
+        VRDriverInput()->UpdateScalarComponent(trigger_, hand.active ? hand.trigger : 0, 0);
+        VRDriverInput()->UpdateBooleanComponent(triggerClick_, hand.active && hand.trigger > 0.6f, 0);
+        VRDriverInput()->UpdateBooleanComponent(grip_, hand.active && hand.squeeze > 0.6f, 0);
+        VRDriverInput()->UpdateScalarComponent(padX_, hand.active ? hand.stick[0] : 0, 0);
+        VRDriverInput()->UpdateScalarComponent(padY_, hand.active ? hand.stick[1] : 0, 0);
+    }
+
     void Update(const HmdQuaternion_t &head, const PadState *pad) {
         if (id_ == k_unTrackedDeviceIndexInvalid) return;
         DriverPose_t p = {};
@@ -426,6 +445,12 @@ public:
         if (height_ <= 0) height_ = 1080;
         float hz = VRSettings()->GetFloat(kSettingsSection, "displayFrequency");
         if (hz <= 0.0f) hz = 60.0f;
+        DroidDeckXrTracking xr;
+        xrMode_ = xr_.Read(&xr) && XrTrackingFile::Fresh(xr);
+        if (xrMode_) {
+            width_ = xr.eyes[0].width * 2; height_ = xr.eyes[0].height;
+            hz = 1000000000.f / xr.period_ns;
+        }
         tanHalf_ = 1.0f;
         eyeAspect_ = (width_ * 0.5f) / height_;
         droiddeck_headpose hp;
@@ -433,7 +458,7 @@ public:
             tanHalf_ = hp.tan_half_fov;
             if (hp.eye_aspect > 0.0f) eyeAspect_ = hp.eye_aspect;
         }
-        VRProperties()->SetStringProperty(c, Prop_ModelNumber_String, "DroidDeck Cardboard");
+        VRProperties()->SetStringProperty(c, Prop_ModelNumber_String, xrMode_ ? "DroidDeck Quest OpenXR" : "DroidDeck Cardboard");
         VRProperties()->SetStringProperty(c, Prop_ManufacturerName_String, "DroidDeck");
         VRProperties()->SetStringProperty(c, Prop_TrackingSystemName_String, "droiddeck");
         VRProperties()->SetFloatProperty(c, Prop_UserIpdMeters_Float, 0.064f);
@@ -488,6 +513,18 @@ public:
         p.qWorldFromDriverRotation.w = 1;
         p.qDriverFromHeadRotation.w = 1;
         p.qRotation.w = 1;
+        DroidDeckXrTracking xr;
+        bool freshXr = xr_.Read(&xr) && XrTrackingFile::Fresh(xr);
+        if (freshXr || xrMode_) {
+            p.deviceIsConnected = true;
+            p.poseIsValid = freshXr && (xr.head.flags & 3u) == 3u;
+            p.result = p.poseIsValid ? TrackingResult_Running_OK : TrackingResult_Running_OutOfRange;
+            if (p.poseIsValid) {
+                p.qRotation = {xr.head.orientation[3], xr.head.orientation[0], xr.head.orientation[1], xr.head.orientation[2]};
+                for (int axis = 0; axis < 3; axis++) p.vecPosition[axis] = xr.head.position[axis];
+            }
+            return p;
+        }
         p.vecPosition[1] = 1.6;
         droiddeck_headpose hp;
         bool ok = pose_.Read(&hp);
@@ -509,6 +546,7 @@ public:
     bool IsDisplayOnDesktop() override { return !directMode_; }
     bool IsDisplayRealDisplay() override { return false; }
     void GetRecommendedRenderTargetSize(uint32_t *w, uint32_t *h) override {
+        if (xrMode_) { *w = width_ / 2; *h = height_; return; }
         *w = (uint32_t)(width_ / 2 * 1.4f);
         *h = (uint32_t)(height_ * 1.4f);
     }
@@ -516,7 +554,14 @@ public:
         *y = 0; *w = (uint32_t)width_ / 2; *h = (uint32_t)height_;
         *x = eye == Eye_Left ? 0 : (uint32_t)width_ / 2;
     }
-    void GetProjectionRaw(EVREye, float *left, float *right, float *top, float *bottom) override {
+    void GetProjectionRaw(EVREye eye, float *left, float *right, float *top, float *bottom) override {
+        DroidDeckXrTracking xr;
+        if (xrMode_ && xr_.Read(&xr) && XrTrackingFile::Fresh(xr)) {
+            const float *fov = xr.eyes[eye == Eye_Right ? 1 : 0].fov;
+            *left = std::tan(fov[0]); *right = std::tan(fov[1]);
+            *top = -std::tan(fov[2]); *bottom = -std::tan(fov[3]);
+            return;
+        }
         *left = -tanHalf_ * eyeAspect_; *right = tanHalf_ * eyeAspect_;
         *top = -tanHalf_; *bottom = tanHalf_;
     }
@@ -536,6 +581,19 @@ private:
         uint32_t lastSeq = 0;
         auto lastSent = std::chrono::steady_clock::now();
         while (running_) {
+            DroidDeckXrTracking xr;
+            if (xrMode_) {
+                bool fresh = xr_.Read(&xr) && XrTrackingFile::Fresh(xr);
+                DriverPose_t head = GetPose();
+                VRServerDriverHost()->TrackedDevicePoseUpdated(id_, head, sizeof(head));
+                for (int hand = 0; hand < 2; hand++) if (hands_[hand]) {
+                    DroidDeckXrHand state = fresh ? xr.hands[hand] : DroidDeckXrHand{};
+                    hands_[hand]->UpdateXr(state);
+                }
+                VRDriverInput()->UpdateBooleanComponent(proximity_, fresh, 0);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                continue;
+            }
             droiddeck_headpose hp;
             bool fresh = pose_.Read(&hp) && hp.seq != lastSeq;
             auto now = std::chrono::steady_clock::now();
@@ -570,6 +628,8 @@ public:
 
 private:
     PoseFile pose_;
+    XrTrackingFile xr_;
+    bool xrMode_ = false;
     PadRing pad_;
     PadState lastPad_;
     VRInputComponentHandle_t proximity_ = 0;

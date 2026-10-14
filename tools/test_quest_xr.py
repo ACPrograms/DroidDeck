@@ -15,6 +15,8 @@ def main():
     parser.add_argument('--seconds', type=int, default=20)
     parser.add_argument('--output', type=Path, default=Path('questxr-validation'))
     parser.add_argument('--require-controllers', action='store_true')
+    parser.add_argument('--surface', action='store_true')
+    parser.add_argument('--guest', action='store_true')
     args = parser.parse_args()
     if args.seconds < 5 or args.seconds > 600:
         parser.error('--seconds must be between 5 and 600')
@@ -25,12 +27,20 @@ def main():
         return subprocess.run([args.adb, '-s', serial, *command], check=True,
                               capture_output=True, text=True).stdout
 
-    health_path = '/sdcard/Android/data/com.droiddeck.questxr/files/xr-health.json'
-    adb('shell', 'am', 'force-stop', 'com.droiddeck.questxr')
+    package = 'com.droiddeck.launcher' if args.guest else 'com.droiddeck.questxr'
+    health_path = f'/sdcard/Android/data/{package}/files/xr-health.json'
+    if not args.guest:
+        adb('shell', 'am', 'force-stop', package)
     adb('shell', 'rm', '-f', health_path)
     adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
     adb('shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close')
-    adb('shell', 'am', 'start', '-n', 'com.droiddeck.questxr/android.app.NativeActivity')
+    component = f'{package}/.QuestXrActivity' if args.guest else f'{package}/android.app.NativeActivity'
+    launch = ['shell', 'am', 'start', '-n', component]
+    if args.surface:
+        launch += ['--ez', 'surface_test', 'true']
+    if args.guest:
+        launch += ['--ez', 'guest_surface', 'true']
+    adb(*launch)
     samples = []
     failure = None
     deadline = time.monotonic() + args.seconds
@@ -55,6 +65,10 @@ def main():
         failure = failure or 'No focused session with valid position and orientation'
     elif args.require_controllers and not any(all(sample['controllersActive']) for sample in samples):
         failure = failure or 'Both controllers did not become active'
+    elif args.guest and samples[-1].get('guestFrames', 0) - samples[0].get('guestFrames', 0) < 72:
+        failure = failure or 'No advancing guest GPU presentation; submitting an XR layer alone is insufficient'
+    elif samples[-1].get('source') != ('guest' if args.guest else 'surface' if args.surface else 'native'):
+        failure = failure or 'Wrong projection source'
     report = {'ok': failure is None, 'error': failure, 'samples': samples}
     (args.output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps({'ok': report['ok'], 'error': failure, 'samples': len(samples),
