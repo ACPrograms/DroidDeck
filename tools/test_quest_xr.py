@@ -17,15 +17,19 @@ def main():
     parser.add_argument('--require-controllers', action='store_true')
     parser.add_argument('--surface', action='store_true')
     parser.add_argument('--guest', action='store_true')
+    parser.add_argument('--keep-awake', action='store_true')
+    parser.add_argument('--steamvr', action='store_true')
     args = parser.parse_args()
     if args.seconds < 5 or args.seconds > 600:
         parser.error('--seconds must be between 5 and 600')
+    if args.steamvr and not args.guest:
+        parser.error('--steamvr requires --guest')
     serial = resolve_serial(args.adb, args.serial)
     args.output.mkdir(parents=True, exist_ok=True)
 
     def adb(*command):
         return subprocess.run([args.adb, '-s', serial, *command], check=True,
-                              capture_output=True, text=True).stdout
+                              capture_output=True, text=True, timeout=15).stdout
 
     package = 'com.droiddeck.launcher' if args.guest else 'com.droiddeck.questxr'
     health_path = f'/sdcard/Android/data/{package}/files/xr-health.json'
@@ -33,40 +37,56 @@ def main():
         adb('shell', 'am', 'force-stop', package)
     adb('shell', 'rm', '-f', health_path)
     adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
-    adb('shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close')
     component = f'{package}/.QuestXrActivity' if args.guest else f'{package}/android.app.NativeActivity'
     launch = ['shell', 'am', 'start', '-n', component]
     if args.surface:
         launch += ['--ez', 'surface_test', 'true']
     if args.guest:
         launch += ['--ez', 'guest_surface', 'true']
-    adb(*launch)
+    if args.steamvr:
+        launch += ['--ez', 'start_steamvr', 'true']
     samples = []
     failure = None
-    deadline = time.monotonic() + args.seconds
-    while time.monotonic() < deadline:
-        time.sleep(1)
+    try:
         adb('shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close')
-        try:
-            sample = json.loads(adb('shell', 'cat', health_path))
-            samples.append(sample)
-            if sample.get('error'):
-                failure = sample['error']
-                break
-        except (subprocess.CalledProcessError, json.JSONDecodeError):
-            pass
-    log = adb('logcat', '-d', '-s', 'DroidDeckXR:I', 'OpenXR-Loader:W', 'AndroidRuntime:E')
+        adb(*launch)
+        deadline = time.monotonic() + args.seconds
+        while time.monotonic() < deadline:
+            time.sleep(1)
+            adb('shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_close')
+            try:
+                sample = json.loads(adb('shell', 'cat', health_path))
+                samples.append(sample)
+                if sample.get('error'):
+                    failure = sample['error']
+                    break
+            except (subprocess.CalledProcessError, json.JSONDecodeError):
+                pass
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        failure = f'ADB operation failed: {type(error).__name__}'
+    finally:
+        if not args.keep_awake:
+            try:
+                adb('shell', 'am', 'broadcast', '-a', 'com.oculus.vrpowermanager.prox_far')
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                failure = failure or 'Could not restore headset proximity after testing'
+    try:
+        log = adb('logcat', '-d', '-s', 'DroidDeckXR:I', 'OpenXR-Loader:W', 'AndroidRuntime:E')
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        log = str(error)
     (args.output / 'logcat.txt').write_text(log, encoding='utf-8')
     if len(samples) < 2:
         failure = failure or 'No advancing telemetry; check runtime initialization and headset wake/proximity'
     elif samples[-1]['rendered'] - samples[0]['rendered'] < 72:
         failure = failure or 'Fewer than 72 additional stereo frames were submitted'
-    elif not any(sample['sessionState'] == 5 and sample['headFlags'] & 3 == 3 for sample in samples):
-        failure = failure or 'No focused session with valid position and orientation'
+    elif not any(sample['sessionState'] == 5 and sample['headFlags'] & 15 == 15 for sample in samples):
+        failure = failure or 'No focused session with tracked 6DoF position and orientation'
     elif args.require_controllers and not any(all(sample['controllersActive']) for sample in samples):
         failure = failure or 'Both controllers did not become active'
     elif args.guest and samples[-1].get('guestFrames', 0) - samples[0].get('guestFrames', 0) < 72:
         failure = failure or 'No advancing guest GPU presentation; submitting an XR layer alone is insufficient'
+    elif args.steamvr and samples[-1].get('steamvrState') != 4:
+        failure = failure or 'SteamVR did not report RUNNING'
     elif samples[-1].get('source') != ('guest' if args.guest else 'surface' if args.surface else 'native'):
         failure = failure or 'Wrong projection source'
     report = {'ok': failure is None, 'error': failure, 'samples': samples}

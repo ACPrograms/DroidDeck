@@ -95,17 +95,25 @@ public:
         while (!app_->destroyRequested && !exit_) {
             android_poll_source *source = nullptr;
             int events = 0;
-            while (ALooper_pollOnce(running_ ? 0 : 100, nullptr, &events,
-                                   reinterpret_cast<void **>(&source)) >= 0) {
+            int pollTimeout = running_ ? 0 : 100;
+            for (int eventCount = 0; eventCount < 32; eventCount++) {
+                if (ALooper_pollOnce(pollTimeout, nullptr, &events, reinterpret_cast<void **>(&source)) < 0) break;
                 if (source) source->process(app_, source);
                 if (app_->destroyRequested) break;
+                pollTimeout = 0;
             }
             pollEvents();
             if (running_ && !app_->destroyRequested) frame();
         }
+        if (exit_ && !app_->destroyRequested) ANativeActivity_finish(app_->activity);
     }
 
     void health(const char *error = "") {
+        int steamvrState = -1;
+        if (guestSurface_ && statusCallback_) {
+            steamvrState = env_->CallIntMethod(app_->activity->clazz, statusCallback_);
+            if (env_->ExceptionCheck()) { env_->ExceptionClear(); steamvrState = -1; }
+        }
         std::string path = std::string(app_->activity->externalDataPath) + "/xr-health.json";
         std::string temp = path + ".tmp";
         FILE *file = std::fopen(temp.c_str(), "w");
@@ -113,12 +121,12 @@ public:
         std::fprintf(file,
             "{\"frames\":%llu,\"rendered\":%llu,\"sessionState\":%d,\"headFlags\":%llu,"
             "\"headPosition\":[%.6f,%.6f,%.6f],\"controllersActive\":[%s,%s],"
-            "\"periodNs\":%lld,\"surfaceSwapchain\":%s,\"source\":\"%s\",\"guestFrames\":%lld,\"error\":\"%s\"}\n",
+            "\"periodNs\":%lld,\"surfaceSwapchain\":%s,\"source\":\"%s\",\"guestFrames\":%lld,\"steamvrState\":%d,\"error\":\"%s\"}\n",
             (unsigned long long)frames_, (unsigned long long)rendered_, state_,
             (unsigned long long)head_.locationFlags,
             head_.pose.position.x, head_.pose.position.y, head_.pose.position.z,
             handActive_[0] ? "true" : "false", handActive_[1] ? "true" : "false",
-            (long long)period_, surfaceSupported_ ? "true" : "false", guestSurface_ ? "guest" : surfaceTest_ ? "surface" : "native", (long long)guestFrames_, error);
+            (long long)period_, surfaceSupported_ ? "true" : "false", guestSurface_ ? "guest" : surfaceTest_ ? "surface" : "native", (long long)guestFrames_, steamvrState, error);
         std::fclose(file);
         std::rename(temp.c_str(), path.c_str());
     }
@@ -142,10 +150,11 @@ private:
     XrSpaceLocation head_{XR_TYPE_SPACE_LOCATION};
     XrSpaceLocation handLocations_[2]{{XR_TYPE_SPACE_LOCATION}, {XR_TYPE_SPACE_LOCATION}};
     bool handActive_[2]{}, pressed_[2]{};
-    bool running_ = false, exit_ = false, surfaceSupported_ = false;
+    bool running_ = false, exit_ = false, surfaceSupported_ = false, quitRequested_ = false;
     bool surfaceTest_ = false;
     bool guestSurface_ = false, guestAttached_ = false;
     jmethodID surfaceCallback_ = nullptr, frameCallback_ = nullptr;
+    jmethodID statusCallback_ = nullptr;
     jobject androidJavaSurface_ = nullptr;
     DroidDeckXrTracking *tracking_ = nullptr;
     DroidDeckXrHaptics *haptics_ = nullptr;
@@ -171,6 +180,18 @@ private:
     }
 
     void initialize() {
+        app_->userData = this;
+        app_->onInputEvent = [](android_app *app, AInputEvent *event) -> int32_t {
+            if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_KEY || AKeyEvent_getKeyCode(event) != AKEYCODE_BACK
+                || AKeyEvent_getAction(event) != AKEY_EVENT_ACTION_UP) return 0;
+            auto *runtime = static_cast<QuestXR *>(app->userData);
+            if (runtime->running_) {
+                XrResult result = xrRequestExitSession(runtime->session_);
+                if (XR_SUCCEEDED(result)) runtime->quitRequested_ = true;
+                else __android_log_print(ANDROID_LOG_ERROR, "DroidDeckXR", "exit request failed: %d", result);
+            } else ANativeActivity_finish(app->activity);
+            return 1;
+        };
         app_->activity->vm->AttachCurrentThread(&env_, nullptr);
         jclass activityClass = env_->GetObjectClass(app_->activity->clazz);
         jmethodID getIntent = env_->GetMethodID(activityClass, "getIntent", "()Landroid/content/Intent;");
@@ -186,6 +207,7 @@ private:
             surfaceTest_ = true;
             surfaceCallback_ = env_->GetMethodID(activityClass, "onXrSurface", "(Landroid/view/Surface;II)V");
             frameCallback_ = env_->GetMethodID(activityClass, "onXrFrame", "(J)J");
+            statusCallback_ = env_->GetMethodID(activityClass, "onXrStatus", "()I");
             if (env_->ExceptionCheck()) { env_->ExceptionClear(); throw std::runtime_error("XR activity bridge methods unavailable"); }
         }
         env_->DeleteLocalRef(extra); env_->DeleteLocalRef(intentClass);
@@ -560,7 +582,9 @@ private:
                     check(xrBeginSession(session_, &begin), "xrBeginSession"); running_ = true;
                 } else if (state_ == XR_SESSION_STATE_STOPPING) {
                     check(xrEndSession(session_), "xrEndSession"); running_ = false;
+                    if (quitRequested_) exit_ = true;
                 } else if (state_ == XR_SESSION_STATE_EXITING || state_ == XR_SESSION_STATE_LOSS_PENDING) exit_ = true;
+                health();
             } else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) exit_ = true;
             event = {XR_TYPE_EVENT_DATA_BUFFER};
         }

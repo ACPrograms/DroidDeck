@@ -424,7 +424,7 @@ public:
         VRDriverInput()->UpdateBooleanComponent(padTouch_, hand.active &&
             (std::abs(hand.stick[0]) + std::abs(hand.stick[1]) > 0.01f || (hand.buttons & 1u)), 0);
         VRDriverInput()->UpdateBooleanComponent(menu_, hand.active && (hand.buttons & 12u), 0);
-        VRDriverInput()->UpdateBooleanComponent(system_, false, 0);
+        VRDriverInput()->UpdateBooleanComponent(system_, hand.active && !right_ && (hand.buttons & 8u), 0);
     }
 
     void Update(const HmdQuaternion_t &head, const PadState *pad) {

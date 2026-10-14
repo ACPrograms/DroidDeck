@@ -7,6 +7,7 @@ import com.droiddeck.launcher.session.SessionState
 object CompositorHost {
     @Volatile
     private var started = false
+    @Volatile
     private var vsyncRunning = false
 
     private val vsync = object : Choreographer.FrameCallback {

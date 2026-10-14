@@ -99,6 +99,39 @@ not block native rendering or independent engineering. No guard was bypassed.
 
 ## Remaining stages
 
+## Milestone 4: full build and deployment
+
+Full CI run 38641552327 passed at `e1d09612`, including APK compilation, tracking
+IPC tests and ELF closure verification. Its 62,211,156-byte APK was downloaded,
+aligned and signed locally with the provided key. The installed original APK's
+certificate matched the expected release certificate. Updating the standard
+`com.droiddeck.launcher` package with `adb install -r` succeeded; a copy of the
+previous APK is retained locally under ignored `build/installed-original.apk`.
+No uninstall or data reset was performed.
+
+The latest source adds the Quest-specific SteamVR Start flow, ongoing SteamVR
+status telemetry, a clean native Back/exit path, and bounded Android event
+draining. It removes UI-thread waits from native surface handoff to avoid a
+NativeActivity destruction deadlock, and restores proximity after tests unless
+`--keep-awake` is specified. These changes compile locally but require a fresh
+integrated APK before their device validation.
+
+Later device runs stopped rendering because the OS displayed **Finding position
+in room**, saying it cannot detect headset movement. Logs show the XR session
+going through STOPPING to IDLE; a sample had only flags 7, lacking tracked
+position. State changes are now written immediately to health telemetry, and
+tests require all four valid/tracked flags to establish 6DoF. Earlier successful
+72 Hz runs remain evidence for those earlier device conditions; the latest
+tests are not counted as passes. Physical headset positioning/lighting needs
+attention before sustained 6DoF and game validation can resume.
+
+The actual shared tracking file was read through the debuggable companion:
+296 bytes, correct magic/version and even sequence, converted prediction about
+21 ms beyond the monotonic sample time. This confirms the IPC time-domain
+conversion on the headset.
+
+## Remaining stages
+
 - Android/Linux eye-image bridge and frame ownership/synchronization.
 - OpenVR driver IPC for predicted 6DoF head, per-eye views and tracked hands.
 - Real Touch input mapping and haptics returning through the bridge.
