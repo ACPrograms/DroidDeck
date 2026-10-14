@@ -7,7 +7,6 @@ import android.location.LocationManager
 import android.os.Build
 import com.droiddeck.launcher.session.SessionPrefs
 
-/** Location is used only for Android's Wi-Fi names and scan results, never coordinates. */
 object WifiDiscovery {
     val permissions = arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
 
