@@ -1,9 +1,11 @@
 #include "../src/xr_tracking_file.h"
 #include <cassert>
 #include <cstdio>
+#include <limits>
 
-int main() {
-    char filename[] = "/tmp/droiddeck-xr-test-XXXXXX";
+int main(int argc, char **argv) {
+    char filename[256];
+    std::snprintf(filename, sizeof(filename), "%s/droiddeck-xr-test-XXXXXX", argc > 1 ? argv[1] : "/tmp");
     int descriptor = mkstemp(filename);
     assert(descriptor >= 0);
     assert(ftruncate(descriptor, sizeof(DroidDeckXrTracking)) == 0);
@@ -20,6 +22,13 @@ int main() {
         writer->head.orientation[3] = 1; writer->head.position[1] = 1.6f; writer->head.flags = 15;
         assert(reader.Read(&packet)); assert(XrTrackingFile::Fresh(packet));
         assert(packet.head.position[1] == 1.6f);
+        assert(XrTrackingFile::Tracked(packet.head));
+        auto invalidPose = packet.head; invalidPose.flags = 7;
+        assert(!XrTrackingFile::Tracked(invalidPose));
+        invalidPose = packet.head; invalidPose.orientation[3] = 0;
+        assert(!XrTrackingFile::Tracked(invalidPose));
+        invalidPose = packet.head; invalidPose.position[0] = std::numeric_limits<float>::quiet_NaN();
+        assert(!XrTrackingFile::Tracked(invalidPose));
         __atomic_store_n(&writer->seq, 1u, __ATOMIC_RELEASE);
         assert(!reader.Read(&packet));
         __atomic_store_n(&writer->seq, 2u, __ATOMIC_RELEASE);

@@ -128,8 +128,6 @@ The actual shared tracking file was read through the debuggable companion:
 21 ms beyond the monotonic sample time. This confirms the IPC time-domain
 conversion on the headset.
 
-## Remaining stages
-
 ## Milestone 5: owned image and original render-pose protocol
 
 The opt-in `DROIDDECK_VR_PRESENT=questframes` presenter captures an owned RGBA
@@ -154,8 +152,14 @@ With `frame_input=true`, the native frontend uses explicitly acquired GLES XR
 swapchain images, uploads receiver-owned pixels, and submits the captured
 per-eye poses/FOV. It omits stale images. `frame_verify=true` reads uploaded
 pixels back from the GPU and compares every byte. This mode is separate from
-the asynchronous Android Surface diagnostic. It is not yet the normal Quest
-Start flow and does not provide a zero-copy/performance-ready bridge.
+the asynchronous Android Surface diagnostic. The main activity's explicit
+`guest_frames=true` entrypoint detaches the desktop Surface, keeps the guest
+active and starts the same SteamVR helper when requested. The Linux helper
+selects the experimental presenter only when this private receiver exists.
+`tools/test_quest_xr.py --guest --steamvr` uses that entrypoint and requires owned
+source images/frame IDs to advance, not generic desktop presentations. It is
+not yet the normal Quest Start flow and does not provide a zero-copy or
+performance-ready bridge.
 
 Host tests cover image/pose pairing, rotation and asymmetric projection math,
 latest-frame replacement, copying before acknowledgement, private socket
@@ -167,6 +171,7 @@ native target and companion APK also compile. These are host/build results,
 not headset GPU evidence. The Quest subsequently disappeared from ADB, so the
 new path cannot yet be deployed or validated on-device.
 
+`tools/build_quest_xr_tests.ps1` builds the three Android test executables.
 `tools/test_quest_frame_channel.py --adb <adb> --native-tests <directory>` runs
 the Android protocol test and a known-pattern sender under the companion's own
 UID. It checks the final source frame ID and GPU checksum. Add
@@ -177,6 +182,36 @@ Without that option it proves only private image transport/GLES upload, not
 The failed full build at `7277386c` was a Debian archive HTTP package 404. CI now
 bootstraps CA certificates, uses HTTPS for compiler packages and retries
 downloads while retaining APT signature/package-hash verification.
+
+The signed companion for this stage is retained locally under ignored
+`build/questxr-owned-frames-signed.apk`. Deployment supports `-SignOnly` while
+disconnected; before installing it now requires an authorized, explicitly
+selected Quest 3, rather than risking an unrelated Android device.
+
+### Reconnected device evidence
+
+Full CI run 38649944478 passed at `040d31c1` and its APK was downloaded and
+release-signed locally. After USB reconnection, the updated diagnostic companion
+installed successfully. The private image test passed on the actual Quest:
+144 complete frames received, zero rejections, 137 uploaded, final source and
+GPU-verified frame ID 144, and expected GPU checksum 1815165381. Every byte of
+the owned image matched GLES readback. The protocol unit executable also passed
+on Android. These prove image ownership/transport and real GPU upload, not
+Linux producer synchronization or SteamVR gameplay.
+
+A later repeat passed both tracking and frame protocol unit executables on
+Android but lost the sustained session at image 138. The native tracking test
+also failed: 9 rendered frames, session stopped to IDLE, head flags 7 and no
+active controllers. State reports still show Debugging tools off and no running
+guest. Steam sign-in is pending. Test failures are retained, not reclassified
+as passes. The user cannot attend these prerequisites yet and requested a pause
+after the remaining independent work.
+
+The driver now marks position/orientation that are merely valid but untracked
+as out-of-range and rejects nonfinite or non-unit poses. The importer requests
+Vulkan 1.2 for its core image-format-list use. Focused Kotlin tests and the new
+validation classifier tests pass. The broad Linux suite had one unrelated
+AppImage log-tail failure under WSL; the full CI suite passed at `040d31c1`.
 
 ## Remaining stages
 

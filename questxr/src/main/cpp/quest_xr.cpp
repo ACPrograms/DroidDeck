@@ -113,7 +113,7 @@ public:
 
     void health(const char *error = "") {
         int steamvrState = -1;
-        if (guestSurface_ && statusCallback_) {
+        if ((guestSurface_ || guestFramesInput_) && statusCallback_) {
             steamvrState = env_->CallIntMethod(app_->activity->clazz, statusCallback_);
             if (env_->ExceptionCheck()) { env_->ExceptionClear(); steamvrState = -1; }
         }
@@ -161,13 +161,14 @@ private:
     bool running_ = false, exit_ = false, surfaceSupported_ = false, quitRequested_ = false;
     bool surfaceTest_ = false;
     bool guestSurface_ = false, guestAttached_ = false;
-    bool frameInput_ = false, verifyPixels_ = false;
+    bool frameInput_ = false, verifyPixels_ = false, guestFramesInput_ = false;
     XrFrameReceiver receiver_;
     DroidDeckXrFrameHeader sourceHeader_{};
     uint64_t uploadedFrames_ = 0, verifiedFrame_ = 0;
     uint32_t gpuChecksum_ = 0;
     GLuint sourceTexture_ = 0, sourceProgram_ = 0;
     jmethodID surfaceCallback_ = nullptr, frameCallback_ = nullptr;
+    jmethodID activeCallback_ = nullptr;
     jmethodID statusCallback_ = nullptr;
     jobject androidJavaSurface_ = nullptr;
     DroidDeckXrTracking *tracking_ = nullptr;
@@ -223,9 +224,15 @@ private:
         env_->DeleteLocalRef(extra);
         extra = env_->NewStringUTF("guest_surface");
         guestSurface_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
-        if (guestSurface_) {
-            surfaceTest_ = true;
-            surfaceCallback_ = env_->GetMethodID(activityClass, "onXrSurface", "(Landroid/view/Surface;II)V");
+        env_->DeleteLocalRef(extra);
+        extra = env_->NewStringUTF("guest_frames");
+        guestFramesInput_ = env_->CallBooleanMethod(intent, getBoolean, extra, JNI_FALSE);
+        if (guestFramesInput_) frameInput_ = true;
+        if (guestSurface_ || guestFramesInput_) {
+            if (guestSurface_) {
+                surfaceTest_ = true;
+                surfaceCallback_ = env_->GetMethodID(activityClass, "onXrSurface", "(Landroid/view/Surface;II)V");
+            } else activeCallback_ = env_->GetMethodID(activityClass, "onXrActive", "(Z)V");
             frameCallback_ = env_->GetMethodID(activityClass, "onXrFrame", "(J)J");
             statusCallback_ = env_->GetMethodID(activityClass, "onXrStatus", "()I");
             if (env_->ExceptionCheck()) { env_->ExceptionClear(); throw std::runtime_error("XR activity bridge methods unavailable"); }
@@ -488,9 +495,10 @@ private:
     }
 
     void attachGuest(bool attach) {
-        if (!guestSurface_ || attach == guestAttached_) return;
-        env_->CallVoidMethod(app_->activity->clazz, surfaceCallback_, attach ? androidJavaSurface_ : nullptr,
-                            eyes_[0].width * 2, eyes_[0].height);
+        if ((!guestSurface_ && !guestFramesInput_) || attach == guestAttached_) return;
+        if (guestFramesInput_) env_->CallVoidMethod(app_->activity->clazz, activeCallback_, static_cast<jboolean>(attach));
+        else env_->CallVoidMethod(app_->activity->clazz, surfaceCallback_, attach ? androidJavaSurface_ : nullptr,
+                                 eyes_[0].width * 2, eyes_[0].height);
         if (env_->ExceptionCheck()) {
             env_->ExceptionDescribe(); env_->ExceptionClear(); throw std::runtime_error("Guest surface handshake failed");
         }
@@ -717,7 +725,7 @@ private:
         XrView views[2]{{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
         check(xrLocateViews(session_, &locate, &viewState, 2, &count, views), "xrLocateViews");
         publishTracking(views, frameState.predictedDisplayTime);
-        if (guestSurface_ && guestAttached_) {
+        if ((guestSurface_ || guestFramesInput_) && guestAttached_) {
             timespec now{}; clock_gettime(CLOCK_MONOTONIC, &now);
             guestFrames_ = env_->CallLongMethod(app_->activity->clazz, frameCallback_, (jlong)now.tv_sec * 1000000000LL + now.tv_nsec);
             if (env_->ExceptionCheck()) { env_->ExceptionClear(); throw std::runtime_error("Guest frame callback failed"); }

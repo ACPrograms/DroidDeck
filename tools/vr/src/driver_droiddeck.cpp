@@ -425,10 +425,13 @@ public:
         if (id_ == k_unTrackedDeviceIndexInvalid) return;
         DriverPose_t pose{};
         pose.qWorldFromDriverRotation.w = pose.qDriverFromHeadRotation.w = 1;
-        pose.qRotation = {hand.pose.orientation[3], hand.pose.orientation[0], hand.pose.orientation[1], hand.pose.orientation[2]};
-        for (int axis = 0; axis < 3; axis++) pose.vecPosition[axis] = hand.pose.position[axis];
+        pose.qRotation.w = 1;
         pose.deviceIsConnected = hand.active;
-        pose.poseIsValid = hand.active && (hand.pose.flags & 3u) == 3u;
+        pose.poseIsValid = hand.active && XrTrackingFile::Tracked(hand.pose);
+        if (pose.poseIsValid) {
+            pose.qRotation = {hand.pose.orientation[3], hand.pose.orientation[0], hand.pose.orientation[1], hand.pose.orientation[2]};
+            for (int axis = 0; axis < 3; axis++) pose.vecPosition[axis] = hand.pose.position[axis];
+        }
         pose.result = pose.poseIsValid ? TrackingResult_Running_OK : TrackingResult_Running_OutOfRange;
         pose_ = pose;
         VRServerDriverHost()->TrackedDevicePoseUpdated(id_, pose, sizeof(pose));
@@ -580,7 +583,7 @@ public:
         bool freshXr = xr_.Read(&xr) && XrTrackingFile::Fresh(xr);
         if (freshXr || xrMode_) {
             p.deviceIsConnected = true;
-            p.poseIsValid = freshXr && (xr.head.flags & 3u) == 3u;
+            p.poseIsValid = freshXr && XrTrackingFile::Tracked(xr.head);
             p.result = p.poseIsValid ? TrackingResult_Running_OK : TrackingResult_Running_OutOfRange;
             if (p.poseIsValid) {
                 p.qRotation = {xr.head.orientation[3], xr.head.orientation[0], xr.head.orientation[1], xr.head.orientation[2]};

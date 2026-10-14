@@ -8,6 +8,29 @@ from pathlib import Path
 from adb_device import resolve_serial
 
 
+def validate_samples(samples, require_controllers=False, guest=False, steamvr=False, surface=False):
+    if len(samples) < 2:
+        return 'No advancing telemetry; check runtime initialization and headset wake/proximity'
+    if samples[-1]['rendered'] - samples[0]['rendered'] < 72:
+        return 'Fewer than 72 additional stereo frames were submitted'
+    if not any(sample['sessionState'] == 5 and sample['headFlags'] & 15 == 15 for sample in samples):
+        return 'No focused session with tracked 6DoF position and orientation'
+    if require_controllers and not any(all(sample['controllersActive']) for sample in samples):
+        return 'Both controllers did not become active'
+    if steamvr and samples[-1].get('uploadedFrames', 0) - samples[0].get('uploadedFrames', 0) < 72:
+        return 'No advancing owned SteamVR images; XR submissions alone are insufficient'
+    if steamvr and samples[-1].get('sourceFrameId', 0) <= samples[0].get('sourceFrameId', 0):
+        return 'SteamVR source frame IDs did not advance'
+    if guest and not steamvr and samples[-1].get('guestFrames', 0) - samples[0].get('guestFrames', 0) < 72:
+        return 'No advancing guest GPU presentation; submitting an XR layer alone is insufficient'
+    if steamvr and samples[-1].get('steamvrState') != 4:
+        return 'SteamVR did not report RUNNING'
+    expected = 'frames' if steamvr else 'guest' if guest else 'surface' if surface else 'native'
+    if samples[-1].get('source') != expected:
+        return 'Wrong projection source'
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description='Validate immersive DroidDeck XR on a connected Quest')
     parser.add_argument('--adb', default=os.environ.get('ADB', 'adb'))
@@ -24,6 +47,8 @@ def main():
         parser.error('--seconds must be between 5 and 600')
     if args.steamvr and not args.guest:
         parser.error('--steamvr requires --guest')
+    if args.steamvr and args.surface:
+        parser.error('--steamvr uses owned frames and cannot use --surface')
     serial = resolve_serial(args.adb, args.serial)
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -42,7 +67,7 @@ def main():
     if args.surface:
         launch += ['--ez', 'surface_test', 'true']
     if args.guest:
-        launch += ['--ez', 'guest_surface', 'true']
+        launch += ['--ez', 'guest_frames' if args.steamvr else 'guest_surface', 'true']
     if args.steamvr:
         launch += ['--ez', 'start_steamvr', 'true']
     samples = []
@@ -75,20 +100,7 @@ def main():
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         log = str(error)
     (args.output / 'logcat.txt').write_text(log, encoding='utf-8')
-    if len(samples) < 2:
-        failure = failure or 'No advancing telemetry; check runtime initialization and headset wake/proximity'
-    elif samples[-1]['rendered'] - samples[0]['rendered'] < 72:
-        failure = failure or 'Fewer than 72 additional stereo frames were submitted'
-    elif not any(sample['sessionState'] == 5 and sample['headFlags'] & 15 == 15 for sample in samples):
-        failure = failure or 'No focused session with tracked 6DoF position and orientation'
-    elif args.require_controllers and not any(all(sample['controllersActive']) for sample in samples):
-        failure = failure or 'Both controllers did not become active'
-    elif args.guest and samples[-1].get('guestFrames', 0) - samples[0].get('guestFrames', 0) < 72:
-        failure = failure or 'No advancing guest GPU presentation; submitting an XR layer alone is insufficient'
-    elif args.steamvr and samples[-1].get('steamvrState') != 4:
-        failure = failure or 'SteamVR did not report RUNNING'
-    elif samples[-1].get('source') != ('guest' if args.guest else 'surface' if args.surface else 'native'):
-        failure = failure or 'Wrong projection source'
+    failure = failure or validate_samples(samples, args.require_controllers, args.guest, args.steamvr, args.surface)
     report = {'ok': failure is None, 'error': failure, 'samples': samples}
     (args.output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps({'ok': report['ok'], 'error': failure, 'samples': len(samples),

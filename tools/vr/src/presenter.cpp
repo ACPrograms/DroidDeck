@@ -183,7 +183,8 @@ private:
             started_ = true;
             thread_ = std::thread([this] {
                 try { Run(); }
-                catch (const std::exception &error) { Log("presenter: %s", error.what()); Fail(); }
+                catch (const std::exception &error) { Log("presenter: %s", error.what()); }
+                Cleanup(); Fail();
             });
         }
     }
@@ -240,6 +241,9 @@ private:
                 lastLog = now;
             }
         }
+    }
+
+    void Cleanup() {
         if (dev_) vk_.DeviceWaitIdle(dev_);
         DestroyCapture();
         while (!textures_.empty()) Forget(textures_.back().handle);
@@ -253,7 +257,7 @@ private:
         }
         if (surface_) vk_.DestroySurfaceKHR(inst_, surface_, nullptr);
         if (inst_) vk_.DestroyInstance(inst_, nullptr);
-        Fail();
+        surface_ = VK_NULL_HANDLE; inst_ = VK_NULL_HANDLE;
     }
 
     std::chrono::microseconds guard_{4000};
@@ -360,7 +364,7 @@ private:
         VK_GLOBAL(X)
 #undef X
         const char *iexts[] = {"VK_KHR_surface", wayland_ ? "VK_KHR_wayland_surface" : "VK_KHR_xlib_surface"};
-        VkApplicationInfo app = {VK_STRUCTURE_TYPE_APPLICATION_INFO, nullptr, "droiddeck-vr-presenter", 1, nullptr, 0, VK_API_VERSION_1_1};
+        VkApplicationInfo app = {VK_STRUCTURE_TYPE_APPLICATION_INFO, nullptr, "droiddeck-vr-presenter", 1, nullptr, 0, VK_API_VERSION_1_2};
         VkInstanceCreateInfo ici = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, nullptr, 0, &app, 0, nullptr,
                                     frameChannel_ ? 0u : 2u, frameChannel_ ? nullptr : iexts};
         VkResult r = vk_.CreateInstance(&ici, nullptr, &inst_);

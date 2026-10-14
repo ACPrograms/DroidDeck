@@ -1,6 +1,7 @@
 #pragma once
 #include "xr_tracking.h"
 #include <cstring>
+#include <cmath>
 #include <mutex>
 #include <string>
 #include <fcntl.h>
@@ -46,6 +47,16 @@ public:
         return packet.active && age >= 0 && age < 500000000LL && packet.period_ns >= 1000000LL
             && packet.period_ns <= 50000000LL && packet.eyes[0].width > 0 && packet.eyes[0].width <= 8192
             && packet.eyes[0].height > 0 && packet.eyes[0].height <= 8192;
+    }
+    static bool Tracked(const DroidDeckXrPose &pose) {
+        if ((pose.flags & 15u) != 15u) return false;
+        float lengthSquared = 0;
+        for (float value : pose.orientation) {
+            if (!std::isfinite(value)) return false;
+            lengthSquared += value * value;
+        }
+        for (float value : pose.position) if (!std::isfinite(value)) return false;
+        return std::abs(lengthSquared - 1.f) < 0.01f;
     }
 private:
     DroidDeckXrTracking *mapping_ = nullptr;

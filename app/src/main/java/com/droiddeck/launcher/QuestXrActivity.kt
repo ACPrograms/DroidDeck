@@ -15,8 +15,8 @@ class QuestXrActivity : NativeActivity() {
     @Volatile private var closing = false
     @Volatile private var steamVrStatus = SteamVr.Status.UNAVAILABLE
     override fun onCreate(savedInstanceState: Bundle?) {
-        if (intent.getBooleanExtra("guest_surface", false)) {
-            intent.putExtra("surface_test", true)
+        if (intent.getBooleanExtra("guest_surface", false) || intent.getBooleanExtra("guest_frames", false)) {
+            if (intent.getBooleanExtra("guest_surface", false)) intent.putExtra("surface_test", true)
             SessionService.resume(this)
         }
         super.onCreate(savedInstanceState)
@@ -35,7 +35,26 @@ class QuestXrActivity : NativeActivity() {
         SessionService.setActivityVisible(this, surface != null)
         WaylandCompositor.nativeVsync(System.nanoTime())
         check(WaylandCompositor.nativeWaitSurface(3000)) { "XR surface GPU handshake timed out" }
-        if (surface != null && intent.getBooleanExtra("start_steamvr", false) && !steamVrStarted) {
+        if (surface != null) startSteamVr()
+    }
+
+    fun onXrActive(active: Boolean) {
+        if (active) {
+            check(CompositorHost.isStarted) { "DroidDeck compositor is not running" }
+            SessionService.resume(this)
+            WaylandCompositor.nativeSetCardboard(false, 1, 0.064f, 3f, 4f, 0f, 0f, 90f, 0f, 0f)
+            WaylandCompositor.nativeSetFrameGenArmed(false, 0, 0)
+            WaylandCompositor.nativeSetZeroCopy(false)
+            CompositorHost.attachXr(null)
+            WaylandCompositor.nativeVsync(System.nanoTime())
+            check(WaylandCompositor.nativeWaitSurface(3000)) { "XR frame GPU handshake timed out" }
+        }
+        SessionService.setActivityVisible(this, active)
+        if (active) startSteamVr()
+    }
+
+    private fun startSteamVr() {
+        if (intent.getBooleanExtra("start_steamvr", false) && !steamVrStarted) {
             steamVrStarted = true
             Thread({
                 if (!SteamVr.run(this, "start")) Log.e("DroidDeckXR", "SteamVR start failed")
@@ -57,7 +76,6 @@ class QuestXrActivity : NativeActivity() {
 
     override fun onDestroy() {
         closing = true
-        if (steamVrStarted) Thread({ SteamVr.run(this, "stop") }, "quest-steamvr-stop").start()
         super.onDestroy()
     }
 }

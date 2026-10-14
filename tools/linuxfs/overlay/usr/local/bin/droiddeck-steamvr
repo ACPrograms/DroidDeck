@@ -75,6 +75,9 @@ JSON
     export VK_LAYER_PATH="$layer${VK_LAYER_PATH:+:$VK_LAYER_PATH}"
     export VK_INSTANCE_LAYERS="VK_LAYER_DROIDDECK_vr${VK_INSTANCE_LAYERS:+:$VK_INSTANCE_LAYERS}"
     export VK_LOADER_LAYERS_DISABLE="${VK_LOADER_LAYERS_DISABLE:-~implicit~}"
+    if [ -S /run/droiddeck/droiddeck-xr-frames ] && [ -z "${DROIDDECK_VR_PRESENT:-}" ]; then
+        export DROIDDECK_VR_PRESENT=questframes
+    fi
 
     shims=$state/shims
     mkdir -p "$shims"

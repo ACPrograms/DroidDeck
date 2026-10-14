@@ -4,7 +4,9 @@ param(
     [string]$Sdk = "$env:USERPROFILE\android-sdk",
     [string]$NdkVersion = '27.3.13750724',
     [string]$BuildTools = '35.0.0',
-    [string]$Apk
+    [string]$Apk,
+    [string]$Serial,
+    [switch]$SignOnly
 )
 $ErrorActionPreference = 'Stop'
 function Invoke-Checked([string]$Program, [string[]]$Arguments) {
@@ -29,7 +31,20 @@ try {
     $certificate = Invoke-Checked "$tools\apksigner.bat" @('verify', '--print-certs', $signed)
     $expected = (Get-Content keystore\release-signer.sha256 -Raw).Trim()
     if (-not ($certificate -match "certificate SHA-256 digest: $expected")) { throw 'Unexpected signing certificate' }
-    Invoke-Checked $Adb @('install', '--no-incremental', '-r', $signed)
+    if (-not $SignOnly) {
+        $connected = @(Invoke-Checked $Adb @('devices') | ForEach-Object {
+            if ($_ -match '^(\S+)\s+device\s*$') { $matches[1] }
+        })
+        if (-not $Serial) {
+            if ($connected.Count -ne 1) { throw 'Specify -Serial with exactly one connected, authorized Quest target' }
+            $Serial = $connected[0]
+        }
+        if ($Serial -notin $connected) { throw 'The selected headset is not connected and authorized' }
+        $model = (Invoke-Checked $Adb @('-s', $Serial, 'shell', 'getprop', 'ro.product.model') | Out-String).Trim()
+        if ($model -notmatch '^Quest[ _]3$') { throw "Refusing Quest 3 deployment to model: $model" }
+        Invoke-Checked $Adb @('-s', $Serial, 'install', '--no-incremental', '-r', $signed)
+    }
+    Write-Output "Verified signed APK: $(Join-Path $repo $signed)"
 } finally {
     Pop-Location
 }
