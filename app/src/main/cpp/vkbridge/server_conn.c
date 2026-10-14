@@ -8,6 +8,8 @@
 #include "vkb_server.h"
 
 #include <errno.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -102,8 +104,14 @@ void vkb_proc_cleanup(vkb_srv_proc *p)
             if (mine) tables[i] = NULL;
             pthread_mutex_unlock(&tables_lock);
             if (!mine) continue;
-            if (t->is_device) {
+            if (p->driver_crashed) {
+                /* The driver faulted for this process: calling into it for its objects again could
+                 * fault again, outside any guard. They are left to the driver. */
+                VKB_WARN("process %d: %s %u left as it is (the driver crashed serving it)", p->pid, t->is_device ? "device" : "instance", t->id);
+                if (t->is_device) vkb_cbtrack_device_destroy(t);
+            } else if (t->is_device) {
                 VKB_INFO("process %d exited without destroying device %u; cleaning up", p->pid, t->id);
+                vkb_cbtrack_device_destroy(t);
                 if (t->real.vkDeviceWaitIdle) t->real.vkDeviceWaitIdle(t->device);
                 vkb_spvfix_device_destroy(t);
                 vkb_dsmap_device_destroy(t);
@@ -216,6 +224,12 @@ void vkb_sv_vkEndCommandBuffer(vkb_srv_call *c)
     const uint8_t *s = vkb_dec_blob(&c->d, &len);
     if (c->d.err) {
         vkb_srv_bad_message(c);
+        return;
+    }
+    /* A command buffer the device never handed out (or has freed) is not replayed: the driver would
+     * be given a pointer it does not own (server_cbtrack.c). */
+    if (!vkb_cbtrack_known(c->table, cb, "vkEndCommandBuffer")) {
+        vkb_enc_u32(&c->r, (uint32_t)VK_ERROR_DEVICE_LOST);
         return;
     }
     VkResult begin_r = VK_SUCCESS;
@@ -425,8 +439,55 @@ static int srv_recv(vkb_srv_conn *conn, vkb_msg_hdr *h, uint8_t **payload, int *
     }
 }
 
+/* ------------------------------------------------------------------ driver fault guard */
+
+/*
+ * A fault inside the GPU driver while serving one client used to take the whole app down (the
+ * server runs in its process). Each request runs under a guard: SIGSEGV/SIGBUS on that thread
+ * jumps back here, the client is cut off (it sees the bridge gone and fails or falls back), and
+ * the app and the other clients go on. Any other fault goes to the handler that was there before.
+ */
+static __thread sigjmp_buf *t_guard;
+static __thread volatile sig_atomic_t t_fault;
+static struct sigaction prev_segv, prev_bus;
+static pthread_once_t guard_once = PTHREAD_ONCE_INIT;
+
+static void guard_handler(int sig, siginfo_t *si, void *uc)
+{
+    sigjmp_buf *g = t_guard;
+    if (g) {
+        t_guard = NULL;
+        t_fault = sig;
+        siglongjmp(*g, 1);
+    }
+    struct sigaction *p = sig == SIGBUS ? &prev_bus : &prev_segv;
+    if ((p->sa_flags & SA_SIGINFO) && p->sa_sigaction) {
+        p->sa_sigaction(sig, si, uc);
+        return;
+    }
+    if (!(p->sa_flags & SA_SIGINFO) && p->sa_handler == SIG_IGN) return;
+    if (!(p->sa_flags & SA_SIGINFO) && p->sa_handler && p->sa_handler != SIG_DFL) {
+        p->sa_handler(sig);
+        return;
+    }
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void guard_install(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = guard_handler;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, &prev_segv);
+    sigaction(SIGBUS, &sa, &prev_bus);
+}
+
 static void *conn_main(void *arg)
 {
+    pthread_once(&guard_once, guard_install);
     vkb_srv_conn *conn = arg;
     vkb_srv_call c;
     vkb_enc_init(&c.r);
@@ -467,7 +528,19 @@ static void *conn_main(void *arg)
                 vkb_srv_set_current_table(c.table);
                 if (vkb_verbose) VKB_DBG("-> %s", vkb_cmd_names[h.cmd]);
                 vkb_srv_current_cmd = vkb_cmd_names[h.cmd];
+                sigjmp_buf jb;
+                if (sigsetjmp(jb, 1)) {
+                    VKB_ERR("the GPU driver crashed (signal %d) in %s for process %d; that client is cut off, the app and "
+                            "the other clients carry on", (int)t_fault, vkb_cmd_names[h.cmd], conn->proc ? conn->proc->pid : -1);
+                    if (conn->proc) conn->proc->driver_crashed = 1;
+                    vkb_srv_current_cmd = NULL;
+                    vkb_srv_set_current_table(NULL);
+                    order_done(conn->proc, h.seq);
+                    break;
+                }
+                t_guard = &jb;
                 vkb_srv_handlers[h.cmd](&c);
+                t_guard = NULL;
                 vkb_srv_current_cmd = NULL;
                 vkb_srv_set_current_table(NULL);
                 if (st_period) stats_add(h.cmd, mono_ns() - t1, t1 - t0);

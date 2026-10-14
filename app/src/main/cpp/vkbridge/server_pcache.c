@@ -46,7 +46,11 @@ void vkb_pcache_set_dir(const char *dir)
 {
     if (!dir || !*dir) return;
     mkdir(dir, 0700);
-    pc_dir = dir;
+    /* A copy: the JNI entry frees its string once the server is up, and the pointer kept before
+     * printed "pipeline cache  \xef\xbf\xbdRYp/13b5-..." and wrote the cache under that name. */
+    char *copy = strdup(dir);
+    if (!copy) return;
+    pc_dir = copy;
     VKB_INFO("pipeline cache directory %s", dir);
 }
 

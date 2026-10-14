@@ -33,6 +33,7 @@ typedef struct vkb_srv_proc {
     uint64_t watermark;            /* every async seq <= this has run */
     uint8_t done[VKB_SEQ_RING];    /* seqs above the watermark that have run */
     int conn_closed;               /* a connection ended (a seq may never arrive) */
+    int driver_crashed;            /* the driver faulted serving it: its objects are left alone */
 } vkb_srv_proc;
 
 typedef struct vkb_srv_conn {
@@ -88,6 +89,7 @@ typedef struct vkb_srv_table {
     struct vkb_pcache *pcache;               /* server_pcache.c */
     struct vkb_dsmap *dsmap;                 /* server_dsmap.c */
     struct vkb_spvfix *spvfix;               /* server_spvfix.c */
+    struct vkb_cbtrack *cbtrack;             /* server_cbtrack.c */
 } vkb_srv_table;
 
 /* server_main.c */
@@ -96,6 +98,11 @@ extern vkb_dispatch vkb_global_dt;
 extern int vkb_verbose;
 
 void vkb_log_summary(void);
+
+/* server_cbtrack.c: command buffers the device handed out; others are refused, not passed on. */
+void vkb_cbtrack_device_init(vkb_srv_table *t);
+void vkb_cbtrack_device_destroy(vkb_srv_table *t);
+int vkb_cbtrack_known(vkb_srv_table *t, VkCommandBuffer cb, const char *what);
 
 /* server_spvfix.c */
 void vkb_spvfix_device_init(vkb_srv_table *t);

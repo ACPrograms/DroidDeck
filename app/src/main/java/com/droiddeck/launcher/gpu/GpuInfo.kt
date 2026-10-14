@@ -86,7 +86,7 @@ data class GpuInfo(
     fun supportText(context: Context): String = context.getString(when (support) {
         Support.TESTED -> R.string.gpuinfo_supported
         Support.UNTESTED -> when (family) {
-            Family.POWERVR -> R.string.gpuinfo_powervr
+            Family.POWERVR -> if (name.contains("Xclipse", ignoreCase = true)) R.string.gpuinfo_xclipse else R.string.gpuinfo_powervr
             Family.A7XX_LOW -> R.string.gpuinfo_experimental
             Family.MALI_JM, Family.MALI_G610_G710, Family.MALI_G615, Family.MALI_G720, Family.MALI_LATEST, Family.MALI_OTHER -> R.string.gpuinfo_experimental
             else -> R.string.gpuinfo_below_tested

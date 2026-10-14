@@ -1190,6 +1190,10 @@ BUSCONF
         # The loader's view first, then the variants that change what Zink asks of the device;
         # the first that starts is what the client gets.
         VK_LOADER_DEBUG=error,warn timeout 20 /usr/local/bin/droiddeck-glprobe 2>&1 | grep -v drirc | head -40 | sed 's/^/== glprobe (loader): /'
+        # What Zink asked the device before it gave up (the Mali compatibility layer's trace), Mesa's
+        # own debug output, and the device as Vulkan programs see it under the same environment.
+        DROIDDECK_MALI_COMPAT_TRACE=1 MESA_DEBUG=1 LIBGL_DEBUG=verbose timeout 20 /usr/local/bin/droiddeck-glprobe 2>&1 | grep -v drirc | head -80 | sed 's/^/== glprobe (trace): /'
+        command -v vulkaninfo >/dev/null 2>&1 && DROIDDECK_MALI_COMPAT_TRACE=1 timeout 20 vulkaninfo --summary 2>&1 | head -40 | sed 's/^/== glprobe (vulkaninfo): /'
         bl_gl_ok=
         for bl_variant in "ZINK_DEBUG=" "ZINK_DEBUG= ZINK_DESCRIPTORS=auto" "ZINK_DEBUG= LIBGL_KOPPER_DISABLE=true" "ZINK_DEBUG= DROIDDECK_MALI_COMPAT=0"; do
           if env $bl_variant timeout 20 /usr/local/bin/droiddeck-glprobe 2>&1 | grep -v drirc | head -20 | sed "s/^/== glprobe ($bl_variant): /"; [ "${PIPESTATUS[0]}" = 0 ]; then

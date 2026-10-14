@@ -151,6 +151,18 @@ static bool wanted(void)
     return getenv("WINEPREFIX") != NULL;
 }
 
+/* DROIDDECK_MALI_COMPAT_TRACE=1: what an application asks before it creates a device (Zink on a
+ * Mali-G615 through Venus gave up before vkCreateDevice without a word). */
+static bool tracing(void)
+{
+    static int on = -1;
+    if (on < 0) {
+        const char *v = getenv("DROIDDECK_MALI_COMPAT_TRACE");
+        on = v && *v && strcmp(v, "0") != 0;
+    }
+    return on;
+}
+
 static bool has_extension(struct instance *inst, VkPhysicalDevice physical_device, const char *name)
 {
     uint32_t count = 0;
@@ -337,6 +349,13 @@ static VKAPI_ATTR void VKAPI_CALL GetPhysicalDeviceFeatures2(VkPhysicalDevice ph
     inst->GetPhysicalDeviceFeatures2(physical_device, features);
     relink(dropped, dropped_count);
     report_features(&features->features, gaps);
+    if (tracing()) {
+        char chain[512] = "";
+        size_t used = 0;
+        for (VkBaseOutStructure *s = features->pNext; s && used + 16 < sizeof(chain); s = s->pNext)
+            used += (size_t)snprintf(chain + used, sizeof(chain) - used, " %d", (int)s->sType);
+        layer_log("trace: vkGetPhysicalDeviceFeatures2 (gaps 0x%x, %u structures held back), chain:%s", gaps, dropped_count, chain);
+    }
     for (VkBaseOutStructure *s = features->pNext; s; s = s->pNext) {
         if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT && (gaps & GAP_ROBUSTNESS2)) {
             ((VkPhysicalDeviceRobustness2FeaturesEXT *)s)->robustBufferAccess2 = VK_TRUE;
@@ -362,6 +381,10 @@ static VKAPI_ATTR void VKAPI_CALL GetPhysicalDeviceProperties2(VkPhysicalDevice 
     struct instance *inst = instance_from_handle(physical_device);
     inst->GetPhysicalDeviceProperties2(physical_device, properties);
     report_limits(&properties->properties.limits, physical_device_gaps(inst, physical_device));
+    if (tracing())
+        layer_log("trace: vkGetPhysicalDeviceProperties2: %s, Vulkan %u.%u.%u, type %d", properties->properties.deviceName,
+                  VK_API_VERSION_MAJOR(properties->properties.apiVersion), VK_API_VERSION_MINOR(properties->properties.apiVersion),
+                  VK_API_VERSION_PATCH(properties->properties.apiVersion), (int)properties->properties.deviceType);
 }
 
 /* The extensions the layer stands in for, added to the driver's list. */
@@ -391,6 +414,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysi
     inst->EnumerateDeviceExtensionProperties(physical_device, NULL, &own, all);
     memcpy(all + own, extra, extra_count * sizeof(*extra));
     uint32_t total = own + extra_count;
+    if (tracing())
+        layer_log("trace: vkEnumerateDeviceExtensionProperties: %u from the driver, %u added by the layer", own, extra_count);
     uint32_t n = *count < total ? *count : total;
     memcpy(properties, all, n * sizeof(*all));
     free(all);
@@ -411,6 +436,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo 
 
     PFN_vkCreateInstance create = (PFN_vkCreateInstance)gipa(VK_NULL_HANDLE, "vkCreateInstance");
     VkResult result = create(info, allocator, instance);
+    if (tracing())
+        layer_log("trace: vkCreateInstance for %s (API %u.%u): %d, layer %s", info->pApplicationInfo && info->pApplicationInfo->pApplicationName ?
+                  info->pApplicationInfo->pApplicationName : "?", info->pApplicationInfo ? VK_API_VERSION_MAJOR(info->pApplicationInfo->apiVersion) : 0,
+                  info->pApplicationInfo ? VK_API_VERSION_MINOR(info->pApplicationInfo->apiVersion) : 0, (int)result, wanted() ? "active" : "idle");
     if (result != VK_SUCCESS)
         return result;
 
