@@ -138,6 +138,8 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private fun openDeckRing(why: String) {
         val deck = SessionState.deckPad
         val opened = if (deck) padBridge?.start() else null
+        // Every pad already connected is a player from the start, before its first press.
+        padBridge?.claimConnected()
         Log.i(TAG, "deck ring ($why): deck pad $deck" + when (opened) {
             null -> ", left for first input"
             true -> ", ring open"
@@ -310,6 +312,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private val deviceListener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) {
             logInputDevice("connected", deviceId)
+            padBridge?.claimConnected()
             updateOnScreenControls()
             updatePointerCapture()
         }

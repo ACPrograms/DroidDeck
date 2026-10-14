@@ -29,7 +29,9 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
  * Guide-then-A chord the client itself answers.
  *
  * <p>Each further controller is another player: slots 1 to 3, an Xbox 360 pad each, which in a
- * Steam session only the client reads (libfakeinput) and hands games through Steam Input.
+ * Steam session only the client reads (libfakeinput) and hands games through Steam Input. Slot 0
+ * is the device's own controls wherever it has them: a Bluetooth pad pressed first used to take
+ * it, and played as the handheld while its built-in pad became player 2.
  */
 public final class PadBridge {
     private static final String TAG = "PadBridge";
@@ -101,6 +103,27 @@ public final class PadBridge {
 
     /** No physical controller is driving the pad: nothing yet, or the on-screen controls were last. */
     public static final int NO_CONTROLLER = -1;
+
+    /**
+     * Whether this controller is the device's own controls, which play in slot 0: the one Android
+     * calls built-in, else - a handheld whose pad Android calls external, as AYN's present theirs -
+     * the controller connected longest, there since boot where it is the device's own. A phone
+     * with only connected pads has its first one there.
+     */
+    static boolean isBuiltIn(InputDevice device) {
+        int own = NO_CONTROLLER;
+        boolean ownInternal = false;
+        for (int id : InputDevice.getDeviceIds()) {
+            InputDevice d = InputDevice.getDevice(id);
+            if (!isFromController(d)) continue;
+            boolean internal = !d.isExternal();
+            if (own == NO_CONTROLLER || (internal && !ownInternal) || (internal == ownInternal && id < own)) {
+                own = id;
+                ownInternal = internal;
+            }
+        }
+        return device.getId() == own;
+    }
     /**
      * The Android input device id of the physical controller that last drove any slot, or
      * {@link #NO_CONTROLLER}: where rumble goes when it names no slot of ours (RumbleComponent).
@@ -411,6 +434,19 @@ public final class PadBridge {
         }
     }
 
+    /**
+     * Gives every connected controller its slot now, so the client lists each one as it is
+     * connected instead of on its first press: a further player's pad is plugged in, at rest.
+     */
+    public synchronized void claimConnected() {
+        for (int id : InputDevice.getDeviceIds()) {
+            InputDevice device = InputDevice.getDevice(id);
+            if (!isFromController(device)) continue;
+            int slot = slotFor(device);
+            if (slot > 0 && playerWriters[slot] == null) publish(slot);
+        }
+    }
+
     /** A controller went away: its player's buttons are let go, and a further player's pad is unplugged. */
     public synchronized void onDeviceRemoved(int deviceId) {
         for (int slot = 0; slot < SLOTS; slot++) {
@@ -471,23 +507,47 @@ public final class PadBridge {
         publish();
     }
 
-    /** The slot this controller plays in: the one it has, else the first free one, else player 1's. */
+    /**
+     * The slot this controller plays in: the one it has, else slot 0 for the device's own controls
+     * and a further player's slot for a connected pad (slot 0 too while the device has no controls
+     * of its own), else player 1's.
+     */
     private int slotFor(InputDevice device) {
         int id = device.getId();
-        if (owners[0] == id) return 0;
-        for (int slot = 1; slot < SLOTS; slot++) {
+        for (int slot = 0; slot < SLOTS; slot++) {
             if (owners[slot] == id) return slot;
         }
         for (int slot = 0; slot < SLOTS; slot++) {
             if (owners[slot] != NO_CONTROLLER && InputDevice.getDevice(owners[slot]) == null) free(slot);
         }
-        for (int slot = 0; slot < SLOTS; slot++) {
+        if (isBuiltIn(device)) {
+            // A connected pad playing as the device's own controls moves to a player's slot of its own.
+            int was = owners[0];
+            if (was != NO_CONTROLLER) {
+                free(0);
+                InputDevice other = InputDevice.getDevice(was);
+                if (other != null && !isBuiltIn(other)) {
+                    int to = claim(other, 1);
+                    if (to > 0) publish(to);
+                }
+            }
+            owners[0] = id;
+            Log.i(TAG, "\"" + device.getName() + "\" (id " + id + ") is player 1, the device's own controls");
+            return 0;
+        }
+        int slot = claim(device, 1);
+        return slot >= 0 ? slot : 0;
+    }
+
+    /** Takes the first free slot from {@code from} for this controller, or -1 if none is free. */
+    private int claim(InputDevice device, int from) {
+        for (int slot = from; slot < SLOTS; slot++) {
             if (owners[slot] != NO_CONTROLLER) continue;
-            owners[slot] = id;
-            Log.i(TAG, "\"" + device.getName() + "\" (id " + id + ") is player " + (slot + 1));
+            owners[slot] = device.getId();
+            Log.i(TAG, "\"" + device.getName() + "\" (id " + device.getId() + ") is player " + (slot + 1));
             return slot;
         }
-        return 0;
+        return -1;
     }
 
     private PadState stateFor(int slot) {
