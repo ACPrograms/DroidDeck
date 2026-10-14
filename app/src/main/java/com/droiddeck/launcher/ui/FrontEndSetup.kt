@@ -6,8 +6,6 @@ import androidx.compose.ui.focus.FocusRequester
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,14 +16,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +30,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PriorityHigh
@@ -62,7 +65,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.semantics.Role
@@ -447,42 +449,42 @@ private fun FrameGenMenu(s: FrontEndState, a: FrontEndActions, host: MenuHost) {
 
 @Composable
 internal fun LaunchSettings(s: FrontEndState, a: FrontEndActions, host: MenuHost, game: com.droiddeck.launcher.frontend.Library.SteamGame? = null) {
-    val columns = if (LocalNarrowPane.current) 2 else 3
     val controller = a.controller
     val context = androidx.compose.ui.platform.LocalContext.current
     val inputMode = androidx.compose.ui.platform.LocalInputModeManager.current
     val wincompKey = game?.takeIf { it.library == com.droiddeck.launcher.frontend.Library.ADDED || it.appId > 0 }?.profileKey
     var wincompOpen by remember(wincompKey) { mutableStateOf<Boolean?>(null) }
     val wincompPicks = remember(wincompKey, wincompOpen) { wincompKey?.let { com.droiddeck.launcher.session.WinComponents.picks(context, it) }.orEmpty() }
-    val cards = buildList<@Composable (Modifier) -> Unit> {
-        add { m ->
+    val rows = buildList<@Composable () -> Unit> {
+        add {
             val back = stringResource(R.string.hop_from_games)
-            SettingCard(stringResource(R.string.setup_card_components), stringResource(R.string.setup_card_components_hint), "card:components", m.hopSource("card:components")) {
+            SettingLine(Icons.Outlined.Layers, stringResource(R.string.setup_card_components), stringResource(R.string.setup_card_components_hint), "card:components", Modifier.hopSource("card:components")) {
                 val at = Hops.sources["card:components"]
                 if (at == null) a.onComponents(true)
                 else Hops.go(HopOrigin("games", HOP_SURFACE_GAMES, null, "card:components", at, back, dest = "components", page = "components")) { a.onComponents(true) }
             }
         }
-        add { m ->
-            Box(m) {
-                SettingCard(stringResource(R.string.frame_gen_title), s.frameGenLabel, "card:fg", Modifier.fillMaxSize()) {
+        add {
+            Box(Modifier.fillMaxWidth()) {
+                SettingLine(Icons.Outlined.AutoAwesome, stringResource(R.string.frame_gen_title), s.frameGenLabel, "card:fg", menu = true) {
                     host.open = if (host.open == "fg") null else "fg"
                 }
                 FrameGenMenu(s, a, host)
             }
         }
-        if (controller != null) add { m -> SettingCard(stringResource(R.string.setup_card_controls), stringResource(R.string.setup_card_controls_hint), "card:controls", m, controller.onMapping) }
+        if (controller != null) add { SettingLine(Icons.Outlined.SportsEsports, stringResource(R.string.setup_card_controls), stringResource(R.string.setup_card_controls_hint), "card:controls", onClick = controller.onMapping) }
         val cardStore = com.droiddeck.launcher.stores.Store.byId(game?.source.orEmpty())?.takeIf { it == com.droiddeck.launcher.stores.Store.EPIC || it == com.droiddeck.launcher.stores.Store.GOG }
-        if (cardStore != null && game?.gameFiles != null) add { m ->
-            Box(m) {
+        if (cardStore != null && game?.gameFiles != null) add {
+            Box(Modifier.fillMaxWidth()) {
                 StoreLaunchCard(host, game.gameFiles!!, cardStore)
             }
         }
-        if (wincompKey != null) add { m ->
-            SettingCard(
+        if (wincompKey != null) add {
+            SettingLine(
+                Icons.Outlined.Extension,
                 stringResource(R.string.wincomp_title),
                 if (wincompPicks.isEmpty()) stringResource(R.string.wincomp_card_none) else wincompPicks.joinToString(", ") { com.droiddeck.launcher.session.WinComponentNames.of(it) },
-                "card:wincomp", m,
+                "card:wincomp",
             ) { wincompOpen = inputMode.inputMode == androidx.compose.ui.input.InputMode.Keyboard }
         }
     }
@@ -492,12 +494,14 @@ internal fun LaunchSettings(s: FrontEndState, a: FrontEndActions, host: MenuHost
         steamAppId = game.appId.takeIf { game.library != com.droiddeck.launcher.frontend.Library.ADDED },
         game = game,
     ) { wincompOpen = null }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-        for (row in cards.chunked(columns)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                for (card in row) card(Modifier.weight(1f).fillMaxHeight())
-                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
-            }
+    val pal = LocalPalette.current
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+            .clip(Shape14).background(MaterialTheme.colorScheme.surface).border(1.dp, pal.line2, Shape14),
+    ) {
+        rows.forEachIndexed { i, row ->
+            if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
+            row()
         }
     }
 }
@@ -531,7 +535,7 @@ private fun StoreLaunchCard(host: MenuHost, folder: java.io.File, store: com.dro
             com.droiddeck.launcher.stores.StoresState.post { sidecar = written ?: com.droiddeck.launcher.stores.StoreGameSidecar.read(folder) }
         }, "epic-options").start()
     }
-    SettingCard(store.shortLabel, value, "card:$key", Modifier.fillMaxSize()) {
+    SettingLine(Icons.Outlined.Storefront, store.shortLabel, value, "card:$key", menu = true) {
         host.open = if (host.open == key) null else key
     }
     AnchoredMenu(host.open == key, onDismiss = { if (host.open == key) host.open = null }, title = store.shortLabel) { first ->
@@ -561,26 +565,35 @@ private fun StoreLaunchCard(host: MenuHost, folder: java.io.File, store: com.dro
 }
 
 @Composable
-private fun SettingCard(label: String, value: String, id: String, modifier: Modifier, onClick: () -> Unit) {
+private fun SettingLine(icon: ImageVector, label: String, value: String, id: String, modifier: Modifier = Modifier, menu: Boolean = false, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     val src = remember { MutableInteractionSource() }
     val hot = rememberHot(src)
-    val pressed by src.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, Motion.sp(0.5f, Spring.StiffnessMedium), label = "cardScale")
-    Column(
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-        modifier = modifier.paneItem(id)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(Shape14)
-            .background(if (hot) pal.signal.copy(alpha = 0.10f) else colors.surface)
-            .glideBorder(hot, Shape14, pal.signal, pal.line2)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 58.dp).paneItem(id)
+            .background(if (hot) pal.signal.copy(alpha = 0.10f) else Color.Transparent)
+            .glideBorder(hot, RectangleShape, pal.signal, Color.Transparent)
             .hoverable(src).clickable(interactionSource = src, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
             .controllerConfirm(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(label, fontSize = 13.sp, color = if (hot) pal.signal else colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Icon(icon, contentDescription = null, tint = if (hot) pal.signal else colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = if (hot) pal.signal else colors.onBackground,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.widthIn(max = 360.dp).clip(RoundedCornerShape(10.dp)).background(colors.surfaceVariant)
+                .border(1.dp, pal.line2, RoundedCornerShape(10.dp)).padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Icon(if (menu) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
+                tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        }
     }
 }
 
