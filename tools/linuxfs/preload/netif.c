@@ -537,6 +537,8 @@ static FILE *synthesize(const char *table) {
 
 int bl_status_without_tracer(const char *path, int flags) __attribute__((visibility("hidden")));
 
+const char *bl_oom_adj_redirect(const char *path, int writing) __attribute__((visibility("hidden")));
+
 static FILE *open_stream(fopen_fn real, const char *path, const char *mode) {
     int status = mode && mode[0] == 'r' && !strchr(mode, '+')
             ? bl_status_without_tracer(path, O_RDONLY | O_CLOEXEC) : -1;
@@ -545,6 +547,7 @@ static FILE *open_stream(fopen_fn real, const char *path, const char *mode) {
         if (copy == NULL) close(status);
         return copy;
     }
+    path = bl_oom_adj_redirect(path, mode && (mode[0] == 'w' || mode[0] == 'a' || strchr(mode, '+')));
     FILE *f = real(path, mode);
     if (f || path == NULL || mode == NULL || mode[0] != 'r') return f;
     int saved = errno;
