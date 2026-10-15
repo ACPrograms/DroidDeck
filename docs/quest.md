@@ -81,6 +81,10 @@ The panel compositor detaches before OpenXR starts displaying guest frames.
 Session suspension accounts for the immersive activity while the panel is hidden.
 Closing the immersive activity stops SteamVR. The panel remains available for
 returning to the normal Steam session.
+The immersive activity belongs to the Steam session that opened it. Ending that
+session closes XR; a failed startup or stopped SteamVR also returns to the panel
+with an error instead of leaving a black scene. Enter SteamVR can then start a
+fresh connection.
 
 With Steam already running, `python3 tools/test_quest_xr.py --serial SERIAL`
 launches the immersive activity and verifies advancing owned images, tracked

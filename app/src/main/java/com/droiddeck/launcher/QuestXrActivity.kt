@@ -2,9 +2,12 @@ package com.droiddeck.launcher
 
 import android.app.NativeActivity
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import com.droiddeck.launcher.gpu.SteamVr
 import com.droiddeck.launcher.session.SessionService
+import com.droiddeck.launcher.session.SessionState
 import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.WaylandCompositor
 
@@ -12,7 +15,9 @@ class QuestXrActivity : NativeActivity() {
     private var steamVrStarted = false
     @Volatile private var closing = false
     @Volatile private var steamVrStatus = SteamVr.Status.UNAVAILABLE
+    private var sessionId: String? = null
     override fun onCreate(savedInstanceState: Bundle?) {
+        sessionId = SessionState.sessionId
         SessionService.setXrActivityVisible(this, true)
         super.onCreate(savedInstanceState)
     }
@@ -36,13 +41,56 @@ class QuestXrActivity : NativeActivity() {
         if (!steamVrStarted) {
             steamVrStarted = true
             Thread({
-                if (!SteamVr.run(this, "start")) Log.e("DroidDeckXR", "SteamVR start failed")
-                while (!closing) {
-                    steamVrStatus = SteamVr.status(this)
-                    Thread.sleep(1000)
+                try {
+                    val started = synchronized(steamVrLock) {
+                        if (closing || !sessionAlive()) false else {
+                            steamVrOwner = this
+                            SteamVr.run(this, "start")
+                        }
+                    }
+                    if (!started) {
+                        leaveXr("SteamVR start failed", true)
+                        return@Thread
+                    }
+                    val startupDeadline = SystemClock.elapsedRealtime() + 30_000
+                    var lastRunning: Long? = null
+                    while (!closing) {
+                        if (!sessionAlive()) {
+                            leaveXr("Steam session ended", false)
+                            break
+                        }
+                        steamVrStatus = SteamVr.status(this)
+                        val now = SystemClock.elapsedRealtime()
+                        if (steamVrStatus == SteamVr.Status.RUNNING) lastRunning = now
+                        val deadline = lastRunning?.plus(5_000) ?: startupDeadline
+                        if (steamVrStatus != SteamVr.Status.RUNNING && now >= deadline) {
+                            leaveXr("SteamVR stopped or did not finish starting", true)
+                            break
+                        }
+                        Thread.sleep(1000)
+                    }
+                } finally {
+                    synchronized(steamVrLock) {
+                        // A retiring activity must not stop a replacement's SteamVR session.
+                        if (steamVrOwner === this) {
+                            if (sessionAlive()) SteamVr.run(this, "stop")
+                            steamVrOwner = null
+                        }
+                    }
                 }
-                SteamVr.run(this, "stop")
             }, "quest-steamvr-start").start()
+        }
+    }
+
+    private fun sessionAlive() = SessionState.running && !SessionState.stopRequested &&
+        sessionId != null && SessionState.sessionId == sessionId
+
+    private fun leaveXr(reason: String, failed: Boolean) {
+        Log.w("DroidDeckXR", reason)
+        closing = true
+        runOnUiThread {
+            if (failed) Toast.makeText(this, R.string.cardboard_steamvr_failed, Toast.LENGTH_LONG).show()
+            finish()
         }
     }
 
@@ -61,5 +109,10 @@ class QuestXrActivity : NativeActivity() {
     override fun onStop() {
         SessionService.setXrActivityVisible(this, false)
         super.onStop()
+    }
+
+    companion object {
+        private val steamVrLock = Any()
+        private var steamVrOwner: QuestXrActivity? = null
     }
 }
