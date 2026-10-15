@@ -18,7 +18,11 @@ object TurnipReleases {
     private const val KEY_DOWNLOADS = "downloads"
 
     class Asset(val source: String, val tag: String, val name: String, val url: String, val size: Long, val linux: Boolean, val label: String,
-                val sha256: String = "", val pair: String = "", val bundle: Boolean = false)
+                val sha256: String = "", val pair: String = "", val bundle: Boolean = false,
+                val assetId: Long = 0, val updatedAt: String = "") {
+        /** "2026-10-15" from GitHub's updated_at; empty when the check did not record it. */
+        val builtOn: String get() = updatedAt.take(10)
+    }
     class Check(val assets: List<Asset>, val latest: List<Pair<String, String>>, val failed: List<String>, val checkedAt: Long)
 
     private class Kind(val linux: Boolean, val label: String, val pair: String, val bundle: Boolean = false)
@@ -102,7 +106,7 @@ object TurnipReleases {
                         assets.put(JSONObject().put("source", src.label).put("tag", tag).put("name", name)
                             .put("url", a.getString("browser_download_url")).put("size", a.optLong("size"))
                             .put("linux", linux).put("label", label).put("sha256", sha).put("pair", kind.pair)
-                            .put("bundle", kind.bundle))
+                            .put("bundle", kind.bundle).put("id", a.optLong("id")).put("updated_at", a.optString("updated_at")))
                     }
                 }
                 if (newest != null) latest.put(JSONObject().put("source", src.label).put("tag", newest))
@@ -141,7 +145,7 @@ object TurnipReleases {
             val a = list.getJSONObject(i)
             out.add(Asset(a.getString("source"), a.getString("tag"), a.getString("name"), a.getString("url"),
                 a.optLong("size"), a.getBoolean("linux"), a.getString("label"), a.optString("sha256", ""), a.optString("pair", ""),
-                a.optBoolean("bundle", false)))
+                a.optBoolean("bundle", false), a.optLong("id"), a.optString("updated_at", "")))
         }
         val latest = ArrayList<Pair<String, String>>()
         val l = json.optJSONArray("latest") ?: JSONArray()
@@ -160,6 +164,31 @@ object TurnipReleases {
     }
 
     private const val SHA_PREFIX = "sha256:"
+    private const val ASSET_ID_PREFIX = "asset:"
+    private const val UPDATED_PREFIX = "updated:"
+
+    /** The id an open non-Adreno pair's asset was installed as, whichever build of it that was. */
+    fun installedIdAnyBuild(context: Context, asset: Asset, isInstalled: (String) -> Boolean): String? =
+        downloads(context).optString(asset.name, "").takeIf { it.isNotEmpty() && isInstalled(it) }
+
+    /**
+     * An open non-Adreno pair is rebuilt in place under the same tag: a different digest, asset id
+     * or upload time than the one installed means a newer build.
+     */
+    fun updateAvailable(context: Context, asset: Asset): Boolean {
+        if (!DriverPairs.isNonAdreno(asset.pair)) return false
+        val d = downloads(context)
+        if (d.optString(asset.name, "").isEmpty()) return false
+        val sha = d.optString(SHA_PREFIX + asset.name, "")
+        val id = d.optLong(ASSET_ID_PREFIX + asset.name, 0)
+        val updated = d.optString(UPDATED_PREFIX + asset.name, "")
+        return (sha.isNotEmpty() && asset.sha256.isNotEmpty() && !sha.equals(asset.sha256, ignoreCase = true)) ||
+            (id != 0L && asset.assetId != 0L && id != asset.assetId) ||
+            (updated.isNotEmpty() && asset.updatedAt.isNotEmpty() && updated != asset.updatedAt)
+    }
+
+    /** When the installed build of [asset] was uploaded, as recorded at download ("" if unknown). */
+    fun installedBuiltOn(context: Context, asset: Asset): String = downloads(context).optString(UPDATED_PREFIX + asset.name, "").take(10)
 
     fun isDownloaded(context: Context, id: String): Boolean {
         val d = downloads(context)
@@ -168,7 +197,11 @@ object TurnipReleases {
 
     fun recordDownload(context: Context, asset: Asset, id: String) {
         val d = downloads(context).put(asset.name, id)
-        if (DriverPairs.isNonAdreno(asset.pair) && asset.sha256.isNotEmpty()) d.put(SHA_PREFIX + asset.name, asset.sha256)
+        if (DriverPairs.isNonAdreno(asset.pair)) {
+            if (asset.sha256.isNotEmpty()) d.put(SHA_PREFIX + asset.name, asset.sha256)
+            if (asset.assetId != 0L) d.put(ASSET_ID_PREFIX + asset.name, asset.assetId)
+            if (asset.updatedAt.isNotEmpty()) d.put(UPDATED_PREFIX + asset.name, asset.updatedAt)
+        }
         prefs(context).edit().putString(KEY_DOWNLOADS, d.toString()).apply()
     }
 

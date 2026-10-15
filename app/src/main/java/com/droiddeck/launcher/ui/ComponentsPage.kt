@@ -521,7 +521,7 @@ fun ComponentsPage(
     }
     val availableTitle: @Composable (String) -> String = { l ->
         when (l) {
-            GPU_TAB -> stringResource(R.string.comp_available_count, gpu.pairs.count { !it.installed && it.complete && (it.suits || showAllPairs) })
+            GPU_TAB -> stringResource(R.string.comp_available_count, gpu.pairs.count { (!it.installed || it.update != null) && it.complete && (it.suits || showAllPairs) })
             PROTON_TAB -> stringResource(R.string.comp_available_count, protons.rows.count { it.installed == null || it.update != null })
             else -> stringResource(R.string.comp_nightlies_count, availableFor(l, catalog, snapshot).size)
         }
@@ -543,7 +543,8 @@ fun ComponentsPage(
                 for (p in gpu.pairs.filter { it.installed && (it.suits || showAllPairs) }) {
                     val key = "gpu:${p.key}"
                     ChoiceLine(
-                        p.name, "${p.version} · ${p.detail}", !gpu.auto && p.active, removable = false,
+                        p.name, "${p.version} · ${p.detail}" + (p.update?.let { " · " + stringResource(R.string.proton_update_available, it) } ?: ""),
+                        !gpu.auto && p.active, removable = false,
                         badge = if (p.recommended) stringResource(R.string.gpu_recommended_caps) else null,
                         progress = if (gpu.busy == p.key) gpu.percent else null,
                         modifier = Modifier.trackRow(key, rowsAt),
@@ -612,12 +613,15 @@ fun ComponentsPage(
     val availableRows: @Composable ColumnScope.(String) -> Unit = { l ->
         when (l) {
             GPU_TAB -> {
-                val shown = gpu.pairs.filter { !it.installed && it.complete && (it.suits || showAllPairs) }
+                val shown = gpu.pairs.filter { (!it.installed || it.update != null) && it.complete && (it.suits || showAllPairs) }
                 if (shown.isEmpty()) EmptyLine(stringResource(if (gpu.checking) R.string.gpu_checking else R.string.gpu_none_listed))
                 for (p in shown) GetLine(
-                    p.name, "${p.version} · ${p.detail}", progress = if (gpu.busy == p.key) gpu.percent else null, enabled = gpu.busy == null,
+                    p.name,
+                    if (p.update != null) "${p.version} · " + stringResource(R.string.proton_update_available, p.update) else "${p.version} · ${p.detail}",
+                    progress = if (gpu.busy == p.key) gpu.percent else null, enabled = gpu.busy == null,
                     badge = if (p.recommended) stringResource(R.string.gpu_recommended_caps) else null,
-                ) { gpuActions.onAuto(false); gpuActions.onPair(p.key) }
+                    action = if (p.update != null) stringResource(R.string.common_update) else null,
+                ) { if (p.update != null) gpuActions.onPairUpdate(p.key) else { gpuActions.onAuto(false); gpuActions.onPair(p.key) } }
                 if (gpu.pairs.any { !it.suits }) Box(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
                     FocusText(stringResource(if (showAllPairs) R.string.gpu_hide_other else R.string.gpu_show_other), pal.signal) { showAllPairs = !showAllPairs }
                 }

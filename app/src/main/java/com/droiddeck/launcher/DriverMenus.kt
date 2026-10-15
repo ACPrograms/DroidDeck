@@ -111,12 +111,21 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         val pairs = DriverPairs.from(TurnipReleases.cached(activity))
         val recommended = if (QuestExperimental.isSupported()) null else DriverPairs.recommendedKey(gpu, pairs)
         pairRows = pairs.map { p ->
-            val bundle = p.bundle?.let { installedBundle(it) }
+            val nad = DriverPairs.isNonAdreno(p.key)
+            val bundle = p.bundle?.let { if (nad) installedBundleAnyBuild(it) else installedBundle(it) }
             val displayId = if (p.bundle != null) bundle?.androidId else p.display?.let { TurnipReleases.installedId(activity, it, td::isInstalled) }
             val linuxId = if (p.bundle != null) bundle?.linuxId else p.linux?.let { TurnipReleases.installedId(activity, it, lm::isInstalled) }
             val mb = p.assets.sumOf { it.size } / 1_048_576.0
+            val update = nad && bundle != null && p.bundle?.let { TurnipReleases.updateAvailable(activity, it) } == true
+            val builtOn = if (nad) p.bundle?.builtOn.orEmpty() else ""
+            val version = when {
+                !nad -> p.version
+                bundle != null -> bundle.version.ifEmpty { p.version }
+                builtOn.isNotEmpty() -> activity.getString(R.string.drivers_built_on, builtOn)
+                else -> p.version
+            }
             PairRow(
-                key = p.key, name = p.name, version = p.version,
+                key = p.key, name = p.name, version = version, update = if (update) builtOn.takeIf { it.isNotEmpty() }?.let { activity.getString(R.string.drivers_built_on, it) } ?: p.version else null,
                 detail = if (!p.complete) activity.getString(R.string.drivers_half_published) else activity.getString(R.string.drivers_pair_size, mb),
                 recommended = p.key == recommended, suits = p.suits(gpu), complete = p.complete,
                 installed = displayId != null && linuxId != null,
@@ -245,7 +254,15 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         installPair(pair, auto = false)
     }
 
-    private fun installPair(pair: DriverPairs.DriverPair, auto: Boolean) {
+    /** A newer build of an installed open non-Adreno pair: replaced in place, still selected if it was. */
+    fun updatePair(key: String) {
+        if (pairBusy != null) return
+        val pair = DriverPairs.from(TurnipReleases.cached(activity)).firstOrNull { it.key == key && it.complete } ?: return
+        val wasActive = pairRows.firstOrNull { it.key == key }?.active == true
+        installPair(pair, auto = wasActive && mode == SessionPrefs.GPU_DRIVERS_AUTO, force = true, select = wasActive)
+    }
+
+    private fun installPair(pair: DriverPairs.DriverPair, auto: Boolean, force: Boolean = false, select: Boolean = true) {
         if (!pair.complete) return
         pairBusy = pair.key
         pairPercent = 0
@@ -257,7 +274,7 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
             val result = runCatching {
                 val zips = pair.assets
                 val ids = zips.mapIndexed { i, asset ->
-                    installedIdOf(asset)
+                    (if (force) null else installedIdOf(asset))
                         ?: installAsset(asset) { pct -> ui.post { pairPercent = (i * 100 + pct) / zips.size } }.also { downloaded = true }
                 }
                 if (pair.bundle != null) DriverBundle.get(activity, ids[0])!!.let { listOf(it.androidId, it.linuxId) } else ids
@@ -266,6 +283,10 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                 pairBusy = null
                 pairPercent = -1
                 result.onSuccess { (pairDisplayId, linuxId) ->
+                    if (!select) {
+                        android.widget.Toast.makeText(activity, activity.getString(R.string.drivers_pair_updated, pair.name), android.widget.Toast.LENGTH_LONG).show()
+                        return@onSuccess
+                    }
                     // A Mali pair under Auto: the compositor draws on the phone's own Mali driver
                     // (dma-buf, modifiers and AHB all work there) and the guest runs the pair's
                     // PanVK. Its Android half stays installed for a manual pick.
@@ -312,6 +333,9 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
 
     private fun installedBundle(asset: TurnipReleases.Asset): DriverBundle.Bundle? =
         TurnipReleases.installedId(activity, asset) { DriverBundle.get(activity, it) != null }?.let { DriverBundle.get(activity, it) }
+
+    private fun installedBundleAnyBuild(asset: TurnipReleases.Asset): DriverBundle.Bundle? =
+        TurnipReleases.installedIdAnyBuild(activity, asset) { DriverBundle.get(activity, it) != null }?.let { DriverBundle.get(activity, it) }
 
     private fun installedIdOf(asset: TurnipReleases.Asset): String? = when {
         asset.bundle -> installedBundle(asset)?.id

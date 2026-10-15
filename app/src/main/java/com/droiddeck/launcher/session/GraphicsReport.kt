@@ -133,12 +133,15 @@ object GraphicsReport {
 
     /** The release tag and download a pair bundle came from, when the last release check knows it. */
     private fun release(context: Context, bundleId: String): String? {
-        val asset = TurnipReleases.cached(context)?.assets?.firstOrNull { a ->
-            val id = a.name.removeSuffix("-Pair.zip")
-            a.bundle && (bundleId == id || bundleId.startsWith("$id-"))
-        }
+        val bundles = TurnipReleases.cached(context)?.assets?.filter { it.bundle }.orEmpty()
+        val asset = bundles.firstOrNull { it.name.removeSuffix("-Pair.zip") == bundleId }
+            ?: bundles.firstOrNull { bundleId.startsWith(it.name.removeSuffix("-Pair.zip") + "-") }
             ?: return null
-        return "${asset.tag} ${asset.url}"
+        val installed = TurnipReleases.installedBuiltOn(context, asset)
+        return "${asset.tag} ${asset.url}" +
+            (if (installed.isNotEmpty()) ", installed build uploaded $installed" else "") +
+            (if (asset.builtOn.isNotEmpty()) ", listed build uploaded ${asset.builtOn}" else "") +
+            (if (TurnipReleases.updateAvailable(context, asset)) "  << NEWER BUILD AVAILABLE" else "")
     }
 
     private fun node(path: String): String {

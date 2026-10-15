@@ -72,6 +72,8 @@ class PairRow(
     val complete: Boolean,
     val installed: Boolean,
     val active: Boolean,
+    /** A newer build of this installed pair (its build date), or null. */
+    val update: String? = null,
 )
 
 class GpuDriversState(
@@ -106,6 +108,7 @@ class GpuDriversState(
 class GpuDriversActions(
     val onAuto: (Boolean) -> Unit = {},
     val onPair: (String) -> Unit = {},
+    val onPairUpdate: (String) -> Unit = {},
     val onRefresh: () -> Unit = {},
     val onSelectLinux: (String) -> Unit = {},
     val onSelectAndroid: (String) -> Unit = {},
