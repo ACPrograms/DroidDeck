@@ -20,6 +20,7 @@ class VkBridgeComponent(private val socket: File, private val logFile: File) : S
         }
         socket.parentFile?.mkdirs()
         val cacheDir = cacheDir(app())
+        writeMode(cacheDir, com.droiddeck.launcher.session.SessionPrefs.vkBridgeMode(app()))
         if (VkBridgeNative.start(app(), socket, logFile, cacheDir)) {
             Log.i(TAG, "server ready in the app's process at $socket")
             return
@@ -56,6 +57,7 @@ class VkBridgeComponent(private val socket: File, private val logFile: File) : S
     companion object {
         private const val TAG = "VkBridge"
         private const val CACHE_DIR = "vkbridge-pipelines"
+        private const val MODE_FILE = "mode"
 
         fun cacheDir(context: Context): File {
             val dir = File(context.filesDir, CACHE_DIR)
@@ -63,6 +65,17 @@ class VkBridgeComponent(private val socket: File, private val logFile: File) : S
             if (old.isDirectory) migrate(old, dir)
             dir.mkdirs()
             return dir
+        }
+
+        fun writeMode(dir: File, mode: String) {
+            val file = File(dir, MODE_FILE)
+            if (runCatching { file.readText().trim() }.getOrNull() == mode) return
+            val tmp = File(dir, "$MODE_FILE.tmp")
+            runCatching {
+                tmp.writeText(mode + "\n")
+                if (!tmp.renameTo(file)) error("rename failed")
+                Log.i(TAG, "bridge mode: $mode")
+            }.onFailure { Log.w(TAG, "could not write $file: $it"); tmp.delete() }
         }
 
         private fun migrate(old: File, dir: File) {
