@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gzip
 import json
 import os
 import re
@@ -386,7 +387,7 @@ def input_request(args: argparse.Namespace) -> dict:
     raise ControlError(f"Unknown input type {kind}", "INVALID_INPUT")
 
 
-def xr_ppm_to_png(data: bytes) -> bytes:
+def xr_ppm_to_png(data: bytes, linear: bool = False) -> bytes:
     header = re.match(rb"P6\n([0-9]+) ([0-9]+)\n255\n", data)
     if not header:
         raise ControlError("Invalid XR image header", "XR_CAPTURE_FAILED")
@@ -398,7 +399,8 @@ def xr_ppm_to_png(data: bytes) -> bytes:
         return struct.pack('>I', len(value)) + kind + value + struct.pack('>I', zlib.crc32(kind + value))
     stride = width * 3
     rows = b''.join(b'\0' + pixels[start:start + stride] for start in range(0, len(pixels), stride))
-    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) +
+    transfer = chunk(b'gAMA', struct.pack('>I', 100000)) if linear else chunk(b'sRGB', b'\0')
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + transfer +
             chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
 
 
@@ -436,11 +438,14 @@ def xr_capture(adb: str, serial: str, destination: Path, timeout: float) -> dict
             raise ControlError(detail, 'XR_CAPTURE_FAILED')
         images = {}
         for eye in (('left', 'right', 'source') if metadata.get('sourceImage') else ('left', 'right')):
-            local = Path(temporary) / (eye + '.ppm')
-            pulled = run_adb(adb, serial, 'pull', remote + '-' + eye + '.ppm', str(local), timeout=120)
+            pulled = run_adb(adb, serial, 'exec-out', 'gzip', '-c', remote + '-' + eye + '.ppm', timeout=120)
             if pulled.returncode:
                 raise ControlError(pulled.stderr.decode(errors='replace'), 'XR_CAPTURE_FAILED')
-            images[eye] = xr_ppm_to_png(local.read_bytes())
+            try:
+                pixels = gzip.decompress(pulled.stdout)
+            except (OSError, EOFError, zlib.error) as error:
+                raise ControlError('Incomplete compressed XR image', 'XR_CAPTURE_FAILED') from error
+            images[eye] = xr_ppm_to_png(pixels, linear=eye == 'source' and metadata.get('sourceColorSpace') == 'linear')
         # Detect overlapping captures before publishing images with another request's metadata.
         check = run_adb(adb, serial, 'shell', 'cat', remote + '.json')
         try:

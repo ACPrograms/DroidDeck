@@ -1,6 +1,7 @@
 import importlib.machinery
 import importlib.util
 import json
+import gzip
 from pathlib import Path
 import struct
 import subprocess
@@ -34,7 +35,12 @@ class XrCaptureTest(unittest.TestCase):
             with self.subTest(data=data), self.assertRaises(ctl.ControlError):
                 ctl.xr_ppm_to_png(data)
 
-    def capture(self, root, failed=False, replaced=False, no_response=False, source=False):
+    def test_linear_source_and_display_eye_have_distinct_png_transfer_tags(self):
+        image = b'P6\n1 1\n255\n\x37\x37\x37'
+        self.assertIn(b'gAMA' + struct.pack('>I', 100000), ctl.xr_ppm_to_png(image, linear=True))
+        self.assertIn(b'sRGB\0', ctl.xr_ppm_to_png(image))
+
+    def capture(self, root, failed=False, replaced=False, no_response=False, source=False, truncated=False):
         calls = []
         token = None
         reads = 0
@@ -48,8 +54,10 @@ class XrCaptureTest(unittest.TestCase):
                 reads += 1
                 stdout = json.dumps({'id': ('old' if reads == 1 or no_response or (replaced and reads > 2) else token),
                                      'ok': not failed, 'validLayer': not failed, 'sourceImage': source}).encode()
-            if args[0] == 'pull':
-                Path(args[2]).write_bytes(b'P6\n1 1\n255\n\x12\x34\x56')
+            if args[0] == 'exec-out':
+                stdout = gzip.compress(b'P6\n1 1\n255\n\x12\x34\x56')
+                if truncated:
+                    stdout = stdout[:-5]
             return subprocess.CompletedProcess(args, 0, stdout, b'')
         with patch.object(ctl, 'run_adb', side_effect=adb), patch.object(ctl.time, 'sleep'):
             result = ctl.xr_capture('adb', 'quest', root, 0.01 if no_response else 2)
@@ -65,7 +73,7 @@ class XrCaptureTest(unittest.TestCase):
             self.assertTrue((root / 'capture.json').is_file())
 
     def test_invalid_layer_replaced_capture_and_timeout_publish_no_images(self):
-        for flags in ({'failed': True}, {'replaced': True}, {'no_response': True}):
+        for flags in ({'failed': True}, {'replaced': True}, {'no_response': True}, {'truncated': True}):
             with self.subTest(flags=flags), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / 'capture'
                 with self.assertRaises(ctl.ControlError):
@@ -77,7 +85,7 @@ class XrCaptureTest(unittest.TestCase):
             root = Path(directory) / 'capture'
             result, calls = self.capture(root, source=True)
             self.assertEqual(result['source'], str((root / 'source.png').resolve()))
-            self.assertEqual(len([c for c in calls if c[0] == 'pull']), 3)
+            self.assertEqual(len([c for c in calls if c[0] == 'exec-out']), 3)
 
 
 if __name__ == '__main__':
