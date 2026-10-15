@@ -99,6 +99,13 @@ images per second despite a 90 Hz XR session.
 This branch retains the safe owned-frame transfer path; reducing transfer cost,
 validating game input and testing actual VR games remain necessary.
 
+The frame channel carries linear RGBA8. Android samples it as linear and writes
+to an sRGB eye swapchain, encoding the display values once. A Quest color-chart
+capture verified that 64, 128, 192 and 224 grey patches retain those values;
+the previous sRGB source upload darkened them to approximately 13, 55, 134 and
+190. The transport remains 8-bit SDR; this correction does not add HDR or higher
+precision gradients.
+
 ### Experimental flat games in SteamVR
 
 Start SteamVR first, then add `droiddeck-steamvr-game %command%` to a flat
