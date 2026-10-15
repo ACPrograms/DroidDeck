@@ -19,6 +19,7 @@
 #include <poll.h>
 #include <time.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <android/log.h>
 
 #define TAG "DroidDeckWayland"
@@ -44,6 +45,46 @@ static ANativeWindow *g_window;
 static char *g_driver_path, *g_library_name, *g_native_lib_dir;
 static int g_dev_state;
 static void device_lost(const char *where);
+static const char *vk_result_name(VkResult r);
+
+/* Why the compositor cannot present ("" while it can). Logged as a DD_PRESENT_FAULT line, read
+ * back over JNI, and shown on the session-ended screen instead of a silent black one. */
+static char g_fault[256];
+static char g_swap_reason[160];
+static pthread_mutex_t g_fault_lock = PTHREAD_MUTEX_INITIALIZER;
+static void set_fault(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void set_fault(const char *fmt, ...) {
+    char msg[sizeof(g_fault)];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+    pthread_mutex_lock(&g_fault_lock);
+    int same = !strcmp(msg, g_fault);
+    if (!same) snprintf(g_fault, sizeof(g_fault), "%s", msg);
+    pthread_mutex_unlock(&g_fault_lock);
+    if (!same) droiddeck_log("present", "DD_PRESENT_FAULT: %s", msg);
+}
+static void clear_fault(void) {
+    pthread_mutex_lock(&g_fault_lock);
+    int had = g_fault[0] != 0;
+    g_fault[0] = 0;
+    pthread_mutex_unlock(&g_fault_lock);
+    if (had) droiddeck_log("present", "presentation recovered: fault cleared");
+}
+const char *vkp_fault(void) {
+    static __thread char copy[sizeof(g_fault)];
+    pthread_mutex_lock(&g_fault_lock);
+    snprintf(copy, sizeof(copy), "%s", g_fault);
+    pthread_mutex_unlock(&g_fault_lock);
+    if (!copy[0] && g_dev_state == -3)
+        snprintf(copy, sizeof(copy), "the GPU did not confirm the compositor's work finished; presenting stopped");
+    return copy;
+}
+
+/* The driver that answered for the display, as the driver itself reports it. */
+static char g_display_driver[320];
+const char *vkp_display_driver(void) { return g_display_driver; }
 static VkInstance g_inst;
 static VkPhysicalDevice g_pd;
 static VkDevice g_dev;
@@ -386,11 +427,43 @@ static int has_ext(VkExtensionProperties *e, uint32_t n, const char *name) {
     return 0;
 }
 
+static int is_proprietary(VkDriverId id) {
+    return id == VK_DRIVER_ID_ARM_PROPRIETARY || id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY ||
+           id == VK_DRIVER_ID_IMAGINATION_PROPRIETARY || id == VK_DRIVER_ID_SAMSUNG_PROPRIETARY ||
+           id == VK_DRIVER_ID_BROADCOM_PROPRIETARY;
+}
+
+/* What really loaded: adrenotools falls back to the vendor driver when the requested one fails
+ * to load (hook_impl.cpp), so the name asked for is not proof of the driver in use. */
+static void log_display_driver(void) {
+    PFN_vkGetPhysicalDeviceProperties2 props2 = g_vk.GetPhysicalDeviceProperties2;
+    VkPhysicalDeviceDriverProperties drv = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    VkPhysicalDeviceProperties2 p2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &drv};
+    if (!props2) {
+        snprintf(g_display_driver, sizeof(g_display_driver), "%.200s (driver properties not available)", g_gpu_name);
+        droiddeck_log("gpu", "display driver: %s", g_display_driver);
+        return;
+    }
+    props2(g_pd, &p2);
+    int fell_back = g_library_name && is_proprietary(drv.driverID);
+    snprintf(g_display_driver, sizeof(g_display_driver), "%.80s: %.64s %.96s (driver id %d, Vulkan %u.%u.%u)%s", p2.properties.deviceName,
+             drv.driverName, drv.driverInfo, (int)drv.driverID, VK_API_VERSION_MAJOR(p2.properties.apiVersion),
+             VK_API_VERSION_MINOR(p2.properties.apiVersion), VK_API_VERSION_PATCH(p2.properties.apiVersion),
+             fell_back ? " - FELL BACK to the phone's own driver" : "");
+    droiddeck_log("gpu", "display driver loaded: %s", g_display_driver);
+    if (fell_back)
+        droiddeck_log("gpu", "display driver: %s was requested but the phone's own driver answered; the requested "
+                   "driver did not load (a missing library beside it, or a rejected ABI - see the adrenotools lines)",
+                   g_library_name);
+}
+
 static int dev_init(void) {
     if (g_dev_state != 0) return g_dev_state == 1 ? 0 : -1;
 
     if (vk_loader_open(g_driver_path, g_library_name, g_native_lib_dir) != 0) {
-        LOGE("present: vk_loader_open failed"); g_dev_state = -1; return -1;
+        LOGE("present: vk_loader_open failed"); g_dev_state = -1;
+        set_fault("no Vulkan driver could be loaded for the display (%s)", g_library_name ? g_library_name : "libvulkan.so");
+        return -1;
     }
 
     const char *inst_exts[3] = {VK_KHR_SURFACE_EXTENSION_NAME,
@@ -421,13 +494,19 @@ static int dev_init(void) {
                                 .enabledExtensionCount = n_inst_exts,
                                 .ppEnabledExtensionNames = inst_exts};
     if (g_vk.CreateInstance(&ici, NULL, &g_inst) != VK_SUCCESS) {
-        LOGE("present: vkCreateInstance failed"); g_dev_state = -1; return -1;
+        LOGE("present: vkCreateInstance failed"); g_dev_state = -1;
+        set_fault("vkCreateInstance failed on the display driver (%s)", g_library_name ? g_library_name : "the phone's own");
+        return -1;
     }
     vk_loader_load_instance(g_inst);
 
     uint32_t npd = 0;
     g_vk.EnumeratePhysicalDevices(g_inst, &npd, NULL);
-    if (!npd) { LOGE("present: no physical devices"); g_dev_state = -1; return -1; }
+    if (!npd) {
+        LOGE("present: no physical devices"); g_dev_state = -1;
+        set_fault("the display driver exposed no GPU to the app");
+        return -1;
+    }
     VkPhysicalDevice pds[8]; if (npd > 8) npd = 8;
     g_vk.EnumeratePhysicalDevices(g_inst, &npd, pds);
     g_pd = VK_NULL_HANDLE;
@@ -439,7 +518,11 @@ static int dev_init(void) {
         for (uint32_t q = 0; q < nq; q++)
             if (qs[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) { g_pd = pds[i]; g_qfam = q; break; }
     }
-    if (g_pd == VK_NULL_HANDLE) { LOGE("present: no graphics queue"); g_dev_state = -1; return -1; }
+    if (g_pd == VK_NULL_HANDLE) {
+        LOGE("present: no graphics queue"); g_dev_state = -1;
+        set_fault("the display GPU offers no graphics queue");
+        return -1;
+    }
     {
         VkPhysicalDeviceProperties props;
         g_vk.GetPhysicalDeviceProperties(g_pd, &props);
@@ -512,9 +595,12 @@ static int dev_init(void) {
         dr = g_vk.CreateDevice(g_pd, &dci, NULL, &g_dev);
     }
     if (dr != VK_SUCCESS) {
-        LOGE("present: vkCreateDevice failed"); g_dev_state = -1; return -1;
+        LOGE("present: vkCreateDevice failed"); g_dev_state = -1;
+        set_fault("vkCreateDevice failed on %s (%s)", g_gpu_name[0] ? g_gpu_name : "the display GPU", vk_result_name(dr));
+        return -1;
     }
     vk_loader_load_device(g_dev);
+    log_display_driver();
     g_vk.GetDeviceQueue(g_dev, g_qfam, 0, &g_queue);
     if (want_ahb)
         g_ahb_properties = (PFN_vkGetAndroidHardwareBufferPropertiesANDROID)
@@ -571,9 +657,11 @@ static int swap_init(void) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     now = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
     if (now < g_swap_retry_at_ns) return -1;
+    g_swap_reason[0] = 0;
     if (swap_init_locked() == 0) {
         g_swap_retry_at_ns = 0;
         g_swap_fail_logged = 0;
+        clear_fault();
         return 0;
     }
     destroy_swapchain();
@@ -581,11 +669,12 @@ static int swap_init(void) {
     if (!g_swap_fail_logged) {
         g_swap_fail_logged = 1;
         LOGE("present: no swapchain on the screen surface; retrying every 0.5 s");
+        set_fault("no swapchain on the session screen (%s)", g_swap_reason[0] ? g_swap_reason : "unknown reason");
     }
     return -1;
 }
 
-#define SWLOGE(...) do { if (!g_swap_fail_logged) LOGE(__VA_ARGS__); } while (0)
+#define SWLOGE(...) do { snprintf(g_swap_reason, sizeof(g_swap_reason), __VA_ARGS__); if (!g_swap_fail_logged) LOGE(__VA_ARGS__); } while (0)
 
 static void vk_format_short(VkFormat f, char *out, size_t n) {
     const char *s = NULL;
@@ -1383,6 +1472,7 @@ static void device_lost(const char *where) {
     vkp_framegen_device_lost();
     droiddeck_log("error", "GPU device lost (VK_ERROR_DEVICE_LOST in %s): the compositor has stopped presenting; "
                "restart the session", where);
+    set_fault("the display GPU was lost (VK_ERROR_DEVICE_LOST in %s)", where);
     for (uint32_t i = 0; i < g_nimg; i++) blendp_forget_image(g_images[i]);
     if (g_swapchain) g_vk.DestroySwapchainKHR(g_dev, g_swapchain, NULL);
     g_swapchain = VK_NULL_HANDLE;
@@ -1926,6 +2016,7 @@ void vkp_reset_first_frame(void) {
 void vkp_signal_first_frame(void) {
     if (g_first_frame_done) return;
     g_first_frame_done = 1;
+    clear_fault();
     droiddeck_on_first_frame();
 }
 

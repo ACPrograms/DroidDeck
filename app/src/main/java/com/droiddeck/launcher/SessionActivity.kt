@@ -1529,7 +1529,30 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private class EndHint(val text: String, val evenOnSuccess: Boolean = false)
 
+    private fun presentationFault(): String? {
+        com.droiddeck.launcher.wayland.WaylandCompositor.compositorFault().takeIf { it.isNotEmpty() }?.let { return it }
+        val waylandLog = SessionState.logDirectory?.let { File(it, "wayland.log") }?.takeIf { it.isFile } ?: return null
+        return try {
+            java.io.RandomAccessFile(waylandLog, "r").use { f ->
+                val start = maxOf(0L, waylandLog.length() - 256L * 1024)
+                f.seek(start)
+                val bytes = ByteArray((waylandLog.length() - start).toInt())
+                f.readFully(bytes)
+                var fault: String? = null
+                String(bytes, Charsets.ISO_8859_1).lineSequence().forEach { line ->
+                    val i = line.indexOf("DD_PRESENT_FAULT: ")
+                    if (i >= 0) fault = line.substring(i + 18).trim().ifEmpty { null }
+                    else if (line.contains("presentation recovered: fault cleared")) fault = null
+                }
+                fault
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun sessionEndHint(log: File?): EndHint? {
+        presentationFault()?.let { return EndHint(getString(R.string.session_end_present_fault, it), evenOnSuccess = true) }
         if (log == null || !log.isFile) return null
         return try {
             var enosys = 0

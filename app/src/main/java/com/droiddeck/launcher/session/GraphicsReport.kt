@@ -163,7 +163,7 @@ object GraphicsReport {
     /** The compositor's driver lines from the app's own log. */
     private val COMPOSITOR = Regex(
         """vk_present|waylandcomp|vk_loader|compositor|vkCreateDevice|extension|adrenotools|TurnipDriver|""" +
-            """graphics driver|SystemVulkan|vkbridge|VkBridge|mali_gralloc|panvk|PanVK|radv|MESA|native buffer|first frame|present|""" +
+            """graphics driver|display driver|DD_PRESENT_FAULT|SystemVulkan|vkbridge|VkBridge|mali_gralloc|panvk|PanVK|radv|MESA|native buffer|first frame|present|""" +
             """lsfg|FrameGen|device gates|AAudio|directaudio|pulse|gralloc|dma.?buf|modifier|import""",
         RegexOption.IGNORE_CASE,
     )
@@ -195,6 +195,12 @@ object GraphicsReport {
                 fellBack?.let {
                     if (fallbackReason == "memory") appendLine("!! MALI BRIDGE FELL BACK: memory sharing = none (no method passed the server's self-test); the session ran on $it")
                     else appendLine("!! MALI BRIDGE FELL BACK: the self-test failed images or draws; the session ran on $it")
+                }
+                com.droiddeck.launcher.wayland.WaylandCompositor.compositorFault().takeIf { it.isNotEmpty() }?.let {
+                    appendLine("!! DISPLAY FAILED: $it")
+                }
+                com.droiddeck.launcher.wayland.WaylandCompositor.displayDriver().takeIf { it.isNotEmpty() }?.let {
+                    appendLine("display driver (as loaded): $it")
                 }
                 appContext?.let { ctx ->
                     if (SessionPrefs.venus(ctx)) VenusComponent.hostVulkanTooOld(ctx)?.let {
