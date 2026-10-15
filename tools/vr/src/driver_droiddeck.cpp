@@ -219,7 +219,7 @@ public:
         out->unTextureFlags = 0;
         Log("  -> handles 0x%llx 0x%llx 0x%llx, fds %d %d %d", (unsigned long long)set.handles[0],
             (unsigned long long)set.handles[1], (unsigned long long)set.handles[2], set.fds[0], set.fds[1], set.fds[2]);
-        droiddeck::Presenter::AddTextures(set.handles, set.fds, d->nFormat, d->nWidth, d->nHeight);
+        droiddeck::Presenter::AddTextures(set.handles, set.fds, d->nFormat, d->nWidth, d->nHeight, pid);
         std::lock_guard<std::mutex> lock(mutex_);
         sets_.push_back(set);
     }

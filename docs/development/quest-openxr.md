@@ -309,6 +309,35 @@ bundled into the user-facing runtime. A valid already-signaled SYNC_FD value of
 
 ## Remaining stages
 
+### Experimental producer lease
+
+`DROIDDECK_VR_PRODUCER_LEASE=1` opts the compositor into a private, same-UID,
+PID-authenticated producer endpoint. It serializes producer queue submissions,
+inserts real GPU fence markers on every observed producer queue, and grants a
+lease only after those fences complete. Producer submissions remain frozen
+until the presenter's GPU readback finishes and the release handshake succeeds.
+The presenter device is excluded from the producer lock. Multiple producer
+PIDs in one eye pair are rejected. Pending timeout fences are retained, not
+destroyed while the GPU can still use them. Losing a granted lease quarantines
+submissions instead of resuming writes against a potentially incomplete copy;
+restarting SteamVR is required in that case. The layer remains resident for its
+process lifetime so its service threads cannot execute unloaded code.
+
+The protocol regression verifies private sockets, peer PID, completion gating,
+retention beyond client acquisition deadlines, release acknowledgement and
+disconnect quarantine. A real Vulkan Lavapipe regression waits for deliberately
+delayed GPU work, verifies all 1,024 buffer words, blocks a concurrent overwriter
+through the lease, then verifies its writes after release; it also exercises
+an outstanding fence through repeated timeouts. CI installs the software Vulkan
+driver so this is not merely a source-shaped or mocked GPU test.
+
+This route is intentionally opt-in, not declared complete. Live Quest validation
+must establish that the swap-set PID identifies the actual final-image writer,
+audit the compositor's external-memory image-layout/queue-family release
+contract, and validate the matching acquire/release barriers with real images.
+The host buffer test does not establish any of those image-sharing properties.
+Owned-image submission still fails closed without a successfully retained lease.
+
 The Vulkan layer no longer drops imported binary waits or unsignaled timeline
 waits after a three-millisecond grace period. Queue submissions and host waits
 retain their original arguments, deadlines and downstream results. The

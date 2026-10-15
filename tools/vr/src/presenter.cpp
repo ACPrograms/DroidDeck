@@ -11,6 +11,7 @@ typedef unsigned long VisualID;
 #include "presenter.h"
 #include "xr_tracking_file.h"
 #include "xr_frame_channel.h"
+#include "producer_lease.h"
 
 #include <atomic>
 #include <chrono>
@@ -22,7 +23,6 @@ typedef unsigned long VisualID;
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <mutex>
-#include <sys/ioctl.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -99,13 +99,31 @@ struct Imported {
     VkImage image = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     uint32_t width = 0, height = 0;
-    int dmaFd = -1;
+    uint32_t producerPid = 0;
 };
 
 struct PendingImport {
     uint64_t handle;
     int fd;
-    uint32_t format, width, height;
+    uint32_t format, width, height, producerPid;
+};
+
+class CaptureLease {
+public:
+    explicit CaptureLease(uint32_t pid) : acquired_(droiddeck_producer_acquire(pid, &lease_)) {}
+    ~CaptureLease() {
+        if (lease_.descriptor < 0) return;
+        if (gpuComplete_) droiddeck_producer_release(&lease_);
+        else close(lease_.descriptor);
+    }
+    bool Acquired() const { return acquired_; }
+    void BeginGpu() { gpuComplete_ = false; }
+    void EndGpu() { gpuComplete_ = true; }
+    bool Release() { return gpuComplete_ && droiddeck_producer_release(&lease_); }
+private:
+    droiddeck_producer_lease lease_{-1, 0};
+    bool acquired_;
+    bool gpuComplete_ = true;
 };
 
 VkFormat UnormOf(uint32_t f) {
@@ -123,13 +141,13 @@ public:
         return impl;
     }
 
-    void Add(const uint64_t handles[3], const int fds[3], uint32_t format, uint32_t w, uint32_t h) {
+    void Add(const uint64_t handles[3], const int fds[3], uint32_t format, uint32_t w, uint32_t h, uint32_t producerPid) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (failed_ || exit_) return;
         for (int i = 0; i < 3; i++) {
             if (fds[i] < 0) continue;
             int fd = dup(fds[i]);
-            if (fd >= 0) pending_.push_back({handles[i], fd, format, w, h});
+            if (fd >= 0) pending_.push_back({handles[i], fd, format, w, h, producerPid});
         }
         EnsureThread();
         cv_.notify_all();
@@ -483,7 +501,7 @@ private:
         Imported im{p.handle};
         im.width = p.width;
         im.height = p.height;
-        if (frameChannel_) im.dmaFd = dup(p.fd);
+        im.producerPid = p.producerPid;
         const char *fl = getenv("DROIDDECK_VR_IMPORT_FORMAT_LIST");
         const bool formatList = !fl || strcmp(fl, "0") != 0;
         VkFormat formats[2] = {(VkFormat)p.format, UnormOf(p.format)};
@@ -495,25 +513,23 @@ private:
                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
                                  VK_SHARING_MODE_EXCLUSIVE, 0, nullptr, VK_IMAGE_LAYOUT_UNDEFINED};
         VkResult r = vk_.CreateImage(dev_, &ici, nullptr, &im.image);
-        if (r != VK_SUCCESS) { Log("presenter: import image %d", r); close(p.fd); if (im.dmaFd >= 0) close(im.dmaFd); return; }
+        if (r != VK_SUCCESS) { Log("presenter: import image %d", r); close(p.fd); return; }
         VkMemoryRequirements req;
         vk_.GetImageMemoryRequirements(dev_, im.image, &req);
         VkImportMemoryFdInfoKHR imp = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, nullptr, VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT, p.fd};
         VkMemoryDedicatedAllocateInfo ded = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, &imp, im.image, VK_NULL_HANDLE};
         int memoryType = MemoryType(req.memoryTypeBits);
-        if (memoryType < 0) { vk_.DestroyImage(dev_, im.image, nullptr); close(p.fd); if (im.dmaFd >= 0) close(im.dmaFd); return; }
+        if (memoryType < 0) { vk_.DestroyImage(dev_, im.image, nullptr); close(p.fd); return; }
         VkMemoryAllocateInfo mai = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &ded, req.size, (uint32_t)memoryType};
         r = vk_.AllocateMemory(dev_, &mai, nullptr, &im.memory);
         if (r != VK_SUCCESS) {
             Log("presenter: import memory (fd %d, %llu bytes) %d", p.fd, (unsigned long long)req.size, r);
             close(p.fd);
-            if (im.dmaFd >= 0) close(im.dmaFd);
             vk_.DestroyImage(dev_, im.image, nullptr);
             return;
         }
         if (vk_.BindImageMemory(dev_, im.image, im.memory, 0) != VK_SUCCESS) {
             vk_.DestroyImage(dev_, im.image, nullptr); vk_.FreeMemory(dev_, im.memory, nullptr);
-            if (im.dmaFd >= 0) close(im.dmaFd);
             return;
         }
         textures_.push_back(im);
@@ -526,7 +542,6 @@ private:
                 vk_.DeviceWaitIdle(dev_);
                 vk_.DestroyImage(dev_, it->image, nullptr);
                 vk_.FreeMemory(dev_, it->memory, nullptr);
-                if (it->dmaFd >= 0) close(it->dmaFd);
                 textures_.erase(it);
                 return;
             }
@@ -543,33 +558,6 @@ private:
         VkImageMemoryBarrier b = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, src, dst, from, to, srcQ, dstQ, img,
                                   {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
         return b;
-    }
-
-    bool ProducerReady(const Imported &image) {
-        struct { uint32_t flags; int32_t fd; } exported{1u, -1};
-        bool ready = false;
-        if (image.dmaFd >= 0 && ioctl(image.dmaFd, _IOWR('b', 2, decltype(exported)), &exported) == 0 && exported.fd >= 0) {
-            struct SyncInfo { char name[32]; int32_t status; uint32_t flags, count, padding; uint64_t fences; } info{};
-            if (ioctl(exported.fd, _IOWR('>', 4, SyncInfo), &info) == 0 && info.count > 0) {
-                pollfd signal{exported.fd, POLLIN, 0};
-                int64_t deadline = xr_frame_now() + 100000000LL;
-                while (xr_frame_now() < deadline) {
-                    int64_t remaining = deadline - xr_frame_now();
-                    if (remaining <= 0) break;
-                    int result = poll(&signal, 1, static_cast<int>((remaining + 999999) / 1000000));
-                    if (result < 0 && errno == EINTR) continue;
-                    ready = result > 0 && (signal.revents & POLLIN) && !(signal.revents & (POLLERR | POLLNVAL));
-                    break;
-                }
-            }
-            close(exported.fd);
-        }
-        if (!ready) {
-            static unsigned said = 0;
-            if (said++ < 3) Log("presenter: refusing Quest frame without a nonempty successful producer fence (texture 0x%llx)",
-                               (unsigned long long)image.handle);
-        }
-        return ready;
     }
 
     void DestroyCapture() {
@@ -635,7 +623,13 @@ private:
         for (int index = 0; index < 2; index++) {
             for (float value : frame.bounds[index]) if (!std::isfinite(value) || value < 0 || value > 1) return false;
             if (frame.bounds[index][0] == frame.bounds[index][2] || frame.bounds[index][1] == frame.bounds[index][3]) return false;
-            if ((index == 0 || eye[0] != eye[1]) && !ProducerReady(*eye[index])) return false;
+        }
+        if (!eye[0]->producerPid || eye[0]->producerPid != eye[1]->producerPid) return false;
+        CaptureLease lease(eye[0]->producerPid);
+        if (!lease.Acquired()) {
+            static unsigned said = 0;
+            if (said++ < 3) Log("presenter: refusing Quest frame without a completed, retained producer lease (pid %u)", eye[0]->producerPid);
+            return false;
         }
         VkResult result = vk_.WaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX);
         if (result != VK_SUCCESS) { Fail(); return false; }
@@ -674,10 +668,19 @@ private:
         vk_.CmdPipelineBarrier(cmd_, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &host, 0, nullptr);
         if (vk_.EndCommandBuffer(cmd_) != VK_SUCCESS || vk_.ResetFences(dev_, 1, &fence_) != VK_SUCCESS) { Fail(); return false; }
         VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount = 1; submit.pCommandBuffers = &cmd_;
+        lease.BeginGpu();
         result = vk_.QueueSubmit(queue_, 1, &submit, fence_);
-        if (result != VK_SUCCESS) { Fail(); return false; }
+        if (result != VK_SUCCESS) {
+            if (vk_.DeviceWaitIdle(dev_) == VK_SUCCESS) lease.EndGpu();
+            Fail(); return false;
+        }
         result = vk_.WaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX);
-        if (result != VK_SUCCESS) { vk_.DeviceWaitIdle(dev_); Fail(); return false; }
+        if (result != VK_SUCCESS) {
+            if (vk_.DeviceWaitIdle(dev_) == VK_SUCCESS) lease.EndGpu();
+            Fail(); return false;
+        }
+        lease.EndGpu();
+        if (!lease.Release()) return false;
         void *mapping = nullptr;
         if (vk_.MapMemory(dev_, readbackMemory_, 0, VK_WHOLE_SIZE, 0, &mapping) != VK_SUCCESS) return false;
         VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE}; range.memory = readbackMemory_; range.size = VK_WHOLE_SIZE;
@@ -792,7 +795,7 @@ private:
 
 }
 
-void Presenter::AddTextures(const uint64_t h[3], const int fds[3], uint32_t f, uint32_t w, uint32_t hh) { Impl::Get().Add(h, fds, f, w, hh); }
+void Presenter::AddTextures(const uint64_t h[3], const int fds[3], uint32_t f, uint32_t w, uint32_t hh, uint32_t pid) { Impl::Get().Add(h, fds, f, w, hh, pid); }
 void Presenter::RemoveTexture(uint64_t h) { Impl::Get().Remove(h); }
 void Presenter::Submit(const EyeFrame &f) { Impl::Get().Submit(f); }
 void Presenter::Shutdown() { Impl::Get().Shutdown(); }

@@ -7,7 +7,9 @@ driver=$vrdir/droiddeck
 layer=$vrdir/layer
 logs=$HOME/.local/share/Steam/logs
 state=${XDG_RUNTIME_DIR:-/tmp}/droiddeck-steamvr
+umask 077
 mkdir -p "$state"
+chmod 700 "$state"
 
 PKG_URL=https://steamdeck-packages.steamos.cloud/archlinux-deckard-hotfixes/release/0.3.x/deckard-steamvr-rel-r25358740%2B28b72a4f-1-aarch64.pkg.tar.zst
 PKG_SHA256=90a600775eb3e8856dc475f83166a93a290a0b1f3b4e82a69c8e2a8f06b9ddc9

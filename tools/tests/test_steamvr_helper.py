@@ -57,6 +57,7 @@ class SteamVrHelperTest(unittest.TestCase):
 
     def test_fresh_runtime_mode_is_selected_and_log_survives_runtime_cleanup(self):
         log = self.start()
+        self.assertEqual((self.runtime / 'droiddeck-steamvr').stat().st_mode & 0o777, 0o700)
         self.assertEqual(log.read_text().strip(), 'display=3360x1760@120')
         self.assertEqual((self.runtime / 'droiddeck-steamvr/vrstartup.log').resolve(), log)
         shutil.rmtree(self.runtime)

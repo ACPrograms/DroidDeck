@@ -64,7 +64,7 @@ int main(void) {
     void *dispatch = &dispatch;
     VkDevice device = (VkDevice)&dispatch;
     VkQueue queue = (VkQueue)&dispatch;
-    g_dev[0] = (struct dev){device, mock_proc, NULL, 1, 0};
+    g_dev[0] = (struct dev){device, mock_proc, NULL, 1, 0, 0};
     g_poller_started = 1;
     VkExportSemaphoreCreateInfo export_info = {VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO, NULL,
                                                VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT};

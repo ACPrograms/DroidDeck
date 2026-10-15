@@ -193,7 +193,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu >/dev/null
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libvulkan1 mesa-vulkan-drivers >/dev/null
           D=app/src/main/assets/linuxfs
           mkdir -p "$D"
           aarch64-linux-gnu-g++ -shared -fPIC -O2 -Wall -Wno-attributes -Wno-nonnull-compare \
