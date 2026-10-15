@@ -155,6 +155,11 @@ the previous sRGB source upload darkened them to approximately 13, 55, 134 and
 190. The transport remains 8-bit SDR; this correction does not add HDR or higher
 precision gradients.
 
+When available, `XR_EXT_performance_settings` requests sustained-high CPU and GPU
+performance for the running OpenXR session. These are runtime-managed hints;
+device power and thermal policies remain authoritative. Unsupported or rejected
+requests do not prevent startup. This does not change render resolution.
+
 ### Experimental flat games in SteamVR
 
 Start SteamVR first, then add `droiddeck-steamvr-game %command%` to a flat

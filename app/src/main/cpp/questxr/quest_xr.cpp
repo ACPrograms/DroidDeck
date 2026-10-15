@@ -104,6 +104,8 @@ private:
     DroidDeckXrHand inputs_[2]{};
     PFN_xrConvertTimeToTimespecTimeKHR convertTime_ = nullptr;
     bool timespecSupported_ = false;
+    PFN_xrPerfSettingsSetPerformanceLevelEXT setPerformance_ = nullptr;
+    bool performanceSupported_ = false;
     XrPath hands_[2]{};
     XrSpace handSpaces_[2]{};
     XrSpaceLocation head_{XR_TYPE_SPACE_LOCATION};
@@ -252,9 +254,12 @@ private:
         for (const auto &extension : extensions) {
             if (!std::strcmp(extension.extensionName, XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME))
                 timespecSupported_ = true;
+            if (!std::strcmp(extension.extensionName, XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME))
+                performanceSupported_ = true;
         }
         std::vector<const char *> enabled{XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME, XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
         if (timespecSupported_) enabled.push_back(XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME);
+        if (performanceSupported_) enabled.push_back(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME);
         XrInstanceCreateInfoAndroidKHR androidInfo{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
         androidInfo.applicationVM = app_->activity->vm;
         androidInfo.applicationActivity = app_->activity->clazz;
@@ -266,6 +271,11 @@ private:
         create.enabledExtensionCount = enabled.size();
         create.enabledExtensionNames = enabled.data();
         check(xrCreateInstance(&create, &instance_), "xrCreateInstance");
+        if (performanceSupported_) {
+            XrResult result = xrGetInstanceProcAddr(instance_, "xrPerfSettingsSetPerformanceLevelEXT",
+                reinterpret_cast<PFN_xrVoidFunction *>(&setPerformance_));
+            if (XR_FAILED(result)) setPerformance_ = nullptr;
+        }
         if (timespecSupported_) check(xrGetInstanceProcAddr(instance_, "xrConvertTimeToTimespecTimeKHR",
             reinterpret_cast<PFN_xrVoidFunction *>(&convertTime_)), "time conversion entrypoint");
         XrSystemGetInfo systemInfo{XR_TYPE_SYSTEM_GET_INFO};
@@ -590,12 +600,23 @@ private:
                     XrSessionBeginInfo begin{XR_TYPE_SESSION_BEGIN_INFO};
                     begin.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
                     check(xrBeginSession(session_, &begin), "xrBeginSession"); running_ = true;
+                    if (setPerformance_) {
+                        for (auto domain : {XR_PERF_SETTINGS_DOMAIN_CPU_EXT, XR_PERF_SETTINGS_DOMAIN_GPU_EXT}) {
+                            XrResult request = setPerformance_(session_, domain, XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT);
+                            __android_log_print(ANDROID_LOG_INFO, "DroidDeckXR", "sustained performance domain=%d result=%d", domain, request);
+                        }
+                    }
                 } else if (state_ == XR_SESSION_STATE_STOPPING) {
                     check(xrEndSession(session_), "xrEndSession"); running_ = false;
                     if (quitRequested_) exit_ = true;
                 } else if (state_ == XR_SESSION_STATE_EXITING || state_ == XR_SESSION_STATE_LOSS_PENDING) exit_ = true;
                 health();
             } else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING) exit_ = true;
+            else if (event.type == XR_TYPE_EVENT_DATA_PERF_SETTINGS_EXT) {
+                const auto &performance = *reinterpret_cast<XrEventDataPerfSettingsEXT *>(&event);
+                __android_log_print(ANDROID_LOG_INFO, "DroidDeckXR", "performance domain=%d subdomain=%d level=%d->%d",
+                                    performance.domain, performance.subDomain, performance.fromLevel, performance.toLevel);
+            }
             event = {XR_TYPE_EVENT_DATA_BUFFER};
         }
         check(result, "xrPollEvent");
