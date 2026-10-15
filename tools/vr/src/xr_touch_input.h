@@ -6,7 +6,7 @@
 struct XrTouchInput {
     float trigger = 0, grip = 0, stickX = 0, stickY = 0;
     bool triggerClick = false, gripClick = false, stickClick = false;
-    bool primaryClick = false, secondaryClick = false, menuClick = false;
+    bool primaryClick = false, secondaryClick = false, systemClick = false;
     bool triggerTouch = false, stickTouch = false, primaryTouch = false, secondaryTouch = false, thumbrestTouch = false;
 };
 
@@ -23,7 +23,7 @@ inline XrTouchInput xr_touch_input(const DroidDeckXrHand &hand, bool right) {
     input.stickClick = hand.buttons & DROIDDECK_XR_STICK_CLICK;
     input.primaryClick = hand.buttons & DROIDDECK_XR_PRIMARY_CLICK;
     input.secondaryClick = hand.buttons & DROIDDECK_XR_SECONDARY_CLICK;
-    input.menuClick = !right && (hand.buttons & DROIDDECK_XR_MENU_CLICK);
+    input.systemClick = !right && (hand.buttons & DROIDDECK_XR_MENU_CLICK);
     input.triggerTouch = hand.buttons & DROIDDECK_XR_TRIGGER_TOUCH;
     input.stickTouch = hand.buttons & DROIDDECK_XR_STICK_TOUCH;
     input.primaryTouch = hand.buttons & DROIDDECK_XR_PRIMARY_TOUCH;

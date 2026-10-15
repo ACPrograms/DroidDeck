@@ -74,6 +74,9 @@ and display timing, and returns owned stereo images with their render poses.
 SteamVR haptics return through the tracking bridge. No root or separate XR APK
 is required. Other devices retain their existing SteamVR start behavior.
 
+The left Touch menu button is SteamVR's system button and toggles its dashboard.
+The right Meta button remains reserved by the headset OS.
+
 The panel compositor detaches before OpenXR starts displaying guest frames.
 Session suspension accounts for the immersive activity while the panel is hidden.
 Closing the immersive activity stops SteamVR. The panel remains available for

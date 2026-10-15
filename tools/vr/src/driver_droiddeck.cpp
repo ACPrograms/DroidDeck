@@ -455,8 +455,8 @@ public:
         driverInput->UpdateScalarComponent(padY_, input.stickY, 0);
         driverInput->UpdateBooleanComponent(padClick_, input.stickClick, 0);
         driverInput->UpdateBooleanComponent(padTouch_, input.stickTouch, 0);
-        driverInput->UpdateBooleanComponent(menu_, input.menuClick, 0);
-        driverInput->UpdateBooleanComponent(system_, false, 0);
+        driverInput->UpdateBooleanComponent(menu_, false, 0);
+        driverInput->UpdateBooleanComponent(system_, input.systemClick, 0);
         if (xrMode_) {
             driverInput->UpdateScalarComponent(gripValue_, input.grip, 0);
             driverInput->UpdateBooleanComponent(triggerTouch_, input.triggerTouch, 0);
