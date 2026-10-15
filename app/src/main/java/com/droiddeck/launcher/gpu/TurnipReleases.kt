@@ -12,42 +12,21 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Driver downloads from the Turnip release repos, offered in both driver menus. Checked only when
- * the user taps refresh - the result is remembered, so the menu shows the last check without going
- * online. A download goes through the same importer as a zip picked by hand, so it gets the same
- * checks and lands as an ordinary imported driver.
- *
- * Each repo's recent releases are read newest first and every driver variant is offered from the
- * newest release that carries it: a repo that stops publishing one variant (Banners-Turnip's A8xx
- * Linux build after v26.3.0-20260923) still offers its last one, and a repo with two release lines
- * (WinNative's Android `v1.x` and Linux `linux-v0.x`) offers the newest of each.
- */
 object TurnipReleases {
     private const val PREFS = "turnip_releases"
     private const val KEY_RELEASE = "latest"
     private const val KEY_DOWNLOADS = "downloads"
 
-    /** [label] names the variant for the menu: the GPUs it is for, and a build flavour. */
-    /** [sha256] is the release asset's digest from GitHub; empty for a list cached before it was kept. */
-    /**
-     * [pair] names the matched set an asset belongs to (DriverPairs): a display build and a Linux
-     * build of the same pair are made to run together. "" for a list cached before pairs were kept.
-     */
-    /** [bundle]: one zip holding both halves of the pair (DriverBundle); [linux] is false for it. */
     class Asset(val source: String, val tag: String, val name: String, val url: String, val size: Long, val linux: Boolean, val label: String,
                 val sha256: String = "", val pair: String = "", val bundle: Boolean = false)
-    /** [latest] = each source's newest release tag, for the refresh line. */
     class Check(val assets: List<Asset>, val latest: List<Pair<String, String>>, val failed: List<String>, val checkedAt: Long)
 
-    /** What an asset is: a Linux build or not, the menu label, and the pair it belongs to. */
     private class Kind(val linux: Boolean, val label: String, val pair: String, val bundle: Boolean = false)
 
     /** [prerelease]: a source whose bundles are all test builds offers them from pre-releases too. */
     private class Source(val label: String, val repo: String, val prerelease: Boolean = false, val classify: (name: String, tag: String) -> Kind?)
 
     private val SOURCES = listOf(
-        // Turnip-<tag>[-variant][-Linux|-Wayland].zip; -Wayland is for a path this app does not have.
         Source("Banners-Turnip", "The412Banner/Banners-Turnip") { name, tag ->
             val prefix = "Turnip-$tag"
             if (!name.startsWith(prefix) || !name.endsWith(".zip")) return@Source null
@@ -64,16 +43,12 @@ object TurnipReleases {
             }
             Kind(linux, label, "banner" + variant.lowercase())
         },
-        // WN-Turnip-<ver>-<b|p>_Axxx.zip (Android) and WN-Linux-Turnip-<ver>-<b|p>_Axxx.zip (Linux):
-        // b = Balanced, p = Performance, Axxx = every Adreno.
         Source("WinNative", "WinNative-Emu/Drivers") { name, _ ->
             val m = Regex("""^WN-(Linux-)?Turnip-[^-]+-([a-z]+)_(\w+)\.zip$""").find(name) ?: return@Source null
             val flavour = when (m.groupValues[2]) { "b" -> "Balanced"; "p" -> "Performance"; else -> m.groupValues[2] }
             val gpus = if (m.groupValues[3] == "Axxx") "all Adreno" else m.groupValues[3]
             Kind(m.groupValues[1].isNotEmpty(), "$gpus · $flavour", "wn-" + m.groupValues[2])
         },
-        // DD-Turnip-v<ver>.zip: DroidDeck's own all-in-one build, both halves in one zip, published
-        // to Drivers-CI (releases only). Every release is offered, not just the newest, each its own pair.
         Source("DroidDeck", "Droid-Deck/Drivers-CI") { name, tag ->
             if (!Regex("""^DD-Turnip-v\d+\.\d+\.\d+\.zip$""").matches(name)) return@Source null
             Kind(false, "Android + Linux · all Adreno", DriverPairs.ddTurnip(tag), bundle = true)
@@ -90,20 +65,14 @@ object TurnipReleases {
 
     private const val NON_ADRENO_REPO = "The412Banner/droiddeck-nonadreno-drivers"
 
-    /** The sources this device reads: an Adreno never asks the non-Adreno repo, so its list is as before. */
     private fun sources(): List<Source> =
         if (com.droiddeck.launcher.core.DeviceSupport.adreno()) SOURCES.filter { it.repo != NON_ADRENO_REPO } else SOURCES
 
-    /** The result of the last check, or null when the user has never checked. */
     fun cached(context: Context): Check? {
         val raw = prefs(context).getString(KEY_RELEASE, null) ?: return null
         return runCatching { parse(JSONObject(raw)) }.getOrNull()
     }
 
-    /**
-     * Read every source now and remember the result. A source that fails is named in [Check.failed]
-     * and the others still count; throws only when every source failed.
-     */
     fun refresh(context: Context): Check {
         val assets = JSONArray()
         val latest = JSONArray()
@@ -125,13 +94,10 @@ object TurnipReleases {
                         val a = list.getJSONObject(j)
                         val name = a.getString("name")
                         val kind = src.classify(name, tag) ?: continue
-                        // A bundle is only offered from an official release, never a pre-release.
                         if (kind.bundle && r.optBoolean("prerelease") && !src.prerelease) continue
                         val linux = kind.linux
                         val label = kind.label
-                        // Only assets GitHub has a sha256 for are offered: the download is checked against it.
                         val sha = Hashes.githubSha256(a.optString("digest")) ?: continue
-                        // Newest first: the first release carrying a variant is the one offered.
                         if (!seen.add(if (kind.bundle) kind.pair else "$linux|$label")) continue
                         assets.put(JSONObject().put("source", src.label).put("tag", tag).put("name", name)
                             .put("url", a.getString("browser_download_url")).put("size", a.optLong("size"))
@@ -186,11 +152,8 @@ object TurnipReleases {
         return Check(out, latest, failed, json.optLong("checkedAt"))
     }
 
-    /** The id an asset was installed as, when it was downloaded before and is still installed. */
     fun installedId(context: Context, asset: Asset, isInstalled: (String) -> Boolean): String? {
         val d = downloads(context)
-        // The open non-Adreno drivers are rebuilt in place under the same asset name: one whose
-        // digest changed since it was downloaded counts as not installed, so it is fetched again.
         if (DriverPairs.isNonAdreno(asset.pair) && asset.sha256.isNotEmpty() &&
             !asset.sha256.equals(d.optString(SHA_PREFIX + asset.name, asset.sha256), ignoreCase = true)) return null
         return d.optString(asset.name, "").takeIf { it.isNotEmpty() && isInstalled(it) }
@@ -198,7 +161,6 @@ object TurnipReleases {
 
     private const val SHA_PREFIX = "sha256:"
 
-    /** True when [id] came from a release download rather than a zip picked by hand. */
     fun isDownloaded(context: Context, id: String): Boolean {
         val d = downloads(context)
         return d.keys().asSequence().any { d.optString(it) == id }
@@ -210,7 +172,6 @@ object TurnipReleases {
         prefs(context).edit().putString(KEY_DOWNLOADS, d.toString()).apply()
     }
 
-    /** Forget a deleted driver, so its release offers the download again. */
     fun forget(context: Context, id: String) {
         val d = downloads(context)
         val keys = d.keys().asSequence().filter { d.optString(it) == id }.toList()
@@ -219,7 +180,6 @@ object TurnipReleases {
         prefs(context).edit().putString(KEY_DOWNLOADS, d.toString()).apply()
     }
 
-    /** Download an asset into the cache; the caller imports it and deletes the file. */
     fun download(context: Context, asset: Asset, progress: (Int) -> Unit): File {
         if (asset.sha256.isEmpty()) throw IOException(context.getString(R.string.turnip_list_predates_checksums))
         val target = File(context.cacheDir, asset.name)

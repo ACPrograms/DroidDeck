@@ -13,7 +13,7 @@ class SteamPresentationTest(unittest.TestCase):
     def launch(self, enabled=None, inherited=None):
         source = SESSION.read_text()
         begin = source.index("    bl_steam_path=$PATH")
-        end = source.index("\n    # Decky", begin)
+        end = source.index("\n    decky_loader=", begin)
         command = source.index('      PATH="$bl_steam_path"')
         command_end = source.index("\n      rc=$?", command)
         script = (source[begin:end] + '\n_bl_ui=(-gamepadui); _bl_cdp=(); _bl_lang=()\n'

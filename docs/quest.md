@@ -1,15 +1,41 @@
-# Experimental Quest 3/3S support
+# Experimental Quest 2/3/3S support
 
 Quest 3/3S runs DroidDeck as a 2D panel. This does not add immersive VR or
-OpenXR support. Quest 2 is outside the bundled Adreno 7xx driver path.
+OpenXR support. Quest 2 has a separate experimental Adreno 6xx driver path.
+
+Quest 2 selects `turnip26.3.0-quest2`, a pinned Banners-Turnip A6xx/A7xx build
+with the same GPUOBJ adapter. It does not select the Quest 3 A7xx binary.
+The first Quest 2 launch applies manual driver selection and the SurfaceControl
+workaround, even if `questDefaultsV1` exists from an earlier install. Later user
+choices are retained. The separate `turnip26.3.0-a6xx` bundle provides a plain
+Adreno 6xx offline fallback for other devices; their driver Auto behavior remains.
+Neither family-wide hardware coverage nor Quest 2 operation has been verified.
+
+The A6xx input URL and SHA-256 are pinned in `tools/quest/build-driver.py`.
+Both A6xx bundles are prepared by the existing local/CI wrapper build step and
+covered by runtime-input attestation. Quest 3/3S retains its original driver.
+Early installation and compositor breadcrumbs are written to `driver-setup.txt`
+in private files and, when available, the app's external files directory. They
+do not require a Steam session. The existing Quest Java crash file now also
+applies to Quest 2; native crashes still require Android logcat.
 
 Install the standard DroidDeck APK on Quest 3/3S. Device detection on the
 first launch selects manual drivers, the bundled
 `turnip25.1.0-quest1` Android driver and the default Linux driver. It enables
 `hdr.steam` to use the existing SurfaceControl presentation workaround from
 [the Quest report](https://github.com/Droid-Deck/DroidDeck/issues/245).
+Presentation also has a Quest-specific layer path for complete SDR scenes and
+the black backdrop, independent of this HDR preference; see
+[the presentation candidate and headset test](quest-presentation-test.md).
 These defaults apply once; subsequent user changes are retained. Colour
 accuracy and headset performance still need testing.
+
+Selecting driver Auto also uses the bundled Quest display driver and runtime
+default, without downloading a generic Adreno driver pair. Manual selections
+remain available and are not replaced on startup. Android's Auto-by-GPU fallback
+uses the Quest bundle too; the external `Download/droiddeck-driver` override
+still takes precedence. Fully close and restart DroidDeck after changing the
+display driver, since the compositor loads it once per app process.
 
 Both the Android driver wrapper and the Linux session preload use
 `tools/quest/kgsl_compat.c`. Successful legacy allocation/free calls are
