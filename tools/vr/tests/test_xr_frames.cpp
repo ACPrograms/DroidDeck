@@ -7,7 +7,7 @@
 static DroidDeckXrFrameHeader Header(uint64_t id = 1) {
     DroidDeckXrFrameHeader header{};
     header.magic = DROIDDECK_XR_FRAME_MAGIC; header.version = DROIDDECK_XR_FRAME_VERSION;
-    header.width = 8; header.height = 4; header.bytes = 128; header.color_space = 1;
+    header.width = 8; header.height = 4; header.bytes = 128; header.color_space = DROIDDECK_XR_COLOR_LINEAR_RGBA8;
     header.frame_id = id; header.captured_ns = xr_frame_now();
     for (int eye = 0; eye < 2; eye++) {
         for (int axis = 0; axis < 3; axis++) header.eye_pose[eye][axis][axis] = 1;

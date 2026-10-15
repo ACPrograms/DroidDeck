@@ -126,8 +126,10 @@ tools/droiddeckctl wake
 
 `xr-frame` captures both app eye textures while SteamVR is open, saving `left.png`,
 `right.png` and `capture.json` with the matching source frame, projection poses,
-FOV and dimensions. It works over wired or wireless authorized ADB. A unique
-request ID prevents stale images from passing as a fresh capture; no valid XR
+FOV and dimensions. It works over wired or wireless authorized ADB.
+Newer builds also include `source.png`, the incoming stereo texture before the
+Android eye draw, and sRGB attachment/write state in the metadata for color debugging.
+A unique request ID prevents stale images from passing as a fresh capture; no valid XR
 layer produces an explicit error. Captures exclude Meta system overlays and
 the headset compositor's final reprojection. GPU readback runs only on request
 and can briefly affect frame timing. Remote files are overwritten each time.

@@ -260,7 +260,8 @@ public:
             if (xrWidth_) {
                 frame_.render.magic = DROIDDECK_XR_FRAME_MAGIC; frame_.render.version = DROIDDECK_XR_FRAME_VERSION;
                 frame_.render.width = xrWidth_; frame_.render.height = xrHeight_;
-                frame_.render.bytes = xrWidth_ * xrHeight_ * 4; frame_.render.color_space = 1;
+                frame_.render.bytes = xrWidth_ * xrHeight_ * 4;
+                frame_.render.color_space = DROIDDECK_XR_COLOR_LINEAR_RGBA8;
             }
             for (int e = 0; e < 2; e++) {
                 frame_.texture[e] = eyes[e].hTexture;

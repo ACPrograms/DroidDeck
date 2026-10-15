@@ -34,7 +34,7 @@ class XrCaptureTest(unittest.TestCase):
             with self.subTest(data=data), self.assertRaises(ctl.ControlError):
                 ctl.xr_ppm_to_png(data)
 
-    def capture(self, root, failed=False, replaced=False, no_response=False):
+    def capture(self, root, failed=False, replaced=False, no_response=False, source=False):
         calls = []
         token = None
         reads = 0
@@ -47,7 +47,7 @@ class XrCaptureTest(unittest.TestCase):
             if args[:2] == ('shell', 'cat'):
                 reads += 1
                 stdout = json.dumps({'id': ('old' if reads == 1 or no_response or (replaced and reads > 2) else token),
-                                     'ok': not failed, 'validLayer': not failed}).encode()
+                                     'ok': not failed, 'validLayer': not failed, 'sourceImage': source}).encode()
             if args[0] == 'pull':
                 Path(args[2]).write_bytes(b'P6\n1 1\n255\n\x12\x34\x56')
             return subprocess.CompletedProcess(args, 0, stdout, b'')
@@ -71,6 +71,13 @@ class XrCaptureTest(unittest.TestCase):
                 with self.assertRaises(ctl.ControlError):
                     self.capture(root, **flags)
                 self.assertFalse(root.exists())
+
+    def test_source_capture_is_pulled_when_supported_by_the_headset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'capture'
+            result, calls = self.capture(root, source=True)
+            self.assertEqual(result['source'], str((root / 'source.png').resolve()))
+            self.assertEqual(len([c for c in calls if c[0] == 'pull']), 3)
 
 
 if __name__ == '__main__':

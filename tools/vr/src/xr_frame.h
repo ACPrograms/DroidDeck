@@ -6,6 +6,7 @@
 #define DROIDDECK_XR_FRAME_VERSION 1u
 #define DROIDDECK_XR_FRAME_SOCKET "droiddeck-xr-frames"
 #define DROIDDECK_XR_FRAME_MAX_BYTES (64u * 1024u * 1024u)
+#define DROIDDECK_XR_COLOR_LINEAR_RGBA8 1u
 
 struct DroidDeckXrFrameHeader {
     uint32_t magic, version, width, height;
@@ -23,7 +24,7 @@ inline bool xr_frame_valid(const DroidDeckXrFrameHeader &header) {
     if (header.magic != DROIDDECK_XR_FRAME_MAGIC || header.version != DROIDDECK_XR_FRAME_VERSION
         || !header.frame_id || header.width < 2 || (header.width & 1u) || !header.height
         || header.width > 8192 || header.height > 4096 || bytes > DROIDDECK_XR_FRAME_MAX_BYTES
-        || header.bytes != bytes || header.color_space != 1 || header.captured_ns <= 0) return false;
+        || header.bytes != bytes || header.color_space != DROIDDECK_XR_COLOR_LINEAR_RGBA8 || header.captured_ns <= 0) return false;
     for (int eye = 0; eye < 2; eye++) {
         for (const auto &row : header.eye_pose[eye]) for (float value : row) if (!std::isfinite(value)) return false;
         for (const auto &row : header.projection[eye]) for (float value : row) if (!std::isfinite(value)) return false;

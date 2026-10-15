@@ -130,6 +130,7 @@ private:
     EGLSurface surface_ = EGL_NO_SURFACE;
     std::array<Eye, 2> eyes_;
     GLuint framebuffer_ = 0, vertexArray_ = 0;
+    GLint sourceEncoding_ = 0, eyeEncoding_ = 0;
 
     std::string captureRequest() {
         if (frames_ % 9) return {};
@@ -145,24 +146,29 @@ private:
         return token;
     }
 
-    bool captureEye(const Eye &eye, uint32_t image, int index) {
+    bool captureTexture(GLuint texture, int width, int height, const char *name) {
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, eye.images[image].image, 0);
-        std::vector<unsigned char> pixels((size_t)eye.width * eye.height * 4);
-        glReadPixels(0, 0, eye.width, eye.height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+        GLint encoding = 0;
+        glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                              GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING, &encoding);
+        if (!std::strcmp(name, "source")) sourceEncoding_ = encoding;
+        else eyeEncoding_ = encoding;
+        std::vector<unsigned char> pixels((size_t)width * height * 4);
+        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
         bool ok = glGetError() == GL_NO_ERROR;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         if (!ok) return false;
         std::string file = std::string(app_->activity->externalDataPath) +
-            (index ? "/xr-capture-right.ppm" : "/xr-capture-left.ppm");
+            "/xr-capture-" + name + ".ppm";
         std::string temporary = file + ".tmp";
         FILE *output = std::fopen(temporary.c_str(), "wb");
         if (!output) return false;
-        ok = std::fprintf(output, "P6\n%d %d\n255\n", eye.width, eye.height) > 0;
-        std::vector<unsigned char> row((size_t)eye.width * 3);
-        for (int y = eye.height - 1; y >= 0 && ok; y--) {
-            for (int x = 0; x < eye.width; x++)
-                std::memcpy(row.data() + x * 3, pixels.data() + ((size_t)y * eye.width + x) * 4, 3);
+        ok = std::fprintf(output, "P6\n%d %d\n255\n", width, height) > 0;
+        std::vector<unsigned char> row((size_t)width * 3);
+        for (int y = height - 1; y >= 0 && ok; y--) {
+            for (int x = 0; x < width; x++)
+                std::memcpy(row.data() + x * 3, pixels.data() + ((size_t)y * width + x) * 4, 3);
             ok = std::fwrite(row.data(), 1, row.size(), output) == row.size();
         }
         if (std::fclose(output) != 0) ok = false;
@@ -190,7 +196,11 @@ private:
                 pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w,
                 fov.angleLeft, fov.angleRight, fov.angleUp, fov.angleDown);
         }
-        std::fputs("]}\n", output);
+        const char *extensions = reinterpret_cast<const char *>(glGetString(GL_EXTENSIONS));
+        const bool srgbControl = extensions && std::strstr(extensions, "GL_EXT_sRGB_write_control");
+        std::fprintf(output, "],\"sourceImage\":true,\"sourceColorSpace\":\"linear\",\"sourceEncoding\":%d,\"eyeEncoding\":%d,"
+            "\"srgbWriteControl\":%s,\"srgbWriteEnabled\":%s}\n", sourceEncoding_, eyeEncoding_,
+            srgbControl ? "true" : "false", srgbControl && glIsEnabled(0x8DB9) ? "true" : "false");
         if (std::fclose(output) == 0) std::rename(temporary.c_str(), file.c_str());
     }
 
@@ -525,7 +535,8 @@ private:
         if (frame.header.width > static_cast<uint32_t>(maximum) || frame.header.height > static_cast<uint32_t>(maximum))
             throw std::runtime_error("XR source exceeds GPU texture limit");
         glBindTexture(GL_TEXTURE_2D, sourceTexture_);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, frame.header.width, frame.header.height, 0,
+        // Direct-mode output is linear; the sRGB eye framebuffer performs the display encoding.
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, frame.header.width, frame.header.height, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
         if (verifyPixels_) {
             glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
@@ -655,6 +666,8 @@ private:
         }
         const std::string capture = captureRequest();
         bool captured = valid;
+        if (!capture.empty() && valid)
+            captured = captureTexture(sourceTexture_, sourceHeader_.width, sourceHeader_.height, "source");
         if (valid) for (int eye = 0; eye < 2; eye++) {
             uint32_t image = 0;
             XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
@@ -662,7 +675,7 @@ private:
             XrSwapchainImageWaitInfo imageWait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO}; imageWait.timeout = XR_INFINITE_DURATION;
             check(xrWaitSwapchainImage(eyes_[eye].swapchain, &imageWait), "wait image");
             render(eyes_[eye], image);
-            if (!capture.empty()) captured = captureEye(eyes_[eye], image, eye) && captured;
+            if (!capture.empty()) captured = captureTexture(eyes_[eye].images[image].image, eyes_[eye].width, eyes_[eye].height, eye ? "right" : "left") && captured;
             XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
             check(xrReleaseSwapchainImage(eyes_[eye].swapchain, &release), "release image");
             projection[eye].pose = views[eye].pose; projection[eye].fov = views[eye].fov;

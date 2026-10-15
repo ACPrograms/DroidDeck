@@ -435,7 +435,7 @@ def xr_capture(adb: str, serial: str, destination: Path, timeout: float) -> dict
             detail = 'No valid XR projection layer is being submitted' if not metadata.get('validLayer') else 'GPU readback or image write failed'
             raise ControlError(detail, 'XR_CAPTURE_FAILED')
         images = {}
-        for eye in ('left', 'right'):
+        for eye in (('left', 'right', 'source') if metadata.get('sourceImage') else ('left', 'right')):
             local = Path(temporary) / (eye + '.ppm')
             pulled = run_adb(adb, serial, 'pull', remote + '-' + eye + '.ppm', str(local), timeout=120)
             if pulled.returncode:
@@ -455,6 +455,7 @@ def xr_capture(adb: str, serial: str, destination: Path, timeout: float) -> dict
     (destination / 'capture.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
     return {'ok': True, 'command': 'xr-frame', 'deviceSerial': serial, 'capture': metadata,
             'left': str((destination / 'left.png').resolve()), 'right': str((destination / 'right.png').resolve()),
+            **({'source': str((destination / 'source.png').resolve())} if 'source' in images else {}),
             'scope': 'App eye textures before headset compositor reprojection; excludes Meta system overlays'}
 
 
