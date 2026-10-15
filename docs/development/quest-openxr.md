@@ -310,6 +310,15 @@ bundled into the user-facing runtime. A valid already-signaled SYNC_FD value of
 
 ## Remaining stages
 
+Steam's ARM64 watchdog also aborts with `futex robust_list not initialized by
+pthreads`. A captured preload trace showed successful own-thread queries
+leaving `errno=EFAULT`. The preload now prefers the real kernel query, falls
+back only for `ENOSYS`, preserves errno on fallback success and safely rejects
+invalid output pointers. A host regression compares native and fallback
+results with the kernel's actual head, including a held robust mutex and a
+second thread, and preserves permission failures. This is not yet a verified
+fix for Valve's assertion: the Quest disconnected before a new device trace.
+
 - Android/Linux eye-image bridge and frame ownership/synchronization.
 - OpenVR driver IPC for predicted 6DoF head, per-eye views and tracked hands.
 - Real Touch input mapping and haptics returning through the bridge.

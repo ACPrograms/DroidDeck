@@ -98,22 +98,35 @@ long syscall(long number, ...) {
     args[i] = va_arg(ap, long);
   }
   va_end(ap);
+  int saved_errno = errno;
+  if (!real_syscall) {
+    real_syscall = (long (*)(long, ...)) dlsym(RTLD_NEXT, "syscall");
+  }
   if (number == SYS_get_robust_list && (args[0] == 0 || args[0] == gettid())) {
+    errno = saved_errno;
+    long result = real_syscall(number, args[0], args[1], args[2]);
+    if (result != -1 || errno != ENOSYS) {
+      return result;
+    }
     struct robust_list_head *head = thread_robust_head();
     if (!head) {
       errno = ENOSYS;
       return -1;
     }
-    *(struct robust_list_head **)args[1] = head;
-    *(size_t *)args[2] = sizeof(*head);
+    size_t length = sizeof(*head);
+    struct iovec local[2] = {{&head, sizeof(head)}, {&length, sizeof(length)}};
+    struct iovec remote[2] = {{(void *)args[1], sizeof(head)}, {(void *)args[2], sizeof(length)}};
+    ssize_t written = process_vm_writev(getpid(), local, 2, remote, 2, 0);
+    if (written != (ssize_t)(sizeof(head) + sizeof(length))) {
+      if (written >= 0) errno = EFAULT;
+      return -1;
+    }
+    errno = saved_errno;
     return 0;
   }
   long handled;
   if (bl_fsync_syscall(number, args, &handled)) {
     return handled;
-  }
-  if (!real_syscall) {
-    real_syscall = (long (*)(long, ...)) dlsym(RTLD_NEXT, "syscall");
   }
   if (number == SYS_openat2) {
     if (!__atomic_load_n(&openat2_missing, __ATOMIC_RELAXED)) {
