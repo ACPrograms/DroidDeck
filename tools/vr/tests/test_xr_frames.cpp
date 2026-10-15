@@ -97,6 +97,17 @@ int main(int argc, char **argv) {
     assert(receiver.Start(socketPath)); assert(sender.Send(socketPath, Header(1), pixels.data()));
     assert(receiver.Take(&taken));
     receiver.Stop(); assert(receiver.Start(socketPath));
+    int delayed = Connect(socketPath);
+    usleep(140000);
+    auto delayedHeader = Header();
+    assert(xr_frame_io(delayed, &delayedHeader, sizeof(delayedHeader), true, xr_frame_now() + 200000000LL));
+    usleep(110000);
+    assert(xr_frame_io(delayed, pixels.data(), pixels.size(), true, xr_frame_now() + 200000000LL));
+    uint64_t acknowledged = 0;
+    assert(xr_frame_io(delayed, &acknowledged, sizeof(acknowledged), false, xr_frame_now() + 200000000LL));
+    assert(acknowledged == delayedHeader.frame_id && receiver.Take(&taken));
+    close(delayed);
+    receiver.Stop(); assert(receiver.Start(socketPath));
     int descriptor = Connect(socketPath); auto header = Header(); header.version++;
     assert(xr_frame_io(descriptor, &header, sizeof(header), true, xr_frame_now() + 200000000LL));
     close(descriptor); WaitRejected(receiver, 1); assert(!receiver.Take(&taken));

@@ -145,7 +145,12 @@ static void *droiddeck_producer_serve(void *argument) {
         }
         uint64_t granted = ++ticket;
         message = (struct droiddeck_producer_message){DROIDDECK_PRODUCER_MAGIC, DROIDDECK_PRODUCER_READY, granted};
-        int valid = droiddeck_producer_io(connection, &message, 1, deadline);
+        if (!droiddeck_producer_io(connection, &message, 1, droiddeck_producer_now() + 100000000LL)) {
+            server->release();
+            close(connection);
+            continue;
+        }
+        int valid = 1;
         while (valid) {
             struct pollfd request = {connection, POLLIN, 0};
             int ready = poll(&request, 1, -1);
@@ -174,6 +179,16 @@ static int droiddeck_producer_start(struct droiddeck_producer_server *server) {
     address.sun_family = AF_UNIX;
     if (!droiddeck_producer_path(address.sun_path, sizeof(address.sun_path), getpid()) ||
         !droiddeck_producer_private_parent(address.sun_path)) return 0;
+    struct stat existing;
+    if (lstat(address.sun_path, &existing) == 0) {
+        if (!S_ISSOCK(existing.st_mode) || existing.st_uid != getuid()) return 0;
+        int probe = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+        if (probe < 0) return 0;
+        int connected = connect(probe, (struct sockaddr *)&address, sizeof(address));
+        int error = errno;
+        close(probe);
+        if (connected == 0 || error != ECONNREFUSED || unlink(address.sun_path) != 0) return 0;
+    } else if (errno != ENOENT) return 0;
     server->listener = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
     if (server->listener < 0) return 0;
     if (bind(server->listener, (struct sockaddr *)&address, sizeof(address)) != 0) {

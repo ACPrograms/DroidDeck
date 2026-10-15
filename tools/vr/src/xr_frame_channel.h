@@ -124,6 +124,7 @@ private:
                     || now - frame.header.captured_ns > 500000000LL || frame.header.frame_id <= lastFrame) { rejected_++; break; }
                 try { frame.pixels.resize(frame.header.bytes); }
                 catch (...) { rejected_++; break; }
+                deadline = xr_frame_now() + 200000000LL;
                 if (!xr_frame_io(client, frame.pixels.data(), frame.pixels.size(), false, deadline)) { rejected_++; break; }
                 if (xr_frame_now() - frame.header.captured_ns > 500000000LL) { rejected_++; break; }
                 uint64_t acknowledgement = frame.header.frame_id;

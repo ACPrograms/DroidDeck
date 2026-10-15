@@ -48,8 +48,26 @@ static void VKAPI_CALL mock_destroy(VkDevice device, VkSemaphore semaphore, cons
     destroyed++;
 }
 
+static int expect_queue_lock;
+
+static void check_queue_lock(void) {
+    int acquired = pthread_mutex_trylock(&g_submission_lock);
+    assert(acquired == (expect_queue_lock ? EBUSY : 0));
+    if (!acquired) pthread_mutex_unlock(&g_submission_lock);
+}
+
+static VkResult VKAPI_CALL mock_queue_idle(VkQueue queue) {
+    assert(queue); check_queue_lock(); return VK_ERROR_DEVICE_LOST;
+}
+
+static VkResult VKAPI_CALL mock_device_idle(VkDevice device) {
+    assert(device); check_queue_lock(); return VK_ERROR_DEVICE_LOST;
+}
+
 static PFN_vkVoidFunction VKAPI_CALL mock_proc(VkDevice device, const char *name) {
     (void)device;
+    if (!strcmp(name, "vkQueueWaitIdle")) return (PFN_vkVoidFunction)mock_queue_idle;
+    if (!strcmp(name, "vkDeviceWaitIdle")) return (PFN_vkVoidFunction)mock_device_idle;
     if (!strcmp(name, "vkQueueSubmit")) return (PFN_vkVoidFunction)mock_submit;
     if (!strcmp(name, "vkQueueSubmit2")) return (PFN_vkVoidFunction)mock_submit2;
     if (!strcmp(name, "vkWaitSemaphores")) return (PFN_vkVoidFunction)mock_wait;
@@ -66,6 +84,16 @@ int main(void) {
     VkQueue queue = (VkQueue)&dispatch;
     g_dev[0] = (struct dev){device, mock_proc, NULL, 1, 0, 0};
     g_poller_started = 1;
+    PFN_vkQueueWaitIdle queue_idle = (PFN_vkQueueWaitIdle)semaphore_hook("vkQueueWaitIdle");
+    PFN_vkDeviceWaitIdle device_idle = (PFN_vkDeviceWaitIdle)semaphore_hook("vkDeviceWaitIdle");
+    assert(queue_idle && device_idle);
+    for (int producer = 0; producer <= 1; producer++) {
+        g_dev[0].producer = producer;
+        expect_queue_lock = producer;
+        assert(queue_idle(queue) == VK_ERROR_DEVICE_LOST);
+        assert(device_idle(device) == VK_ERROR_DEVICE_LOST);
+    }
+    g_dev[0].producer = 0;
     VkExportSemaphoreCreateInfo export_info = {VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO, NULL,
                                                VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT};
     VkSemaphoreCreateInfo create = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, &export_info, 0};

@@ -497,6 +497,7 @@ struct producer_queue {
 static struct producer_queue g_producer_queues[MAX_OBJS];
 static int g_producer_overflow;
 static int g_producer_started;
+static int64_t g_producer_retry_at;
 static struct droiddeck_producer_server g_producer_server;
 
 __attribute__((destructor)) static void producer_process_exit(void) {
@@ -558,7 +559,8 @@ static void producer_quarantine(void) {
 }
 
 static void producer_record(struct dev *device, VkQueue queue) {
-    if (!g_producer_started) {
+    if (!g_producer_started && droiddeck_producer_now() >= g_producer_retry_at) {
+        g_producer_retry_at = droiddeck_producer_now() + 1000000000LL;
         g_producer_server.acquire = producer_acquire;
         g_producer_server.release = producer_release;
         g_producer_server.quarantine = producer_quarantine;
@@ -885,6 +887,24 @@ static VkResult VKAPI_CALL QueueBindSparse(VkQueue queue, uint32_t count, const 
     return result;
 }
 
+static VkResult VKAPI_CALL QueueWaitIdle(VkQueue queue) {
+    struct dev *device = dev_for(queue);
+    PFN_vkQueueWaitIdle next = (PFN_vkQueueWaitIdle)device->gdpa(device->handle, "vkQueueWaitIdle");
+    if (device->producer) pthread_mutex_lock(&g_submission_lock);
+    VkResult result = next(queue);
+    if (device->producer) pthread_mutex_unlock(&g_submission_lock);
+    return result;
+}
+
+static VkResult VKAPI_CALL DeviceWaitIdle(VkDevice handle) {
+    struct dev *device = dev_for(handle);
+    PFN_vkDeviceWaitIdle next = (PFN_vkDeviceWaitIdle)device->gdpa(handle, "vkDeviceWaitIdle");
+    if (device->producer) pthread_mutex_lock(&g_submission_lock);
+    VkResult result = next(handle);
+    if (device->producer) pthread_mutex_unlock(&g_submission_lock);
+    return result;
+}
+
 static VkResult VKAPI_CALL WaitSemaphores(VkDevice d, const VkSemaphoreWaitInfo *info, uint64_t timeout) {
     PFN_vkWaitSemaphores next = (PFN_vkWaitSemaphores)dev_for(d)->gdpa(d, "vkWaitSemaphores");
     if (!next) next = (PFN_vkWaitSemaphores)dev_for(d)->gdpa(d, "vkWaitSemaphoresKHR");
@@ -928,6 +948,8 @@ static PFN_vkVoidFunction semaphore_hook(const char *name) {
     HOOK_AS("vkQueueSubmit2KHR", QueueSubmit2)
     HOOK_AS("vkQueuePresentKHR", QueuePresentKHR)
     HOOK_AS("vkQueueBindSparse", QueueBindSparse)
+    HOOK_AS("vkQueueWaitIdle", QueueWaitIdle)
+    HOOK_AS("vkDeviceWaitIdle", DeviceWaitIdle)
     HOOK_AS("vkWaitSemaphores", WaitSemaphores)
     HOOK_AS("vkWaitSemaphoresKHR", WaitSemaphores)
     HOOK_AS("vkGetSemaphoreCounterValue", GetSemaphoreCounterValue)

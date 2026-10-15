@@ -9,12 +9,14 @@ static atomic_int completed;
 static atomic_int released;
 static atomic_int quarantined;
 static atomic_int available;
+static atomic_int slow;
 
 static int acquire(int64_t deadline) {
     assert(deadline > droiddeck_producer_now());
     if (!atomic_load(&available)) return 0;
     assert(pthread_mutex_lock(&queue_lock) == 0);
     atomic_fetch_add(&completed, 1);
+    if (atomic_load(&slow)) usleep(170000);
     return 1;
 }
 
@@ -43,6 +45,17 @@ int main(void) {
     struct droiddeck_producer_server server = {.acquire = acquire, .release = release, .quarantine = quarantine};
     assert(!droiddeck_producer_start(&server));
     assert(chmod(parent, 0700) == 0);
+    char path[128];
+    assert(droiddeck_producer_path(path, sizeof(path), getpid()));
+    int regular = open(path, O_CREAT | O_RDWR, 0600);
+    assert(regular >= 0); close(regular);
+    assert(!droiddeck_producer_start(&server));
+    assert(unlink(path) == 0);
+    int stale = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    struct sockaddr_un address = {.sun_family = AF_UNIX};
+    strcpy(address.sun_path, path);
+    assert(bind(stale, (struct sockaddr *)&address, sizeof(address)) == 0);
+    close(stale);
     assert(droiddeck_producer_start(&server));
     struct stat metadata;
     assert(stat(server.path, &metadata) == 0 && (metadata.st_mode & 0777) == 0600);
@@ -65,6 +78,21 @@ int main(void) {
     assert(droiddeck_producer_acquire(getpid(), &lease));
     assert(lease.ticket > first_ticket);
     assert(droiddeck_producer_release(&lease));
+    atomic_store(&slow, 1);
+    assert(droiddeck_producer_acquire(getpid(), &lease));
+    assert(droiddeck_producer_release(&lease));
+    atomic_store(&slow, 0);
+    int abandoned = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    assert(connect(abandoned, (struct sockaddr *)&address, sizeof(address)) == 0);
+    struct droiddeck_producer_message request = {DROIDDECK_PRODUCER_MAGIC, DROIDDECK_PRODUCER_ACQUIRE, 0};
+    atomic_store(&slow, 1);
+    int before = atomic_load(&completed);
+    assert(send(abandoned, &request, sizeof(request), MSG_NOSIGNAL) == sizeof(request));
+    wait_count(&completed, before + 1);
+    close(abandoned);
+    wait_count(&released, 4);
+    assert(!atomic_load(&quarantined));
+    atomic_store(&slow, 0);
     char wrong_path[128];
     assert(droiddeck_producer_path(wrong_path, sizeof(wrong_path), (uint32_t)getpid() + 1));
     assert(link(server.path, wrong_path) == 0);
@@ -76,7 +104,7 @@ int main(void) {
     assert(droiddeck_producer_acquire(getpid(), &lease));
     close(lease.descriptor);
     wait_count(&quarantined, 1);
-    assert(atomic_load(&released) == 2);
+    assert(atomic_load(&released) == 4);
     assert(pthread_mutex_trylock(&queue_lock) == EBUSY);
     assert(pthread_join(server.thread, NULL) == 0);
     close(server.listener);
