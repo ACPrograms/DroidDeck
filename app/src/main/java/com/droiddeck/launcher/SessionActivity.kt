@@ -2383,6 +2383,10 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun steamVrAction(action: String) {
+        if (action == "start" && com.droiddeck.launcher.session.QuestExperimental.isSupported()) {
+            startActivity(android.content.Intent(this, QuestXrActivity::class.java))
+            return
+        }
         if (action == "start") {
             switchPictureForSteamVr()
             steamVrSeenRunning = false

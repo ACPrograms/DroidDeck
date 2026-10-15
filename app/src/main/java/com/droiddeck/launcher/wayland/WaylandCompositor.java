@@ -148,6 +148,7 @@ public final class WaylandCompositor {
                                                      String nativeLibDir);
 
     public static native void nativeSetSurface(Surface surface);
+    public static native boolean nativeWaitSurface(int timeoutMs);
 
     public static native void nativeSendPointer(int action, int x, int y);
 

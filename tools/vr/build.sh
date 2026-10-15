@@ -29,6 +29,8 @@ compile() {
     local cmd=(sh -c '
         set -e
         mkdir -p build/vr/stub
+        aarch64-linux-gnu-g++ -std=c++17 -O2 -Wall -Wextra -Werror -static-libstdc++ -static-libgcc -pthread \
+            -o build/vr/out/droiddeck/bin/linuxarm64/xr-display-mode tools/vr/src/xr_display_mode.cpp
         aarch64-linux-gnu-gcc -shared -fPIC -O2 -Wl,-soname,libwayland-client.so.0 -Itools/vr/third_party/wayland \
             -o build/vr/stub/libwayland-client.so tools/vr/src/wayland_client_stub.c
         aarch64-linux-gnu-gcc -c -fPIC -O2 -Itools/vr/third_party/wayland -o build/vr/xdg-shell-protocol.o \
@@ -39,7 +41,7 @@ compile() {
             -o build/vr/out/droiddeck/bin/linuxarm64/driver_droiddeck.so tools/vr/src/driver_droiddeck.cpp tools/vr/src/presenter.cpp \
             build/vr/xdg-shell-protocol.o -Lbuild/vr/stub -lwayland-client -ldl
         aarch64-linux-gnu-gcc -std=c11 -shared -fPIC -O2 -Wall -Wextra -Wno-unused-parameter -fvisibility=hidden -pthread \
-            -Wl,-z,defs -Ibuild/vr/include -o build/vr/out/layer/libVkLayer_droiddeck_vr.so tools/vr/src/vk_layer_droiddeck_vr.c -ldl
+            -Wl,-z,defs -Wl,-z,nodelete -Ibuild/vr/include -o build/vr/out/layer/libVkLayer_droiddeck_vr.so tools/vr/src/vk_layer_droiddeck_vr.c -ldl
         aarch64-linux-gnu-strip --strip-unneeded build/vr/out/droiddeck/bin/linuxarm64/driver_droiddeck.so \
             build/vr/out/layer/libVkLayer_droiddeck_vr.so')
     if [ "$native" = 1 ]; then

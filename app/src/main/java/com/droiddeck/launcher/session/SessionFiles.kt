@@ -104,6 +104,7 @@ object SessionFiles {
             listOf("NOTICE", "GPL-2", "GPL-3", "LGPL-2.1", "7zip-License", "7zip-unRarLicense").map { "usr/local/share/licenses/droiddeck-msitools/$it" }
         val vr = listOf(
             "droiddeck/bin/linuxarm64/driver_droiddeck.so",
+            "droiddeck/bin/linuxarm64/xr-display-mode",
             "droiddeck/driver.vrdrivermanifest",
             "droiddeck/resources/settings/default.vrsettings",
             "layer/libVkLayer_droiddeck_vr.so",

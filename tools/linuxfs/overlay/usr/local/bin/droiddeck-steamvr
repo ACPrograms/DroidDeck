@@ -7,7 +7,9 @@ driver=$vrdir/droiddeck
 layer=$vrdir/layer
 logs=$HOME/.local/share/Steam/logs
 state=${XDG_RUNTIME_DIR:-/tmp}/droiddeck-steamvr
+umask 077
 mkdir -p "$state"
+chmod 700 "$state"
 
 PKG_URL=https://steamdeck-packages.steamos.cloud/archlinux-deckard-hotfixes/release/0.3.x/deckard-steamvr-rel-r25358740%2B28b72a4f-1-aarch64.pkg.tar.zst
 PKG_SHA256=90a600775eb3e8856dc475f83166a93a290a0b1f3b4e82a69c8e2a8f06b9ddc9
@@ -75,6 +77,16 @@ JSON
     export VK_LAYER_PATH="$layer${VK_LAYER_PATH:+:$VK_LAYER_PATH}"
     export VK_INSTANCE_LAYERS="VK_LAYER_DROIDDECK_vr${VK_INSTANCE_LAYERS:+:$VK_INSTANCE_LAYERS}"
     export VK_LOADER_LAYERS_DISABLE="${VK_LOADER_LAYERS_DISABLE:-~implicit~}"
+    if [ -S "${XDG_RUNTIME_DIR:-/run/droiddeck}/droiddeck-xr-frames" ] && [ -z "${DROIDDECK_VR_PRESENT:-}" ]; then
+        export DROIDDECK_VR_PRESENT=questframes
+    fi
+    if [ "${DROIDDECK_VR_PRESENT:-}" = questframes ]; then
+        export DROIDDECK_VR_PRODUCER_LEASE=${DROIDDECK_VR_PRODUCER_LEASE:-1}
+    fi
+    if [ -z "${DROIDDECK_VR_DISPLAY_MODE:-}" ] && [ -x "$driver/bin/linuxarm64/xr-display-mode" ]; then
+        mode=$("$driver/bin/linuxarm64/xr-display-mode") || mode=
+        if [ -n "$mode" ]; then export DROIDDECK_VR_DISPLAY_MODE="$mode"; fi
+    fi
 
     shims=$state/shims
     mkdir -p "$shims"
@@ -86,7 +98,9 @@ JSON
 
     : > "$state/active"
     cd "$steamvr/bin/linuxarm64" || exit 1
-    setsid ./vrstartup > "$state/vrstartup.log" 2>&1 < /dev/null &
+    startup_log=$logs/droiddeck-vrstartup.log
+    ln -sf "$startup_log" "$state/vrstartup.log"
+    setsid ./vrstartup > "$startup_log" 2>&1 < /dev/null &
     echo "SteamVR starting; logs in $logs and $state/vrstartup.log"
     ;;
 *)

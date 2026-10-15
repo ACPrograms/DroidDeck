@@ -1,7 +1,7 @@
 # Experimental Quest 2/3/3S support
 
-Quest 3/3S runs DroidDeck as a 2D panel. This does not add immersive VR or
-OpenXR support. Quest 2 has a separate experimental Adreno 6xx driver path.
+Quest runs DroidDeck as a 2D panel, with an experimental immersive SteamVR path
+in the standard app. Quest 2 has a separate experimental Adreno 6xx driver path.
 
 Quest 2 selects `turnip26.3.0-quest2`, a pinned Banners-Turnip A6xx/A7xx build
 with the same GPUOBJ adapter. It does not select the Quest 3 A7xx binary.
@@ -64,3 +64,30 @@ On a headset, check the Steam login panel, sign-in, game installation and
 then an owned game's rendering/input. Capture the device/OS, session logs,
 `files/quest-startup.txt` and any `files/quest-last-crash.txt` failure.
 Host allocation and preload-chain tests do not establish headset operation.
+
+## Experimental immersive SteamVR
+
+In a running Steam session, install SteamVR through DroidDeck's SteamVR controls,
+then choose Start. On supported Quest devices this opens the standard app's
+OpenXR activity. The guest driver receives headset poses, Touch controller input
+and display timing, and returns owned stereo images with their render poses.
+SteamVR haptics return through the tracking bridge. No root or separate XR APK
+is required. Other devices retain their existing SteamVR start behavior.
+
+The panel compositor detaches before OpenXR starts displaying guest frames.
+Session suspension accounts for the immersive activity while the panel is hidden.
+Closing the immersive activity stops SteamVR. The panel remains available for
+returning to the normal Steam session.
+
+With Steam already running, `python3 tools/test_quest_xr.py --serial SERIAL`
+launches the immersive activity and verifies advancing owned images, tracked
+6DoF, focus and SteamVR status. Add `--require-controllers` while holding both
+controllers. Results include telemetry and logcat in `build/questxr-validation`.
+Host tests and APK installation alone do not establish headset operation.
+
+On Quest 3, a 45-second hardware run maintained focused tracked 6DoF, both
+controllers active, and advancing stereo images. A headset tester confirmed
+controller models and trigger animation. That run delivered about 8.5 new stereo
+images per second despite a 90 Hz XR session.
+This branch retains the safe owned-frame transfer path; reducing transfer cost,
+validating game input and testing actual VR games remain necessary.
