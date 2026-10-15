@@ -70,7 +70,7 @@ Host allocation and preload-chain tests do not establish headset operation.
 In a running Steam session, open the session menu's SteamVR tab, install SteamVR
 once, then choose Enter SteamVR. Cardboard has its own tab and can remain off. On supported Quest devices this opens the standard app's
 OpenXR activity. The guest driver receives headset poses, Touch controller input
-and display timing, and returns owned stereo images with their render poses.
+and display timing, and returns owned stereo images tagged with the latest eye poses.
 SteamVR haptics return through the tracking bridge. No root or separate XR APK
 is required. Other devices retain their existing SteamVR start behavior.
 
@@ -85,6 +85,23 @@ Without a seated transform, SteamVR reported valid raw and standing poses but
 invalid seated poses, causing Thumper to remain behind its tracking-loss fade.
 On Quest, supplying both transforms made all three origins valid; seated height
 started within a millimetre of zero while standing and raw height stayed unchanged.
+
+Quest uses SteamVR's normal Linux compositor through its display component.
+The Vulkan layer captures only the HMD display swapchain, retains its present
+waits, and chains a GPU copy before presentation. Three bounded capture buffers
+allow rendering and transfer to overlap. Color conversion happens on the GPU;
+the readback allocation travels as a DMA-BUF descriptor through `SCM_RIGHTS`.
+Android brackets its CPU read with `DMA_BUF_IOCTL_SYNC`, copies to owned pixels,
+then acknowledges that buffer. Missing acknowledgements quarantine the transfer
+instead of allowing a producer to overwrite a possible reader. This still
+includes a CPU read and GLES upload; it is not GPU image import into OpenXR.
+
+The helper enables SteamVR's Linux Vulkan asynchronous queue and disables motion
+smoothing. It excludes the pinned Steam Frame package's optional CVP backend,
+whose library constructor exits on Quest's unsupported SoC. The original library
+is retained with a `.droiddeck-disabled` suffix. SteamVR binaries are not patched.
+Cardboard retains its existing direct-mode path; `questframes` remains an explicit
+diagnostic override for the earlier driver presenter.
 
 The panel compositor detaches before OpenXR starts displaying guest frames.
 Session suspension accounts for the immersive activity while the panel is hidden.
@@ -105,10 +122,19 @@ On Quest 3, a 45-second hardware run maintained focused tracked 6DoF, both
 controllers active, and advancing stereo images. A headset tester confirmed
 controller models and trigger animation. That run delivered about 8.5 new stereo
 images per second despite a 90 Hz XR session.
-This branch retains the safe owned-frame transfer path; reducing transfer cost,
-validating game input and testing actual VR games remain necessary.
+That earlier measurement used the driver-direct presenter. With SteamVR's normal
+compositor, a native Vulkan scene passed its first submission and continued
+submitting stereo frames. Thumper and The Thrill of the Fight produced clean
+immersive scenes. SUPERHOT's Windows OpenXR build still showed shared-image
+corruption. A subsequent 60-second shared-buffer dashboard run delivered about
+43 new stereo images per second. Reusing Android pixel buffers raised the next
+60-second run to about 68 received and 65 uploaded images per second, with valid
+focused tracking and no rejected frames. These dashboard results do not establish refresh-rate gameplay: game input,
+sustained game performance, and exact association with SteamVR's final compositor
+pose still require validation.
 
-The frame channel carries linear RGBA8. Android samples it as linear and writes
+The frame channel supports linear and sRGB RGBA8. SteamVR's final display image
+uses sRGB display values; Android decodes those during texture sampling and writes
 to an sRGB eye swapchain, encoding the display values once. A Quest color-chart
 capture verified that 64, 128, 192 and 224 grey patches retain those values;
 the previous sRGB source upload darkened them to approximately 13, 55, 134 and

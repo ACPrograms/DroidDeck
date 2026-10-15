@@ -569,6 +569,8 @@ public:
         VRProperties()->SetBoolProperty(c, Prop_IsOnDesktop_Bool, false);
         VRProperties()->SetBoolProperty(c, Prop_DisplayDebugMode_Bool, false);
         directMode_ = VRSettings()->GetBool(kSettingsSection, "directMode");
+        const char *presentation = std::getenv("DROIDDECK_VR_PRESENT");
+        if (xrMode_ && presentation && !std::strcmp(presentation, "questwsi")) directMode_ = false;
         VRProperties()->SetBoolProperty(c, Prop_HasDriverDirectModeComponent_Bool, directMode_);
         if (directMode_) {
             VRProperties()->SetBoolProperty(c, Prop_DriverDirectModeSendsVsyncEvents_Bool, true);

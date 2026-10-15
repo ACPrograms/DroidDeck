@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     auto valid = Header(); assert(xr_frame_valid(valid));
     valid.color_space = DROIDDECK_XR_COLOR_SRGB_RGBA8; assert(xr_frame_valid(valid));
     auto unknownColor = valid; unknownColor.color_space = 3; assert(!xr_frame_valid(unknownColor));
-    auto invalid = valid; invalid.version++; assert(!xr_frame_valid(invalid));
+    auto invalid = valid; invalid.version = 3; assert(!xr_frame_valid(invalid));
     invalid = valid; invalid.width = 3; assert(!xr_frame_valid(invalid));
     invalid = valid; invalid.bytes--; assert(!xr_frame_valid(invalid));
     invalid = valid; invalid.width = 8192; invalid.height = 4096; assert(!xr_frame_valid(invalid));
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
     assert(acknowledged == delayedHeader.frame_id && receiver.Take(&taken));
     close(delayed);
     receiver.Stop(); assert(receiver.Start(socketPath));
-    int descriptor = Connect(socketPath); auto header = Header(); header.version++;
+    int descriptor = Connect(socketPath); auto header = Header(); header.version = 3;
     assert(xr_frame_io(descriptor, &header, sizeof(header), true, xr_frame_now() + 200000000LL));
     close(descriptor); WaitRejected(receiver, 1); assert(!receiver.Take(&taken));
     descriptor = Connect(socketPath); header = Header(); header.captured_ns += 1000000000LL;

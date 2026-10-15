@@ -13,6 +13,9 @@
 #include <errno.h>
 #define DROIDDECK_PRODUCER_SERVER
 #include "producer_lease.h"
+#ifdef DROIDDECK_WSI_CAPTURE
+#include "wsi_capture.h"
+#endif
 
 #define LAYER_NAME "VK_LAYER_DROIDDECK_vr"
 #define EXPORT __attribute__((visibility("default")))
@@ -258,6 +261,9 @@ static VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice pd, const VkDeviceCreat
         }
     }
     pthread_mutex_unlock(&g_lock);
+#ifdef DROIDDECK_WSI_CAPTURE
+    if (in) droiddeck_wsi_device(*out, pd, in->handle, in->gipa, next_gdpa, ci);
+#endif
     return VK_SUCCESS;
 }
 
@@ -267,6 +273,9 @@ static void producer_destroy_device(struct dev *device, const VkAllocationCallba
 static void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCallbacks *alloc) {
     struct dev *d = dev_for(device);
     if (!d) return;
+#ifdef DROIDDECK_WSI_CAPTURE
+    droiddeck_wsi_destroy(device);
+#endif
     if (d->producer) producer_destroy_device(d, alloc);
     forget_device_semaphores(device);
     PFN_vkDestroyDevice f = d->destroy;
@@ -281,6 +290,7 @@ static void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCallback
 
 #define FAKE_DISPLAY ((VkDisplayKHR)(uintptr_t)0xdd0001)
 #define FAKE_MODE ((VkDisplayModeKHR)(uintptr_t)0xdd0002)
+static VkSurfaceKHR g_hmd_surface;
 static uint32_t g_mode_w = 1920, g_mode_h = 1080, g_mode_mhz = 60000;
 
 static void mode_init(void) {
@@ -383,6 +393,7 @@ static VkResult VKAPI_CALL CreateDisplayPlaneSurfaceKHR(VkInstance i, const VkDi
     if (!headless) { say("%s: no headless surface to stand in", "vkCreateDisplayPlaneSurfaceKHR"); return VK_ERROR_INITIALIZATION_FAILED; }
     VkHeadlessSurfaceCreateInfoEXT hci = {VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT, NULL, 0};
     VkResult r = headless(i, &hci, a, s);
+    if (r == VK_SUCCESS) g_hmd_surface = *s;
     say("the display's surface is a headless one (%s)", r == VK_SUCCESS ? "ok" : "failed");
     return r;
 }
@@ -441,12 +452,24 @@ static VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice d, const VkSwapchainCreat
                                               VkSwapchainKHR *out) {
     PFN_vkCreateSwapchainKHR next = NEXT(d, CreateSwapchainKHR);
     VkSwapchainCreateInfoKHR sized = *ci;
+#ifdef DROIDDECK_WSI_CAPTURE
+    const char *capture_mode = getenv("DROIDDECK_VR_PRESENT");
+    const int capture = capture_mode && !strcmp(capture_mode, "questwsi")
+        && !strcmp(program_invocation_short_name, "vrcompositor") && ci->surface == g_hmd_surface;
+    if (capture)
+        sized.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+#endif
     mode_init();
     if (sized.imageExtent.width == UINT32_MAX || sized.imageExtent.height == UINT32_MAX)
         sized.imageExtent = (VkExtent2D){g_mode_w, g_mode_h};
     ci = &sized;
     VkResult r = next(d, ci, a, out);
-    if (r == VK_SUCCESS) return r;
+    if (r == VK_SUCCESS) {
+#ifdef DROIDDECK_WSI_CAPTURE
+        if (capture) droiddeck_wsi_swapchain(d, *out, ci);
+#endif
+        return r;
+    }
     char line[256];
     int n = snprintf(line, sizeof(line), "format %d space %d mode %d images %u %ux%u usage 0x%x chain:", ci->imageFormat,
                      ci->imageColorSpace, ci->presentMode, ci->minImageCount, ci->imageExtent.width, ci->imageExtent.height,
@@ -462,16 +485,30 @@ static VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice d, const VkSwapchainCreat
     if (r != VK_SUCCESS) {
         mine.imageFormat = VK_FORMAT_B8G8R8A8_UNORM;
         mine.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+#ifdef DROIDDECK_WSI_CAPTURE
+        if (capture) mine.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+#endif
         mine.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         mine.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
         r = next(d, &mine, a, out);
     }
     say("headless swapchain: %s", r == VK_SUCCESS ? "ok" : "still refused");
+#ifdef DROIDDECK_WSI_CAPTURE
+    if (r == VK_SUCCESS && capture) droiddeck_wsi_swapchain(d, *out, &mine);
+#endif
     return r;
+}
+
+static void VKAPI_CALL DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, const VkAllocationCallbacks *allocator) {
+#ifdef DROIDDECK_WSI_CAPTURE
+    droiddeck_wsi_forget(device, swapchain);
+#endif
+    NEXT(device, DestroySwapchainKHR)(device, swapchain, allocator);
 }
 
 static PFN_vkVoidFunction display_device_hook(const char *name) {
     HOOK_AS("vkCreateSwapchainKHR", CreateSwapchainKHR)
+    HOOK_AS("vkDestroySwapchainKHR", DestroySwapchainKHR)
     HOOK_AS("vkDisplayPowerControlEXT", DisplayPowerControlEXT)
     HOOK_AS("vkRegisterDeviceEventEXT", RegisterDeviceEventEXT)
     HOOK_AS("vkRegisterDisplayEventEXT", RegisterDisplayEventEXT)
@@ -873,7 +910,11 @@ static VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR
     struct dev *device = dev_for(queue);
     PFN_vkQueuePresentKHR next = (PFN_vkQueuePresentKHR)device->gdpa(device->handle, "vkQueuePresentKHR");
     if (device->producer) { pthread_mutex_lock(&g_submission_lock); producer_record(device, queue); }
+#ifdef DROIDDECK_WSI_CAPTURE
+    VkResult result = droiddeck_wsi_present(device->handle, queue, info, next);
+#else
     VkResult result = next(queue, info);
+#endif
     if (device->producer) pthread_mutex_unlock(&g_submission_lock);
     return result;
 }
@@ -928,9 +969,9 @@ static VkResult VKAPI_CALL CreateImage(VkDevice d, const VkImageCreateInfo *ci, 
     }
     if (!ext) return r;
     char line[256];
-    int n = snprintf(line, sizeof(line), "%s image %ux%u format %d flags 0x%x usage 0x%x tiling %d handles 0x%x list",
+    int n = snprintf(line, sizeof(line), "%s image %ux%u format %d flags 0x%x usage 0x%x tiling %d layers %u mips %u samples %u handles 0x%x list",
                      program_invocation_short_name, ci->extent.width, ci->extent.height, ci->format, ci->flags, ci->usage,
-                     ci->tiling, ext->handleTypes);
+                     ci->tiling, ci->arrayLayers, ci->mipLevels, ci->samples, ext->handleTypes);
     for (uint32_t i = 0; list && i < list->viewFormatCount && n < (int)sizeof(line) - 8; i++)
         n += snprintf(line + n, sizeof(line) - n, " %d", list->pViewFormats[i]);
     say("%s", line);

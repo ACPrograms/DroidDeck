@@ -129,7 +129,7 @@ tools/droiddeckctl wake
 FOV and dimensions. It works over wired or wireless authorized ADB.
 Newer builds also include `source.png`, the incoming stereo texture before the
 Android eye draw, and sRGB attachment/write state in the metadata for color debugging.
-Source PNGs are tagged as linear and eye PNGs as sRGB. Transfers use Android's
+Source PNGs use the incoming frame's color space and eye PNGs use sRGB. Transfers use Android's
 gzip utility to avoid sending full uncompressed images over wireless ADB.
 A unique request ID prevents stale images from passing as a fresh capture; no valid XR
 layer produces an explicit error. Captures exclude Meta system overlays and

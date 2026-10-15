@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import socket
 import subprocess
@@ -83,11 +84,39 @@ class SteamVrHelperTest(unittest.TestCase):
                         '"${DROIDDECK_VR_PRESENT:-unset}" "${DROIDDECK_VR_PRODUCER_LEASE:-unset}"')
         return self.start().read_text().strip()
 
-    def test_quest_receiver_automatically_enables_retained_producer_ownership(self):
+    def test_quest_receiver_uses_normal_compositor_and_excludes_unsupported_frame_backend(self):
         self.runtime.mkdir()
+        cvp = self.steamvr / 'drivers/cv/bin/linuxarm64/libArcturusPerception.so'
+        cvp.parent.mkdir(parents=True)
+        cvp.write_bytes(b'frame-only backend')
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as receiver:
             receiver.bind(str(self.runtime / 'droiddeck-xr-frames'))
-            self.assertIn('present=questframes lease=1', self.lease_log())
+            self.assertIn('present=questwsi lease=unset', self.lease_log())
+        settings = json.loads((self.home / '.local/share/Steam/config/steamvr.vrsettings').read_text())
+        self.assertEqual(settings['steamvr'], {'enableLinuxVulkanAsync': True, 'motionSmoothing': False})
+        self.assertFalse(cvp.exists())
+        self.assertEqual(Path(str(cvp) + '.droiddeck-disabled').read_bytes(), b'frame-only backend')
+
+    def test_quest_settings_preserve_other_preferences_and_start_is_idempotent(self):
+        self.environment['DROIDDECK_VR_PRESENT'] = 'questwsi'
+        path = self.home / '.local/share/Steam/config/steamvr.vrsettings'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({'steamvr': {'somePreference': 42}, 'dashboard': {'somePreference': True}}))
+        self.start()
+        self.start()
+        settings = json.loads(path.read_text())
+        self.assertEqual(settings['steamvr']['somePreference'], 42)
+        self.assertEqual(settings['dashboard'], {'somePreference': True})
+
+    def test_quest_refuses_to_overwrite_malformed_settings(self):
+        self.environment['DROIDDECK_VR_PRESENT'] = 'questwsi'
+        path = self.home / '.local/share/Steam/config/steamvr.vrsettings'
+        path.parent.mkdir(parents=True)
+        path.write_text('invalid json')
+        result = subprocess.run(['sh', str(self.helper), 'start'], env=self.environment,
+                                capture_output=True, text=True, timeout=5)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(path.read_text(), 'invalid json')
 
     def test_explicit_quest_presenter_enables_the_lease(self):
         self.environment['DROIDDECK_VR_PRESENT'] = 'questframes'

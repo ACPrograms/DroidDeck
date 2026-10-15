@@ -555,6 +555,7 @@ private:
         }
         if (glGetError() != GL_NO_ERROR) throw std::runtime_error("Frame texture upload failed");
         sourceHeader_ = frame.header;
+        receiver_.Recycle(std::move(frame.pixels));
         uploadedFrames_++;
         if (verifyPixels_ || uploadedFrames_ % 72 == 1) health();
     }
