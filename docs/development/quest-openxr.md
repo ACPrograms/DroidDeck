@@ -292,8 +292,7 @@ A minimal native Vulkan probe on the real Quest reports export/import support
 for SYNC_FD fences/semaphores, but not OPAQUE_FD handles. This distinguishes the
 unsupported implicit DMA-buf fence export from available explicit Vulkan GPU
 completion primitives. Implementing the explicit producer synchronization is
-still necessary; the existing shared-semaphore wait-dropping workaround must
-not be treated as correct synchronization. The desktop's dashboard helper also
+still necessary. The desktop's dashboard helper also
 lacks X display authorization; no authentication or permission check was
 bypassed to work around that error.
 
@@ -309,6 +308,18 @@ bundled into the user-facing runtime. A valid already-signaled SYNC_FD value of
 -1 is handled according to the Vulkan specification.
 
 ## Remaining stages
+
+The Vulkan layer no longer drops imported binary waits or unsignaled timeline
+waits after a three-millisecond grace period. Queue submissions and host waits
+retain their original arguments, deadlines and downstream results. The
+software fallback supports permanent OPAQUE_FD timeline payloads only; binary,
+temporary and malformed fallback imports fail explicitly without consuming
+the caller's descriptor. Native handles still pass through unchanged. Host
+regressions exercise both submit APIs, pending values, device-loss propagation,
+65-semaphore host waits, import failures, re-export and descriptor cleanup.
+These are API-contract tests, not Quest GPU or SteamVR game validation. Native
+binary SYNC_FD support remains available, but adapting SteamVR's unsupported
+OPAQUE_FD binary usage still requires a correctly synchronized implementation.
 
 Steam's ARM64 watchdog also aborts with `futex robust_list not initialized by
 pthreads`. A captured preload trace showed successful own-thread queries
