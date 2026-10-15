@@ -66,6 +66,12 @@ static inline void AHardwareBuffer_describe(const AHardwareBuffer *b, AHardwareB
 static inline void AHardwareBuffer_acquire(AHardwareBuffer *b) { (void)b; }
 static inline void AHardwareBuffer_release(AHardwareBuffer *b) { (void)b; }
 ''')
+        (tmp / 'sys').mkdir()
+        (tmp / 'sys/system_properties.h').write_text('''
+#pragma once
+#define PROP_VALUE_MAX 92
+static inline int __system_property_get(const char *name, char *value) { (void)name; value[0] = 0; return 0; }
+''')
         (tmp / 'android/log.h').write_text('''
 #pragma once
 #define ANDROID_LOG_INFO 4

@@ -55,6 +55,15 @@ int32_t ANativeWindow_getWidth(ANativeWindow *w) { return 64; }
 int32_t ANativeWindow_getHeight(ANativeWindow *w) { return 64; }
 void ANativeWindow_release(ANativeWindow *w) {}
 void sc_layer_window_gone(void) {}
+int sc_layer_present_pass(const struct vkp_draw *d, int n, int w, int h) { return 0; }
+void sc_layer_hide(void) {}
+int sc_layer_base_black(int w, int h) { return 0; }
+void sc_layer_hide_base(void) {}
+void sc_layer_hide_overlay(void) {}
+void vkp_cardboard_bind_device(VkDevice d, const VkPhysicalDeviceMemoryProperties *m) {}
+int vkp_cardboard_active(void) { return 0; }
+void vkp_cardboard_begin_frame(void) {}
+VkImage vkp_cardboard_run(VkCommandBuffer c, VkImage s, int sw, int sh, int ow, int oh) { return s; }
 int vk_loader_open(const char *a, const char *b, const char *c) { assert(0); return -1; }
 void vk_loader_load_instance(VkInstance i) { assert(0); }
 void vk_loader_load_device(VkDevice d) { assert(0); }
