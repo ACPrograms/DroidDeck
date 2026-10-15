@@ -521,8 +521,8 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                         releaseDrawerDirection()
                     }
                 }
-                LaunchedEffect(cardboard.enabled, steamVrSwitchedPicture) {
-                    while (cardboard.enabled || steamVrSwitchedPicture) {
+                LaunchedEffect(cardboard.enabled, steamVrSwitchedPicture, drawerOpen, drawerPage) {
+                    while (cardboard.enabled || steamVrSwitchedPicture || (drawerOpen && drawerPage == SessionDrawerPage.STEAMVR)) {
                         val now = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                             SteamVr.status(this@SessionActivity)
                         }
@@ -559,6 +559,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                     onCardboard = { c -> SessionPrefs.setCardboard(this@SessionActivity, c); applyCardboard(c) },
                     onCardboardRecenter = { headTracker?.recenter() },
                     steamVr = steamVrStatus,
+                    immersiveSteamVr = com.droiddeck.launcher.session.QuestExperimental.isSupported(),
                     onSteamVr = { action -> steamVrAction(action) },
                     textureAnisotropy = if (drawerGameProfileId == null) textureAnisotropy else drawerTextureAnisotropy,
                     textureLodBias = if (drawerGameProfileId == null) textureLodBias else drawerTextureLodBias,

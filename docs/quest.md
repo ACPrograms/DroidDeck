@@ -67,8 +67,8 @@ Host allocation and preload-chain tests do not establish headset operation.
 
 ## Experimental immersive SteamVR
 
-In a running Steam session, install SteamVR through DroidDeck's SteamVR controls,
-then choose Start. On supported Quest devices this opens the standard app's
+In a running Steam session, open the session menu's SteamVR tab, install SteamVR
+once, then choose Enter SteamVR. Cardboard has its own tab and can remain off. On supported Quest devices this opens the standard app's
 OpenXR activity. The guest driver receives headset poses, Touch controller input
 and display timing, and returns owned stereo images with their render poses.
 SteamVR haptics return through the tracking bridge. No root or separate XR APK
