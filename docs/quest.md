@@ -136,8 +136,9 @@ immersive scenes. SUPERHOT's Windows OpenXR build initially showed shared-image
 corruption: DXVK supplied a restricted mutable-image format list while SteamVR
 created its corresponding opaque shared images without one. Turnip can select
 different memory layouts for those descriptions. On the Quest bridge, the layer
-normalizes the known opaque-FD creation chains to SteamVR's unrestricted list,
-without changing DMA-BUF/modifier images or other targets. A headset capture then
+normalizes the known opaque-FD stereo-array creation chains to SteamVR's unrestricted list,
+without changing application-owned single-layer OpenVR images, DMA-BUF/modifier
+images or other targets. A headset capture then
 showed clean SUPERHOT scene geometry; interactive gameplay remains unverified.
 A subsequent 60-second shared-buffer dashboard run delivered about
 43 new stereo images per second. Reusing Android pixel buffers raised the next

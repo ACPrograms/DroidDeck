@@ -980,8 +980,9 @@ static VkResult VKAPI_CALL CreateImage(VkDevice d, const VkImageCreateInfo *ci, 
     VkImageCreateInfo compatible = *ci;
     VkExternalMemoryImageCreateInfo shared;
     const VkBaseInStructure *first = ci->pNext;
-    // SteamVR omits a format list, but DXVK adds one; Turnip can choose a different shared-memory layout.
-    if (dev_for(d)->quest_images && (ci->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) && ci->tiling == VK_IMAGE_TILING_OPTIMAL
+    // SteamVR's OpenXR stereo arrays omit a format list, while DXVK adds one on import.
+    // Leave single-layer OpenVR images alone: the application owns their export layout.
+    if (dev_for(d)->quest_images && ci->arrayLayers > 1 && (ci->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) && ci->tiling == VK_IMAGE_TILING_OPTIMAL
         && first && first->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
         const VkBaseInStructure *second = first->pNext;
         if (second && second->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO
@@ -990,7 +991,7 @@ static VkResult VKAPI_CALL CreateImage(VkDevice d, const VkImageCreateInfo *ci, 
             say("%s", "matching opaque shared image layout to SteamVR's unrestricted format list");
         }
     }
-    if (dev_for(d)->quest_images && (ci->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) && ci->tiling == VK_IMAGE_TILING_OPTIMAL
+    if (dev_for(d)->quest_images && ci->arrayLayers > 1 && (ci->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) && ci->tiling == VK_IMAGE_TILING_OPTIMAL
         && first && first->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO) {
         const VkExternalMemoryImageCreateInfo *external = (const void *)first;
         const VkBaseInStructure *second = external->pNext;

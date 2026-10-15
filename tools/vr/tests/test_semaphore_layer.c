@@ -42,6 +42,9 @@ static void check_shared_images(VkDevice device) {
     expected_image_chain = &list;
     assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
     g_dev[0].quest_images = 1;
+    image.arrayLayers = 1;
+    assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    image.arrayLayers = 2;
     image.flags = 0;
     assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
     image.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
