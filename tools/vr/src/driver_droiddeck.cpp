@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -21,6 +22,7 @@
 #include "xr_frame_math.h"
 #include "xr_vsync_timing.h"
 #include "xr_touch_input.h"
+#include "xr_chaperone.h"
 
 #define DD_EXPORT extern "C" __attribute__((visibility("default")))
 
@@ -557,6 +559,13 @@ public:
         VRProperties()->SetFloatProperty(c, Prop_DisplayFrequency_Float, hz);
         VRProperties()->SetFloatProperty(c, Prop_SecondsFromVsyncToPhotons_Float, 0.011f);
         VRProperties()->SetUint64Property(c, Prop_CurrentUniverseId_Uint64, 2);
+        if (xrMode_) {
+            char timestamp[32];
+            std::time_t now = std::time(nullptr); std::tm utc{}; gmtime_r(&now, &utc);
+            std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc);
+            const auto chaperone = xr_chaperone_json(xr.head, timestamp);
+            VRProperties()->SetStringProperty(c, Prop_DriverProvidedChaperoneJson_String, chaperone.c_str());
+        }
         VRProperties()->SetBoolProperty(c, Prop_IsOnDesktop_Bool, false);
         VRProperties()->SetBoolProperty(c, Prop_DisplayDebugMode_Bool, false);
         directMode_ = VRSettings()->GetBool(kSettingsSection, "directMode");

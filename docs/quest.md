@@ -77,6 +77,15 @@ is required. Other devices retain their existing SteamVR start behavior.
 The left Touch menu button is SteamVR's system button and toggles its dashboard.
 The right Meta button remains reserved by the headset OS.
 
+The driver supplies SteamVR's version-5 chaperone configuration through
+`Prop_DriverProvidedChaperoneJson_String`, following Valve's driver API. Standing
+tracking keeps the OpenXR stage coordinates; seated tracking starts at the head's
+position and yaw. No synthetic play area or collision walls are advertised.
+Without a seated transform, SteamVR reported valid raw and standing poses but
+invalid seated poses, causing Thumper to remain behind its tracking-loss fade.
+On Quest, supplying both transforms made all three origins valid; seated height
+started within a millimetre of zero while standing and raw height stayed unchanged.
+
 The panel compositor detaches before OpenXR starts displaying guest frames.
 Session suspension accounts for the immersive activity while the panel is hidden.
 Closing the immersive activity stops SteamVR. The panel remains available for
