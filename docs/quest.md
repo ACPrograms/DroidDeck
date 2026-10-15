@@ -91,3 +91,19 @@ controller models and trigger animation. That run delivered about 8.5 new stereo
 images per second despite a 90 Hz XR session.
 This branch retains the safe owned-frame transfer path; reducing transfer cost,
 validating game input and testing actual VR games remain necessary.
+
+### Experimental flat games in SteamVR
+
+Start SteamVR first, then add `droiddeck-steamvr-game %command%` to a flat
+game's Steam launch options. Remove that prefix to restore normal panel launch.
+This runs a nested, unmodified Gamescope OpenVR backend for that game. Gamescope
+owns the GPU overlay, placement and input routing; no CPU screen capture or
+PipeWire service is used. The existing DroidDeck Vulkan synchronization layer
+remains enabled. On Quest, a connected XR receiver selects Gamescope's Vulkan
+texture sharing instead of DMA-BUF modifiers. Explicit environment overrides
+are preserved; other devices retain the upstream modifier default.
+
+An upstream GPU cube overlay has been observed on Quest 3. Flat-game stability,
+controller interaction and performance still require hardware validation. This
+uses Valve's public Gamescope backend; the exact Steam Frame OS launch setup
+has not been verified.
