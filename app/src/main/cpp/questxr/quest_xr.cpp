@@ -198,8 +198,9 @@ private:
         }
         const char *extensions = reinterpret_cast<const char *>(glGetString(GL_EXTENSIONS));
         const bool srgbControl = extensions && std::strstr(extensions, "GL_EXT_sRGB_write_control");
-        std::fprintf(output, "],\"sourceImage\":true,\"sourceColorSpace\":\"linear\",\"sourceEncoding\":%d,\"eyeEncoding\":%d,"
-            "\"srgbWriteControl\":%s,\"srgbWriteEnabled\":%s}\n", sourceEncoding_, eyeEncoding_,
+        std::fprintf(output, "],\"sourceImage\":true,\"sourceColorSpace\":\"%s\",\"sourceEncoding\":%d,\"eyeEncoding\":%d,"
+            "\"srgbWriteControl\":%s,\"srgbWriteEnabled\":%s}\n",
+            sourceHeader_.color_space == DROIDDECK_XR_COLOR_SRGB_RGBA8 ? "srgb" : "linear", sourceEncoding_, eyeEncoding_,
             srgbControl ? "true" : "false", srgbControl && glIsEnabled(0x8DB9) ? "true" : "false");
         if (std::fclose(output) == 0) std::rename(temporary.c_str(), file.c_str());
     }
@@ -535,8 +536,8 @@ private:
         if (frame.header.width > static_cast<uint32_t>(maximum) || frame.header.height > static_cast<uint32_t>(maximum))
             throw std::runtime_error("XR source exceeds GPU texture limit");
         glBindTexture(GL_TEXTURE_2D, sourceTexture_);
-        // Direct-mode output is linear; the sRGB eye framebuffer performs the display encoding.
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, frame.header.width, frame.header.height, 0,
+        GLenum encoding = frame.header.color_space == DROIDDECK_XR_COLOR_SRGB_RGBA8 ? GL_SRGB8_ALPHA8 : GL_RGBA8;
+        glTexImage2D(GL_TEXTURE_2D, 0, encoding, frame.header.width, frame.header.height, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, frame.pixels.data());
         if (verifyPixels_) {
             glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
