@@ -309,6 +309,18 @@ bundled into the user-facing runtime. A valid already-signaled SYNC_FD value of
 
 ## Remaining stages
 
+### Sustained validation telemetry
+
+`tools/test_quest_xr.py --metrics` records public battery, thermal-service and
+package-memory dumps before and after the measured frame window. Unavailable
+metrics remain explicitly unavailable; no privilege escalation or alternate
+private-file access is attempted. Reports now distinguish observed XR submits,
+guest GPU presentations, owned-image uploads and rejected-frame rates from the
+runtime's nominal refresh rate, and record the focused/tracked sample fraction.
+A run that loses focused 6DoF tracking at the end no longer passes merely because
+one earlier sample was tracked. These reporting paths have host tests; no new
+Quest performance or thermal result is claimed while the headset is disconnected.
+
 ### Touch input profile
 
 Fresh XR controller activation now selects SteamVR's built-in `oculus_touch`
