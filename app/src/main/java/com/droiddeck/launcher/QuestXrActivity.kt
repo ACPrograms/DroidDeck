@@ -32,7 +32,7 @@ class QuestXrActivity : NativeActivity() {
             WaylandCompositor.nativeSetFpsLimit(0)
         }
         CompositorHost.attachXr(surface)
-        SessionService.setActivityVisible(this, surface != null)
+        SessionService.setXrActivityVisible(this, surface != null)
         WaylandCompositor.nativeVsync(System.nanoTime())
         check(WaylandCompositor.nativeWaitSurface(3000)) { "XR surface GPU handshake timed out" }
         if (surface != null) startSteamVr()
@@ -49,7 +49,7 @@ class QuestXrActivity : NativeActivity() {
             WaylandCompositor.nativeVsync(System.nanoTime())
             check(WaylandCompositor.nativeWaitSurface(3000)) { "XR frame GPU handshake timed out" }
         }
-        SessionService.setActivityVisible(this, active)
+        SessionService.setXrActivityVisible(this, active)
         if (active) startSteamVr()
     }
 
@@ -76,6 +76,7 @@ class QuestXrActivity : NativeActivity() {
 
     override fun onDestroy() {
         closing = true
+        SessionService.setXrActivityVisible(this, false)
         super.onDestroy()
     }
 }

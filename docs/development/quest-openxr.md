@@ -235,6 +235,42 @@ and the USB stay-awake setting introduced during testing is restored to off.
 The user requested pausing the goal until they can help with Steam sign-in,
 on-device Debugging tools, tracking and controllers. The goal is not complete.
 
+### Resumed device work
+
+Steam sign-in and the on-device Debugging tools prerequisite are now satisfied.
+The user's left Touch controller tracks in space and gives a short trigger
+pulse in the native scene. The right controller also fails in Quest Home, so
+two-controller validation remains blocked by a controller/Quest-side issue.
+The native scene reports tracked head flags 15 and a roughly 8.333 ms display
+period (120 Hz). This does not establish guest SteamVR image correctness.
+
+The selected imported Android/Linux drivers failed frame import. Selecting the
+bundled Quest-patched Android driver and the Linux runtime default, disabling
+Cardboard for the ordinary 2D panel, and restarting the app process restored
+Steam's first frame and READY. These were combined configuration changes, not
+an isolated single-driver comparison. Original preferences are backed up
+locally. No uninstall or data reset was used.
+
+Valve's pinned ARM64 SteamVR package installed successfully. The guest driver
+receives real per-eye texture handles and imports them on the Quest GPU, but
+the correctness-first capture path rejects the unavailable producer fences.
+The first owned-image test submitted zero projection images; it remains a
+failure. The ordinary Wayland diagnostic can present SteamVR frames but does
+not establish producer synchronization or image/pose association.
+
+The Vsync scheduler now rejects repeated predicted targets and PostPresent
+uses the same atomically paired runtime tick/period instead of a fixed 60 Hz
+interval. Host and actual Android CPU regression tests pass for 72/90/120 Hz,
+throttling, prediction reuse, concurrent tick/period publication and restart.
+The updated ARM64 driver links and was copied into the live runtime with its
+SHA-256 verified. This does not yet establish sustained guest rendering.
+
+The 2D panel's onStop could also suspend the guest after the XR surface became
+visible. XR visibility now has a separate service lease; panel transitions
+cannot overwrite it, and normal suspend rules return when XR visibility is
+lost. Focused visibility/background-policy tests pass. A signed full-app build
+and live validation of this lifecycle fix are pending.
+
 ## Remaining stages
 
 - Android/Linux eye-image bridge and frame ownership/synchronization.

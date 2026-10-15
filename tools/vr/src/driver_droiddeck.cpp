@@ -19,6 +19,7 @@
 #include "presenter.h"
 #include "xr_tracking_file.h"
 #include "xr_frame_math.h"
+#include "xr_vsync_timing.h"
 
 #define DD_EXPORT extern "C" __attribute__((visibility("default")))
 
@@ -137,11 +138,12 @@ private:
 
 class Vsync {
 public:
-    static constexpr std::chrono::nanoseconds kInterval{16666667};
+    static constexpr auto kInterval = XrVsyncTiming::kDefaultPeriod;
     static constexpr std::chrono::microseconds kLead{2000};
 
     static void Start() {
         if (running_.exchange(true)) return;
+        timing_.Reset();
         thread_ = std::thread([] {
             XrTrackingFile xrFile;
             auto next = std::chrono::steady_clock::now() + kInterval;
@@ -150,19 +152,15 @@ public:
                 DroidDeckXrTracking xr;
                 if (xrFile.Read(&xr) && XrTrackingFile::Fresh(xr)) {
                     interval = std::chrono::nanoseconds(xr.period_ns);
-                    auto tick = std::chrono::steady_clock::time_point(std::chrono::nanoseconds(xr.predicted_ns));
                     auto now = std::chrono::steady_clock::now();
-                    if (xr.predicted_ns > 0 && tick > now && tick < now + interval * 3) next = tick;
+                    next = timing_.Target(now, next, xr.predicted_ns, interval);
                 }
                 auto announce = next - kLead;
                 std::this_thread::sleep_until(announce);
                 auto now = std::chrono::steady_clock::now();
                 double offset = std::chrono::duration<double>(next - now).count();
+                timing_.Record(next, interval);
                 VRServerDriverHost()->VsyncEvent(offset);
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    last_ = next;
-                }
                 next += interval;
                 now = std::chrono::steady_clock::now();
                 while (next <= now) next += interval;
@@ -173,16 +171,14 @@ public:
         running_ = false;
         if (thread_.joinable()) thread_.join();
     }
-    static std::chrono::steady_clock::time_point LastTick() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return last_;
+    static std::chrono::steady_clock::time_point Deadline(uint32_t framesToThrottle) {
+        return timing_.Deadline(framesToThrottle);
     }
 
 private:
     static inline std::atomic<bool> running_{false};
     static inline std::thread thread_;
-    static inline std::mutex mutex_;
-    static inline std::chrono::steady_clock::time_point last_{};
+    static inline XrVsyncTiming timing_;
 };
 
 class DirectMode : public IVRDriverDirectModeComponent {
@@ -296,8 +292,7 @@ public:
     }
 
     void PostPresent(const Throttling_t *t) override {
-        auto last = Vsync::LastTick();
-        auto until = last + Vsync::kInterval * (1 + (t ? t->nFramesToThrottle : 0));
+        auto until = Vsync::Deadline(t ? t->nFramesToThrottle : 0);
         if (until > std::chrono::steady_clock::now()) std::this_thread::sleep_until(until);
     }
 

@@ -71,6 +71,8 @@ class SessionService : Service() {
     private var suspendPolicy = SessionPrefs.SUSPEND_MANUAL
     private var steamDownloadsInBackground = false
     private var activityVisible = true
+    private var xrActivityVisible = false
+    private val hasVisibleSurface get() = sessionHasVisibleSurface(activityVisible, screenOn, xrActivityVisible)
     private var screenOn = true
     private var manualPauseRequested = false
     private var steamSleepToken: String? = null
@@ -170,6 +172,17 @@ class SessionService : Service() {
                 updateSuspendPolicy()
                 return START_NOT_STICKY
             }
+            ACTION_XR_ACTIVITY_VISIBLE -> {
+                xrActivityVisible = true
+                resumeSession(panelVisible = false)
+                return START_NOT_STICKY
+            }
+            ACTION_XR_ACTIVITY_HIDDEN -> {
+                xrActivityVisible = false
+                suspendAttemptFailed = false
+                updateSuspendPolicy()
+                return START_NOT_STICKY
+            }
             ACTION_SUSPEND_POLICY_CHANGED -> {
                 if (!SessionState.running) return START_NOT_STICKY
                 suspendPolicy = SessionPrefs.suspendPolicy(this, SessionState.mode)
@@ -205,6 +218,7 @@ class SessionService : Service() {
         suspendPolicy = SessionPrefs.suspendPolicy(this, SessionState.mode)
         steamDownloadsInBackground = SessionPrefs.steamDownloadsInBackground(this)
         activityVisible = true
+        xrActivityVisible = false
         screenOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive ?: true
         manualPauseRequested = false
         suspendDownloadNow = false
@@ -918,8 +932,8 @@ class SessionService : Service() {
         Log.i(TAG, "queued Steam game $gameId for the running client")
     }
 
-    private fun resumeSession() {
-        activityVisible = true
+    private fun resumeSession(panelVisible: Boolean = true) {
+        if (panelVisible) activityVisible = true
         screenOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive ?: screenOn
         manualPauseRequested = false
         suspendDownloadNow = false
@@ -1110,11 +1124,11 @@ class SessionService : Service() {
 
     private fun updateSuspendPolicy() {
         if (!SessionState.running) return
-        if (suspendPolicy == SessionPrefs.SUSPEND_MANUAL && (!activityVisible || !screenOn)) {
+        if (suspendPolicy == SessionPrefs.SUSPEND_MANUAL && !hasVisibleSurface) {
             manualPauseRequested = true
         }
         val controller = suspendController ?: return
-        val hidden = !activityVisible || !screenOn
+        val hidden = !hasVisibleSurface
         val downloadsBlockingSuspend = steamDownloadsInBackground && SessionState.mode == MODE_STEAM &&
             suspendPolicy != SessionPrefs.SUSPEND_NEVER && hidden && downloadActive && !suspendDownloadNow
         if (downloadsBlockingSuspend) acquireLocks()
@@ -1136,6 +1150,7 @@ class SessionService : Service() {
         SessionEvents.record(if (shouldSuspend) "session.suspend_requested" else "session.resume_requested", mapOf(
             "policy" to suspendPolicy, "activityVisible" to activityVisible,
             "screenOn" to screenOn, "steamSleep" to (steamSleepToken != null),
+            "xrActivityVisible" to xrActivityVisible,
             "nativeSleep" to (nativeSleepToken != null),
         ))
         if (shouldSuspend) {
@@ -1193,7 +1208,7 @@ class SessionService : Service() {
     }
 
     private fun resumeSteamSleepOnReturn() {
-        if (suspendPolicy in setOf(SessionPrefs.SUSPEND_AUTO, SessionPrefs.SUSPEND_NATIVE) && activityVisible && screenOn) {
+        if (suspendPolicy in setOf(SessionPrefs.SUSPEND_AUTO, SessionPrefs.SUSPEND_NATIVE) && hasVisibleSurface) {
             if (steamSleepToken == null && (nativeSleepToken == null || nativeSleepFallback)) requestSteamWake()
             completeNativeSleep()
             completeSteamSleep()
@@ -1304,6 +1319,7 @@ class SessionService : Service() {
             if (!SessionState.running) return
             SessionState.running = false
         }
+        xrActivityVisible = false
         updateDownloadMonitoring()
         val stoppedGen = sessionGen
         val stoppedSession = SessionState.sessionId
@@ -1356,8 +1372,8 @@ class SessionService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (pipTask) {
-            Log.i(TAG, "PiP task dismissed - retaining the session under its background policy")
+        if (pipTask || xrActivityVisible) {
+            Log.i(TAG, "panel task dismissed - retaining the session under its active surface policy")
             activityVisible = false
             updateSuspendPolicy()
             return
@@ -1558,6 +1574,8 @@ class SessionService : Service() {
         private const val ACTION_SUSPEND_POLICY_CHANGED = "com.droiddeck.launcher.SUSPEND_POLICY_CHANGED"
         private const val ACTION_ACTIVITY_VISIBLE = "com.droiddeck.launcher.ACTIVITY_VISIBLE"
         private const val ACTION_ACTIVITY_HIDDEN = "com.droiddeck.launcher.ACTIVITY_HIDDEN"
+        private const val ACTION_XR_ACTIVITY_VISIBLE = "com.droiddeck.launcher.XR_ACTIVITY_VISIBLE"
+        private const val ACTION_XR_ACTIVITY_HIDDEN = "com.droiddeck.launcher.XR_ACTIVITY_HIDDEN"
         private const val ACTION_TRACK_AUXILIARY = "com.droiddeck.launcher.TRACK_AUXILIARY"
         private const val ACTION_STOP_AUXILIARY = "com.droiddeck.launcher.STOP_AUXILIARY"
         private const val ACTION_AUXILIARY_EXITED = "com.droiddeck.launcher.AUXILIARY_EXITED"
@@ -1614,6 +1632,12 @@ class SessionService : Service() {
         fun setActivityVisible(context: Context, visible: Boolean) {
             if (!SessionState.running) return
             val action = if (visible) ACTION_ACTIVITY_VISIBLE else ACTION_ACTIVITY_HIDDEN
+            context.startService(Intent(context, SessionService::class.java).setAction(action))
+        }
+
+        fun setXrActivityVisible(context: Context, visible: Boolean) {
+            if (!SessionState.running) return
+            val action = if (visible) ACTION_XR_ACTIVITY_VISIBLE else ACTION_XR_ACTIVITY_HIDDEN
             context.startService(Intent(context, SessionService::class.java).setAction(action))
         }
 
