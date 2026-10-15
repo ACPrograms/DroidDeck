@@ -321,6 +321,10 @@ thumbrest and face-button touch actions in previously unused button bits, keepin
 the 296-byte tracking layout and existing low click bits compatible. Inactive
 hands clear every input; invalid analog values are sanitized. The flat Cardboard
 gamepad path retains its existing Vive profile and mappings.
+Hand poses now carry the converted OpenXR prediction timestamp relative to
+SteamVR's clock, matching the headset instead of reporting a future hand pose
+as a present-time sample. The common timestamp conversion is host-tested for
+future, past and unavailable prediction times.
 
 Host tests cover the input decoder's independent clicks, touch-versus-press,
 handed menu, analog ranges and inactive reset. The Android native frontend and

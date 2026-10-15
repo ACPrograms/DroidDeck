@@ -431,7 +431,7 @@ public:
     DriverPose_t GetPose() override { return pose_; }
     VRInputComponentHandle_t HapticHandle() const { return haptic_; }
 
-    void UpdateXr(const DroidDeckXrHand &hand) {
+    void UpdateXr(const DroidDeckXrHand &hand, int64_t predicted) {
         if (id_ == k_unTrackedDeviceIndexInvalid) return;
         DriverPose_t pose{};
         pose.qWorldFromDriverRotation.w = pose.qDriverFromHeadRotation.w = 1;
@@ -441,6 +441,7 @@ public:
         if (pose.poseIsValid) {
             pose.qRotation = {hand.pose.orientation[3], hand.pose.orientation[0], hand.pose.orientation[1], hand.pose.orientation[2]};
             for (int axis = 0; axis < 3; axis++) pose.vecPosition[axis] = hand.pose.position[axis];
+            pose.poseTimeOffset = XrTrackingFile::PoseTimeOffset(predicted, XrTrackingFile::Now());
         }
         pose.result = pose.poseIsValid ? TrackingResult_Running_OK : TrackingResult_Running_OutOfRange;
         pose_ = pose;
@@ -611,7 +612,7 @@ public:
             if (p.poseIsValid) {
                 p.qRotation = {xr.head.orientation[3], xr.head.orientation[0], xr.head.orientation[1], xr.head.orientation[2]};
                 for (int axis = 0; axis < 3; axis++) p.vecPosition[axis] = xr.head.position[axis];
-                if (xr.predicted_ns > 0) p.poseTimeOffset = (xr.predicted_ns - XrTrackingFile::Now()) / 1000000000.0;
+                p.poseTimeOffset = XrTrackingFile::PoseTimeOffset(xr.predicted_ns, XrTrackingFile::Now());
             }
             return p;
         }
@@ -678,7 +679,7 @@ private:
                 VRServerDriverHost()->TrackedDevicePoseUpdated(id_, head, sizeof(head));
                 for (int hand = 0; hand < 2; hand++) if (hands_[hand]) {
                     DroidDeckXrHand state = fresh ? xr.hands[hand] : DroidDeckXrHand{};
-                    hands_[hand]->UpdateXr(state);
+                    hands_[hand]->UpdateXr(state, fresh ? xr.predicted_ns : 0);
                 }
                 VRDriverInput()->UpdateBooleanComponent(proximity_, fresh, 0);
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));

@@ -42,6 +42,9 @@ public:
         timespec now{}; clock_gettime(CLOCK_MONOTONIC, &now);
         return (int64_t)now.tv_sec * 1000000000LL + now.tv_nsec;
     }
+    static double PoseTimeOffset(int64_t predicted, int64_t now) {
+        return predicted > 0 ? (static_cast<double>(predicted) - static_cast<double>(now)) / 1000000000.0 : 0;
+    }
     static bool Fresh(const DroidDeckXrTracking &packet) {
         int64_t age = Now() - packet.sampled_ns;
         return packet.active && age >= 0 && age < 500000000LL && packet.period_ns >= 1000000LL

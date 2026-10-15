@@ -5,6 +5,10 @@
 #include <limits>
 
 int main(int argc, char **argv) {
+    assert(XrTrackingFile::PoseTimeOffset(1010000000LL, 1000000000LL) == 0.01);
+    assert(XrTrackingFile::PoseTimeOffset(990000000LL, 1000000000LL) == -0.01);
+    assert(XrTrackingFile::PoseTimeOffset(0, 1000000000LL) == 0);
+    assert(XrTrackingFile::PoseTimeOffset(-1, 1000000000LL) == 0);
     char filename[256];
     std::snprintf(filename, sizeof(filename), "%s/droiddeck-xr-test-XXXXXX", argc > 1 ? argv[1] : "/tmp");
     int descriptor = mkstemp(filename);
