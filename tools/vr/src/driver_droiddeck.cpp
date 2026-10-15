@@ -756,6 +756,7 @@ class Provider : public IServerTrackedDeviceProvider {
 public:
     EVRInitError Init(IVRDriverContext *ctx) override {
         VR_INIT_SERVER_DRIVER_CONTEXT(ctx);
+        focusEnabled_ = access("/run/droiddeck/droiddeck-xr-frames", F_OK) == 0;
         Log("DroidDeck Cardboard driver loaded");
         if (!VRServerDriverHost()->TrackedDeviceAdded("droiddeck-cardboard-hmd", TrackedDeviceClass_HMD, &hmd_))
             Log("TrackedDeviceAdded failed");
@@ -767,6 +768,7 @@ public:
         return VRInitError_None;
     }
     void Cleanup() override {
+        if (focusEnabled_) unlink(kFocusPath);
         if (haptics_) { munmap(haptics_, sizeof(*haptics_)); haptics_ = nullptr; }
         VR_CLEANUP_SERVER_DRIVER_CONTEXT();
     }
@@ -774,6 +776,13 @@ public:
     void RunFrame() override {
         VREvent_t e;
         while (VRServerDriverHost()->PollNextEvent(&e, sizeof(e))) {
+            if (focusEnabled_) {
+                bool changed = false;
+                if (e.eventType == VREvent_SceneApplicationChanged) { scenePid_ = e.data.process.pid; changed = true; }
+                if (e.eventType == VREvent_DashboardActivated) { dashboard_ = true; changed = true; }
+                if (e.eventType == VREvent_DashboardDeactivated) { dashboard_ = false; changed = true; }
+                if (changed) PublishFocus();
+            }
             if (e.eventType == VREvent_Input_HapticVibration) {
                 const auto &pulse = e.data.hapticVibration;
                 int hand = pulse.componentHandle == left_.HapticHandle() ? 0 : pulse.componentHandle == right_.HapticHandle() ? 1 : -1;
@@ -786,6 +795,21 @@ public:
     void LeaveStandby() override {}
 
 private:
+    static constexpr const char *kFocusPath = "/run/droiddeck/droiddeck-steamvr/scene-focus.json";
+    bool focusEnabled_ = false, dashboard_ = true;
+    uint32_t scenePid_ = 0;
+    void PublishFocus() {
+        const std::string temporary = std::string(kFocusPath) + ".tmp";
+        int fd = open(temporary.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0600);
+        if (fd < 0) return;
+        char body[128];
+        int length = snprintf(body, sizeof(body), "{\"serverPid\":%d,\"scenePid\":%u,\"dashboard\":%s}\n",
+                              getpid(), scenePid_, dashboard_ ? "true" : "false");
+        bool written = write(fd, body, length) == length;
+        close(fd);
+        if (written) rename(temporary.c_str(), kFocusPath);
+        else unlink(temporary.c_str());
+    }
     DroidDeckXrHaptics *haptics_ = nullptr;
     void SendHaptic(int hand, const VREvent_HapticVibration_t &pulse) {
         if (!std::isfinite(pulse.fAmplitude) || !std::isfinite(pulse.fFrequency) || !std::isfinite(pulse.fDurationSeconds)) return;

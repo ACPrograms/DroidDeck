@@ -113,6 +113,12 @@ session closes XR; a failed startup or stopped SteamVR also returns to the panel
 with an error instead of leaving a black scene. Enter SteamVR can then start a
 fresh connection.
 
+SteamVR scene-application and dashboard events also guide Gamescope's game focus.
+While the dashboard is hidden, the guest agent resolves the live scene process's
+Steam app ID and promotes its focusable window. Opening the dashboard or ending
+the scene restores the previous order if no other client has replaced it. This
+keeps keyboard/gamepad input with the VR scene without game-specific IDs.
+
 With Steam already running, `python3 tools/test_quest_xr.py --serial SERIAL`
 launches the immersive activity and verifies advancing owned images, tracked
 6DoF, focus and SteamVR status. Add `--require-controllers` while holding both
