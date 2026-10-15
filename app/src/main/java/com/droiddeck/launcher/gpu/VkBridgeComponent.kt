@@ -1,5 +1,6 @@
 package com.droiddeck.launcher.gpu
 
+import android.content.Context
 import android.os.Process
 import android.util.Log
 import com.droiddeck.launcher.core.HostProcess
@@ -18,7 +19,7 @@ class VkBridgeComponent(private val socket: File, private val logFile: File) : S
             return
         }
         socket.parentFile?.mkdirs()
-        val cacheDir = File(app().cacheDir, "vkbridge-pipelines").apply { mkdirs() }
+        val cacheDir = cacheDir(app())
         if (VkBridgeNative.start(app(), socket, logFile, cacheDir)) {
             Log.i(TAG, "server ready in the app's process at $socket")
             return
@@ -54,6 +55,30 @@ class VkBridgeComponent(private val socket: File, private val logFile: File) : S
 
     companion object {
         private const val TAG = "VkBridge"
+        private const val CACHE_DIR = "vkbridge-pipelines"
+
+        fun cacheDir(context: Context): File {
+            val dir = File(context.filesDir, CACHE_DIR)
+            val old = File(context.cacheDir, CACHE_DIR)
+            if (old.isDirectory) migrate(old, dir)
+            dir.mkdirs()
+            return dir
+        }
+
+        private fun migrate(old: File, dir: File) {
+            val moved = if (!dir.exists()) old.renameTo(dir) else false
+            if (!moved) {
+                dir.mkdirs()
+                old.listFiles()?.forEach { f ->
+                    val to = File(dir, f.name)
+                    if (to.exists()) return@forEach
+                    if (!f.renameTo(to)) runCatching { f.copyRecursively(to, overwrite = false) }
+                }
+                old.deleteRecursively()
+            }
+            Log.i(TAG, "bridge cache moved from $old to $dir")
+        }
+
         const val BINARY = "libvkbridge_server.so"
         const val GUEST_ICD = "/usr/local/share/vkbridge/droidbridge_icd.json"
         const val GUEST_LIB = "/usr/local/lib/vkbridge/libvulkan_droidbridge.so"
