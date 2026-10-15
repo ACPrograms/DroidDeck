@@ -117,11 +117,20 @@ tools/droiddeckctl prefs set session some_key true --type bool
 
 tools/droiddeckctl logs latest ./session-artifacts
 tools/droiddeckctl screenshot ./screen.png --display 4
+tools/droiddeckctl xr-frame ./xr-capture
 tools/droiddeckctl record ./clip.mp4 --seconds 8 --display 0
 tools/droiddeckctl pacing --seconds 30
 tools/droiddeckctl displays
 tools/droiddeckctl wake
 ```
+
+`xr-frame` captures both app eye textures while SteamVR is open, saving `left.png`,
+`right.png` and `capture.json` with the matching source frame, projection poses,
+FOV and dimensions. It works over wired or wireless authorized ADB. A unique
+request ID prevents stale images from passing as a fresh capture; no valid XR
+layer produces an explicit error. Captures exclude Meta system overlays and
+the headset compositor's final reprojection. GPU readback runs only on request
+and can briefly affect frame timing. Remote files are overwritten each time.
 
 A sleeping device suspends the session and hides the app's windows from `ui dump`; `wake` first.
 

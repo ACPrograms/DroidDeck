@@ -131,6 +131,69 @@ private:
     std::array<Eye, 2> eyes_;
     GLuint framebuffer_ = 0, vertexArray_ = 0;
 
+    std::string captureRequest() {
+        if (frames_ % 9) return {};
+        std::string file = std::string(app_->activity->externalDataPath) + "/xr-capture.request";
+        FILE *request = std::fopen(file.c_str(), "r");
+        if (!request) return {};
+        char token[34]{};
+        size_t size = std::fread(token, 1, sizeof(token) - 1, request);
+        std::fclose(request);
+        unlink(file.c_str());
+        if (size != 32 || std::strspn(token, "0123456789abcdef") != 32) return {};
+        unlink((std::string(app_->activity->externalDataPath) + "/xr-capture.json").c_str());
+        return token;
+    }
+
+    bool captureEye(const Eye &eye, uint32_t image, int index) {
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, eye.images[image].image, 0);
+        std::vector<unsigned char> pixels((size_t)eye.width * eye.height * 4);
+        glReadPixels(0, 0, eye.width, eye.height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        bool ok = glGetError() == GL_NO_ERROR;
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        if (!ok) return false;
+        std::string file = std::string(app_->activity->externalDataPath) +
+            (index ? "/xr-capture-right.ppm" : "/xr-capture-left.ppm");
+        std::string temporary = file + ".tmp";
+        FILE *output = std::fopen(temporary.c_str(), "wb");
+        if (!output) return false;
+        ok = std::fprintf(output, "P6\n%d %d\n255\n", eye.width, eye.height) > 0;
+        std::vector<unsigned char> row((size_t)eye.width * 3);
+        for (int y = eye.height - 1; y >= 0 && ok; y--) {
+            for (int x = 0; x < eye.width; x++)
+                std::memcpy(row.data() + x * 3, pixels.data() + ((size_t)y * eye.width + x) * 4, 3);
+            ok = std::fwrite(row.data(), 1, row.size(), output) == row.size();
+        }
+        if (std::fclose(output) != 0) ok = false;
+        if (!ok) { unlink(temporary.c_str()); return false; }
+        return std::rename(temporary.c_str(), file.c_str()) == 0;
+    }
+
+    void captureResult(const std::string &token, bool ok, bool valid,
+                       const XrCompositionLayerProjectionView (&views)[2], XrTime displayTime) {
+        std::string file = std::string(app_->activity->externalDataPath) + "/xr-capture.json";
+        std::string temporary = file + ".tmp";
+        FILE *output = std::fopen(temporary.c_str(), "w");
+        if (!output) return;
+        std::fprintf(output, "{\"id\":\"%s\",\"ok\":%s,\"validLayer\":%s,\"frame\":%llu,"
+            "\"sourceFrameId\":%llu,\"displayTime\":%lld,\"sessionState\":%d,\"eyes\":[",
+            token.c_str(), ok ? "true" : "false", valid ? "true" : "false",
+            (unsigned long long)frames_, (unsigned long long)sourceHeader_.frame_id, (long long)displayTime, state_);
+        for (int eye = 0; eye < 2; eye++) {
+            const auto &pose = views[eye].pose;
+            const auto &fov = views[eye].fov;
+            std::fprintf(output, "%s{\"width\":%d,\"height\":%d,\"position\":[%g,%g,%g],"
+                "\"orientation\":[%g,%g,%g,%g],\"fov\":[%g,%g,%g,%g]}",
+                eye ? "," : "", eyes_[eye].width, eyes_[eye].height,
+                pose.position.x, pose.position.y, pose.position.z,
+                pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w,
+                fov.angleLeft, fov.angleRight, fov.angleUp, fov.angleDown);
+        }
+        std::fputs("]}\n", output);
+        if (std::fclose(output) == 0) std::rename(temporary.c_str(), file.c_str());
+    }
+
     XrPath path(const char *text) {
         XrPath result{};
         check(xrStringToPath(instance_, text, &result), "xrStringToPath");
@@ -590,6 +653,8 @@ private:
                 views[eye].fov = {source.fov[0], source.fov[1], source.fov[2], source.fov[3]};
             }
         }
+        const std::string capture = captureRequest();
+        bool captured = valid;
         if (valid) for (int eye = 0; eye < 2; eye++) {
             uint32_t image = 0;
             XrSwapchainImageAcquireInfo acquire{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
@@ -597,6 +662,7 @@ private:
             XrSwapchainImageWaitInfo imageWait{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO}; imageWait.timeout = XR_INFINITE_DURATION;
             check(xrWaitSwapchainImage(eyes_[eye].swapchain, &imageWait), "wait image");
             render(eyes_[eye], image);
+            if (!capture.empty()) captured = captureEye(eyes_[eye], image, eye) && captured;
             XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
             check(xrReleaseSwapchainImage(eyes_[eye].swapchain, &release), "release image");
             projection[eye].pose = views[eye].pose; projection[eye].fov = views[eye].fov;
@@ -609,6 +675,7 @@ private:
         XrFrameEndInfo end{XR_TYPE_FRAME_END_INFO}; end.displayTime = frameState.predictedDisplayTime;
         end.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE; end.layerCount = valid ? 1 : 0; end.layers = layers;
         check(xrEndFrame(session_, &end), "xrEndFrame");
+        if (!capture.empty()) captureResult(capture, captured, valid, projection, frameState.predictedDisplayTime);
         frames_++; if (valid) rendered_++;
         if (frames_ % 72 == 0) {
             health();
