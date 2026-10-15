@@ -441,11 +441,19 @@ object SessionPrefs {
      */
     fun venus(context: Context): Boolean = prefs(context).getBoolean("venus", false)
 
+    fun hostVulkanApi(context: Context): String = prefs(context).getString("hostVulkanApi", "").orEmpty()
+
+    fun setHostVulkanApi(context: Context, api: String) {
+        if (api != hostVulkanApi(context)) prefs(context).edit().putString("hostVulkanApi", api).apply()
+    }
+
     /** The last session's Mali bridge self-test failed and it ran on the pair instead (Setup says so). */
     fun bridgeFellBack(context: Context): Boolean = prefs(context).getBoolean("bridgeFellBack", false)
 
-    fun setBridgeFellBack(context: Context, on: Boolean) {
-        prefs(context).edit().putBoolean("bridgeFellBack", on).apply()
+    fun bridgeFellBackForMemory(context: Context): Boolean = prefs(context).getString("bridgeFallbackReason", "") == "memory"
+
+    fun setBridgeFellBack(context: Context, on: Boolean, reason: String = "") {
+        prefs(context).edit().putBoolean("bridgeFellBack", on).putString("bridgeFallbackReason", if (on) reason else "").apply()
     }
 
     /**

@@ -214,11 +214,13 @@ internal fun SetupPanel(
                                 when (gpu.support) {
                                     com.droiddeck.launcher.gpu.GpuInfo.Support.TESTED -> stringResource(R.string.setup_gpu_detail, gpu.displayName(ctx), gpuName)
                                     com.droiddeck.launcher.gpu.GpuInfo.Support.UNTESTED ->
-                                        if (!s.adreno && s.vkBridge && !com.droiddeck.launcher.core.DeviceSupport.bridgeUsable()) stringResource(R.string.setup_gpu_bridge_unusable, gpu.displayName(ctx))
-                                        else if (!s.adreno && s.vkBridge && s.bridgeFellBack) stringResource(R.string.setup_gpu_bridge_fell_back, gpu.displayName(ctx))
+                                        if (!s.adreno && s.venus && s.venusHostVulkan != null) stringResource(R.string.setup_gpu_venus_host_too_old, gpu.displayName(ctx), s.venusHostVulkan)
+                                        else if (!s.adreno && s.vkBridge && !com.droiddeck.launcher.core.DeviceSupport.bridgeUsable()) stringResource(R.string.setup_gpu_bridge_unusable, gpu.displayName(ctx))
+                                        else if (!s.adreno && s.vkBridge && s.bridgeFellBack) stringResource(if (s.bridgeFellBackMemory) R.string.setup_gpu_bridge_no_memory_sharing else R.string.setup_gpu_bridge_fell_back, gpu.displayName(ctx))
                                         else stringResource(R.string.setup_gpu_untested_detail, gpu.displayName(ctx), gpu.supportText(ctx).replaceFirstChar { it.lowercase() })
-                                    else -> if (s.vkBridge && !com.droiddeck.launcher.core.DeviceSupport.bridgeUsable()) stringResource(R.string.setup_gpu_bridge_unusable, gpuName)
-                                    else if (s.vkBridge && s.bridgeFellBack) stringResource(R.string.setup_gpu_bridge_fell_back, gpuName)
+                                    else -> if (s.venus && s.venusHostVulkan != null) stringResource(R.string.setup_gpu_venus_host_too_old, gpuName, s.venusHostVulkan)
+                                    else if (s.vkBridge && !com.droiddeck.launcher.core.DeviceSupport.bridgeUsable()) stringResource(R.string.setup_gpu_bridge_unusable, gpuName)
+                                    else if (s.vkBridge && s.bridgeFellBack) stringResource(if (s.bridgeFellBackMemory) R.string.setup_gpu_bridge_no_memory_sharing else R.string.setup_gpu_bridge_fell_back, gpuName)
                                     else if (s.vkBridge) stringResource(R.string.setup_gpu_bridge_detail, gpuName)
                                     else stringResource(R.string.setup_gpu_unsupported_detail, gpuName)
                                 },

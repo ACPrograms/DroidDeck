@@ -181,13 +181,23 @@ object GraphicsReport {
             val guestLines = File(dir, "session.log").takeIf { it.isFile }?.useLines { seq ->
                 seq.filter { GUEST.containsMatchIn(it) }.take(200).toList()
             }.orEmpty()
-            val fellBack = File(dir, "vkbridge-fallback").takeIf { it.isFile }?.readText()?.trim()
-            runCatching { SessionPrefs.setBridgeFellBack(appContext ?: return@runCatching, fellBack != null) }
+            val fallbackLines = File(dir, "vkbridge-fallback").takeIf { it.isFile }?.readLines()?.map { it.trim() }?.filter { it.isNotEmpty() }
+            val fellBack = fallbackLines?.firstOrNull()
+            val fallbackReason = fallbackLines?.getOrNull(1).orEmpty()
+            runCatching { SessionPrefs.setBridgeFellBack(appContext ?: return@runCatching, fellBack != null, fallbackReason) }
             val limits = File(dir, "limits.txt").takeIf { it.isFile }?.readText()?.trim()
             val audio = File(dir, "audio.log").takeIf { it.isFile }?.readText().orEmpty()
             report.appendText(buildString {
                 limits?.let { appendLine("open files limit: $it") }
-                fellBack?.let { appendLine("!! MALI BRIDGE FELL BACK: the self-test failed images or draws; the session ran on $it") }
+                fellBack?.let {
+                    if (fallbackReason == "memory") appendLine("!! MALI BRIDGE FELL BACK: memory sharing = none (no method passed the server's self-test); the session ran on $it")
+                    else appendLine("!! MALI BRIDGE FELL BACK: the self-test failed images or draws; the session ran on $it")
+                }
+                appContext?.let { ctx ->
+                    if (SessionPrefs.venus(ctx)) VenusComponent.hostVulkanTooOld(ctx)?.let {
+                        appendLine("!! VENUS OFF: the phone's driver reports Vulkan $it; gamescope needs 1.2 or newer, so the session did not use Venus")
+                    }
+                }
                 if (audio.contains("AAUDIO_ERROR_DISCONNECTED")) {
                     appendLine("!! SOUND: Android refused the audio output (AAUDIO_ERROR_DISCONNECTED) - rebooting the phone usually fixes this")
                 }

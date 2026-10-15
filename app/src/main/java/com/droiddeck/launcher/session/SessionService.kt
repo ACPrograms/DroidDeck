@@ -297,6 +297,12 @@ class SessionService : Service() {
 
     private fun runSession(gen: Int) {
         SessionPrefs.ensurePowerVrAutoDrivers(this)
+        if (!com.droiddeck.launcher.core.DeviceSupport.adreno()) {
+            com.droiddeck.launcher.gpu.VulkanInfo.query()["api"]?.let { SessionPrefs.setHostVulkanApi(this, it) }
+            if (SessionPrefs.venus(this)) VenusComponent.hostVulkanTooOld(this)?.let {
+                Log.w(TAG, "venus: off for this session - the phone's driver reports Vulkan $it and gamescope needs 1.2 or newer; the session uses the PanVK pair or the bridge")
+            }
+        }
         SessionTerminal.clear()
         try {
             LinuxRuntime.writeAccounts(this)

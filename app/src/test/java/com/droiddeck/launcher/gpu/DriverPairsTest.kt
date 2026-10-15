@@ -202,6 +202,22 @@ class DriverPairsTest {
     }
 
     @Test
+    fun upstreamRadvIsAManualXclipseChoiceAndAutoKeepsOurs() {
+        val asset = { id: String -> TurnipReleases.Asset("Non-Adreno", id.lowercase(), "$id-Pair.zip", "https://example/$id", 9_000_000,
+            false, "label", "0".repeat(64), DriverPairs.nonAdreno(id), bundle = true) }
+        val pairs = DriverPairs.from(TurnipReleases.Check(listOf(asset("RADV-Xclipse"), asset("RADV-Xclipse-upstream")), emptyList(), emptyList(), 0L))
+        val xclipse = GpuInfo("Samsung Xclipse 940", 0, Family.POWERVR, "", false)
+        val upstream = pairs.single { it.key == DriverPairs.NAD_RADV_XCLIPSE_UPSTREAM }
+        assertEquals("nad:radv-xclipse-upstream", DriverPairs.nonAdreno("RADV-Xclipse-upstream"))
+        assertTrue(upstream.complete)
+        assertTrue(upstream.suits(xclipse))
+        assertFalse(upstream.suits(GpuInfo("PowerVR", 0, Family.POWERVR, "", false)))
+        assertEquals("RADV upstream · Samsung Xclipse", upstream.name)
+        assertEquals(DriverPairs.NAD_RADV_XCLIPSE, DriverPairs.recommendedKey(xclipse, pairs))
+        assertTrue(DriverPairs.isNonAdreno("RADV-Xclipse-upstream"))
+    }
+
+    @Test
     fun deviceBuildsAreOfferedOnlyForTheirMaliAndNeverByAuto() {
         fun bundle(id: String) = TurnipReleases.Asset("Non-Adreno", id.lowercase(), "$id-Pair.zip", "https://example/$id", 9_000_000,
             false, "label", "0".repeat(64), DriverPairs.nonAdreno(id), bundle = true)

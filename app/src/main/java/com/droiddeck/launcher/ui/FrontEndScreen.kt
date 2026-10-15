@@ -101,6 +101,7 @@ class FrontEndState(
     val graphicsLogs: Boolean = false,
     val steamGpuDrawing: Boolean = false,
     val bridgeFellBack: Boolean = false,
+    val bridgeFellBackMemory: Boolean = false,
     val steamGames: List<Library.SteamGame>,
     val emulators: List<Library.Emulator>,
     val running: String?,
@@ -137,6 +138,7 @@ class FrontEndState(
     val vkBridge: Boolean = false,
     /** Setup's "Mali (Venus)" (SessionPrefs.venus). */
     val venus: Boolean = false,
+    val venusHostVulkan: String? = null,
     val showPhantomGate: Boolean = false,
     val orientation: Int = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
     val launcherFullscreen: Boolean = true,

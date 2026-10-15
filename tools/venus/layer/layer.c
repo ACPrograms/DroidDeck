@@ -414,8 +414,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL EnumerateDeviceExtensionProperties(VkPhysi
     inst->EnumerateDeviceExtensionProperties(physical_device, NULL, &own, all);
     memcpy(all + own, extra, extra_count * sizeof(*extra));
     uint32_t total = own + extra_count;
-    if (tracing())
+    if (tracing()) {
         layer_log("trace: vkEnumerateDeviceExtensionProperties: %u from the driver, %u added by the layer", own, extra_count);
+        trace_extension_names(all, total);
+    }
     uint32_t n = *count < total ? *count : total;
     memcpy(properties, all, n * sizeof(*all));
     free(all);
@@ -470,6 +472,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo 
     LOAD_KHR(GetPhysicalDeviceImageFormatProperties2)
 #undef LOAD
 #undef LOAD_KHR
+    if (tracing())
+        trace_load(inst);
     /* Without the Vulkan 1.1 queries there is no way to answer the chained ones. */
     if (!inst->GetPhysicalDeviceFeatures2 || !inst->GetPhysicalDeviceProperties2 ||
         !inst->GetPhysicalDeviceFormatProperties2 || !inst->GetPhysicalDeviceImageFormatProperties2)
@@ -781,6 +785,11 @@ static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL GetInstanceProcAddr(VkInstance i
     if (!strcmp(name, "vkCreateDevice"))
         return (PFN_vkVoidFunction)CreateDevice;
     PFN_vkVoidFunction next = inst->gipa(instance, name);
+    if (next && tracing()) {
+        PFN_vkVoidFunction traced = trace_hook(inst, name);
+        if (traced)
+            return traced;
+    }
     if (!next || !inst->active)
         return next;
     for (size_t i = 0; i < sizeof(physical_device_hooks) / sizeof(physical_device_hooks[0]); i++) {

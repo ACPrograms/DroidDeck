@@ -103,6 +103,8 @@ void vkb_log_summary(void);
 void vkb_cbtrack_device_init(vkb_srv_table *t);
 void vkb_cbtrack_device_destroy(vkb_srv_table *t);
 int vkb_cbtrack_known(vkb_srv_table *t, VkCommandBuffer cb, const char *what);
+void vkb_cbtrack_describe(vkb_srv_table *t, VkCommandBuffer cb, char *out, size_t n);
+void vkb_cbtrack_ended(vkb_srv_table *t, VkCommandBuffer cb);
 
 /* server_spvfix.c */
 void vkb_spvfix_device_init(vkb_srv_table *t);

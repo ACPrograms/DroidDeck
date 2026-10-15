@@ -473,6 +473,11 @@ int main(int argc, char **argv)
     vkGetPhysicalDeviceMemoryProperties(pd, &mp);
     for (uint32_t i = 0; i < mp.memoryTypeCount; i++)
         printf("     memory type %u: heap %u flags 0x%x\n", i, mp.memoryTypes[i].heapIndex, mp.memoryTypes[i].propertyFlags);
+    int host_visible = 0;
+    for (uint32_t i = 0; i < mp.memoryTypeCount; i++)
+        if (mp.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) host_visible = 1;
+    /* The server offers HOST_VISIBLE only through a memory-sharing method that passed its self-test. */
+    check(host_visible, "memory sharing", host_visible ? "" : "none (no host-visible memory type; the server found no way to share memory with this driver)");
     uint32_t nq = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(pd, &nq, NULL);
     VkQueueFamilyProperties qp[16];

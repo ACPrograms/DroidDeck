@@ -140,6 +140,7 @@ class MainActivity : ComponentActivity() {
     private var zinkLazy by mutableStateOf(false)
     private var vkBridge by mutableStateOf(false)
     private var venus by mutableStateOf(false)
+    private var venusHostVulkan by mutableStateOf<String?>(null)
     private val adrenoGpu by lazy { com.droiddeck.launcher.core.DeviceSupport.adreno() }
     private var noXalia by mutableStateOf(true)
     private var fastSync by mutableStateOf(false)
@@ -359,6 +360,7 @@ class MainActivity : ComponentActivity() {
     private var graphicsLogs by mutableStateOf(false)
     private var steamGpuDrawing by mutableStateOf(false)
     private var bridgeFellBack by mutableStateOf(false)
+    private var bridgeFellBackMemory by mutableStateOf(false)
     private var showRoms by mutableStateOf(false)
     private var homeAppSelected by mutableStateOf(false)
     private var homeScreenEnabled by mutableStateOf(false)
@@ -543,14 +545,14 @@ class MainActivity : ComponentActivity() {
                 FrontEndScreen(
                     FrontEndState(
                         installed = installed, ready = ready, available = available?.version, removalPending = removalPending, runtimeActionsBlocked = runtimeChangesBlocked(),
-                        vkBridge = vkBridge, venus = venus, adreno = adrenoGpu,
+                        vkBridge = vkBridge, venus = venus, venusHostVulkan = venusHostVulkan, adreno = adrenoGpu,
                         shortcutPicker = shortcutPicker,
                         shortcutLibraryScanning = shortcutLibraryScanning,
                         gameSyncFolder = gameSyncFolder,
                         busy = busy, stage = stage, percent = percent,
                         desktopInstalled = desktopInstalled, desktopPresent = desktopPresent,
                         offlineAccount = offlineAccount, offline = offline,
-                        frameGenLabel = frameGenLabel, romsDir = romsDir, logsEnabled = logsEnabled, agentCommands = agentCommands, graphicsLogs = graphicsLogs, steamGpuDrawing = steamGpuDrawing, bridgeFellBack = bridgeFellBack,
+                        frameGenLabel = frameGenLabel, romsDir = romsDir, logsEnabled = logsEnabled, agentCommands = agentCommands, graphicsLogs = graphicsLogs, steamGpuDrawing = steamGpuDrawing, bridgeFellBack = bridgeFellBack, bridgeFellBackMemory = bridgeFellBackMemory,
                         steamGames = steamGames, emulators = emulatorList, running = runningLabel,
                         frameGen = FrameGen.mode(this),
                         lossless = lossless,
@@ -671,7 +673,14 @@ class MainActivity : ComponentActivity() {
                         onRemovePackage = { id -> removePackage(id) },
                         onRuntime = { onRuntimeButton() },
                         onVkBridge = { on -> SessionPrefs.setVkBridge(this, on); vkBridge = on },
-                        onVenus = { on -> SessionPrefs.setVenus(this, on); venus = on },
+                        onVenus = { on ->
+                            SessionPrefs.setVenus(this, on)
+                            venus = on
+                            if (on && !com.droiddeck.launcher.core.DeviceSupport.adreno()) Thread({
+                                com.droiddeck.launcher.gpu.VulkanInfo.query()["api"]?.let { SessionPrefs.setHostVulkanApi(this, it) }
+                                runOnUiThread { venusHostVulkan = com.droiddeck.launcher.session.VenusComponent.hostVulkanTooOld(this) }
+                            }, "venus-host-vulkan").start()
+                        },
                         onFrameGenPick = { mode ->
                             FrameGen.set(this, mode)
                             frameGenLabel = FrameGen.label(this)
@@ -1564,6 +1573,7 @@ class MainActivity : ComponentActivity() {
         zinkLazy = SessionPrefs.zinkLazy(this)
         vkBridge = SessionPrefs.vkBridge(this)
         venus = SessionPrefs.venus(this)
+        venusHostVulkan = com.droiddeck.launcher.session.VenusComponent.hostVulkanTooOld(this)
         noXalia = SessionPrefs.noXalia(this)
         fastSync = SessionPrefs.fastSync(this)
         syncFallback = SessionPrefs.syncFallback(this)
@@ -1593,6 +1603,7 @@ class MainActivity : ComponentActivity() {
         graphicsLogs = SessionPrefs.detailedGraphicsLogs(this)
         steamGpuDrawing = SessionPrefs.steamGpuCompositing(this)
         bridgeFellBack = SessionPrefs.bridgeFellBack(this)
+        bridgeFellBackMemory = SessionPrefs.bridgeFellBackForMemory(this)
         runningLabel = if (SessionState.running) when (SessionState.mode) {
             SessionService.MODE_DESKTOP -> getString(R.string.rail_desktop)
             SessionService.MODE_RUN -> Library.nameForProgram(SessionState.program)

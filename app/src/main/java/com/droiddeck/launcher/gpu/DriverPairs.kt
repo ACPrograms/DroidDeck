@@ -15,6 +15,8 @@ object DriverPairs {
     /** The open non-Adreno drivers (The412Banner/droiddeck-nonadreno-drivers), one pair per driver. */
     const val NON_ADRENO = "nad"
     const val NAD_RADV_XCLIPSE = "nad:radv-xclipse"
+    /** RADV-Xclipse rebased on JimVulkan's upstream: a manual choice, never Auto. */
+    const val NAD_RADV_XCLIPSE_UPSTREAM = "nad:radv-xclipse-upstream"
     const val NAD_MALI_JM = "nad:panvk-mali-jm"
     const val NAD_MALI_G710 = "nad:panvk-mali-g710"
     const val NAD_MALI_G615 = "nad:panvk-mali-g615"
@@ -38,6 +40,7 @@ object DriverPairs {
 
     private fun describeNonAdreno(key: String): Pair<String, Set<Family>> = when (key) {
         NAD_RADV_XCLIPSE -> "RADV · Samsung Xclipse" to setOf(Family.POWERVR)
+        NAD_RADV_XCLIPSE_UPSTREAM -> "RADV upstream · Samsung Xclipse" to setOf(Family.POWERVR)
         NAD_MALI_JM -> "PanVK · Mali G52-G78" to setOf(Family.MALI_JM)
         NAD_MALI_G710 -> "PanVK · Mali-G610/G710" to setOf(Family.MALI_G610_G710)
         NAD_MALI_G615 -> "PanVK · Mali-G615" to setOf(Family.MALI_G615)
@@ -64,7 +67,8 @@ object DriverPairs {
             get() = listOfNotNull(bundle?.tag, display?.tag, linux?.tag).distinct().joinToString(" + ") { it.removePrefix("linux-").removePrefix("DD-Turnip-") }
         fun suits(gpu: GpuInfo) = when {
             // The system-driver family covers PowerVR and Xclipse; RADV is only for the Xclipse.
-            key == NAD_RADV_XCLIPSE -> gpu.family == Family.POWERVR && gpu.name.contains("Xclipse", ignoreCase = true)
+            key == NAD_RADV_XCLIPSE || key == NAD_RADV_XCLIPSE_UPSTREAM ->
+                gpu.family == Family.POWERVR && gpu.name.contains("Xclipse", ignoreCase = true)
             // One binary for Mali v9-v13, not the older G52/G76 in the Job Manager family.
             key == NAD_MALI_KBASE -> gpu.family.mali && GpuInfo.maliKbaseCovered(gpu.name)
             key in DEVICE_BUILDS -> gpu.family.mali && GpuInfo.maliNumber(gpu.name) == DEVICE_BUILDS[key]

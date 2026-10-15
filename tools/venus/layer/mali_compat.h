@@ -70,6 +70,13 @@ struct instance {
     PFN_vkGetPhysicalDeviceFormatProperties2 GetPhysicalDeviceFormatProperties2;
     PFN_vkGetPhysicalDeviceImageFormatProperties GetPhysicalDeviceImageFormatProperties;
     PFN_vkGetPhysicalDeviceImageFormatProperties2 GetPhysicalDeviceImageFormatProperties2;
+    PFN_vkEnumeratePhysicalDevices EnumeratePhysicalDevices;
+    PFN_vkGetPhysicalDeviceMemoryProperties2 GetPhysicalDeviceMemoryProperties2;
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties GetPhysicalDeviceQueueFamilyProperties;
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties2 GetPhysicalDeviceQueueFamilyProperties2;
+    PFN_vkGetPhysicalDeviceExternalBufferProperties GetPhysicalDeviceExternalBufferProperties;
+    PFN_vkGetPhysicalDeviceExternalSemaphoreProperties GetPhysicalDeviceExternalSemaphoreProperties;
+    PFN_vkGetPhysicalDeviceExternalFenceProperties GetPhysicalDeviceExternalFenceProperties;
     pthread_mutex_t lock;
     struct physical_device physical_devices[8];
     uint32_t physical_device_count;
@@ -272,6 +279,11 @@ void bc_destroy_device(struct device *dev);
 struct instance *instance_from_handle(const void *dispatchable);
 /* What the GPU lacks of the features the layer can make up for. */
 uint32_t physical_device_gaps(struct instance *inst, VkPhysicalDevice physical_device);
+
+/* trace.c (DROIDDECK_MALI_COMPAT_TRACE=1) */
+void trace_load(struct instance *inst);
+PFN_vkVoidFunction trace_hook(struct instance *inst, const char *name);
+void trace_extension_names(const VkExtensionProperties *ext, uint32_t n);
 
 
 /* draw.c */

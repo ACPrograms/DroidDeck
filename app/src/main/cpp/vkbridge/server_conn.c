@@ -7,12 +7,15 @@
 #define _GNU_SOURCE
 #include "vkb_server.h"
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/ucontext.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -211,6 +214,46 @@ static void order_done(vkb_srv_proc *p, uint64_t seq)
 
 /* ------------------------------------------------------------------ command buffer replay */
 
+#define REPLAY_RING 32
+
+typedef struct replay_rec {
+    const char *name;
+    uint32_t len;
+    uint32_t nw;
+    uint64_t w[4];
+} replay_rec;
+
+static __thread replay_rec t_replay[REPLAY_RING];
+static __thread uint32_t t_replay_n;
+static __thread VkCommandBuffer t_replay_cb;
+
+static void replay_note(const char *name, const uint8_t *payload, uint32_t len)
+{
+    replay_rec *r = &t_replay[t_replay_n++ % REPLAY_RING];
+    r->name = name;
+    r->len = len;
+    r->nw = len / 8 < 4 ? len / 8 : 4;
+    for (uint32_t i = 0; i < r->nw; i++) memcpy(&r->w[i], payload + i * 8, 8);
+}
+
+static void replay_dump(vkb_srv_table *t)
+{
+    char desc[320];
+    vkb_cbtrack_describe(t, t_replay_cb, desc, sizeof(desc));
+    VKB_ERR("crash detail: %s", desc);
+    uint32_t first = t_replay_n > REPLAY_RING ? t_replay_n - REPLAY_RING : 0;
+    VKB_ERR("crash detail: %u commands replayed, the last %u (oldest first; payload words after the command id):", t_replay_n,
+            t_replay_n - first);
+    for (uint32_t i = first; i < t_replay_n; i++) {
+        const replay_rec *r = &t_replay[i % REPLAY_RING];
+        char words[96] = "";
+        size_t o = 0;
+        for (uint32_t j = 0; j < r->nw && o < sizeof(words); j++)
+            o += (size_t)snprintf(words + o, sizeof(words) - o, " %llx", (unsigned long long)r->w[j]);
+        VKB_ERR("crash detail:   #%u %s (%u bytes)%s", i, r->name, r->len, words);
+    }
+}
+
 static int is_stream_cmd(uint32_t id)
 {
     const char *n = vkb_cmd_names[id];
@@ -234,6 +277,8 @@ void vkb_sv_vkEndCommandBuffer(vkb_srv_call *c)
     }
     VkResult begin_r = VK_SUCCESS;
     size_t pos = 0;
+    t_replay_cb = cb;
+    t_replay_n = 0;
     vkb_enc scratch;
     vkb_enc_init(&scratch);
     uint32_t ncmds = 0;
@@ -258,6 +303,7 @@ void vkb_sv_vkEndCommandBuffer(vkb_srv_call *c)
         sub.conn = c->conn;
         sub.in_stream = 1;
         vkb_srv_current_cmd = vkb_cmd_names[id];
+        replay_note(vkb_cmd_names[id], s + pos, n);
         vkb_srv_handlers[id](&sub);
         vkb_srv_current_cmd = vkb_cmd_names[VKB_CMD_vkEndCommandBuffer];
         scratch = sub.r;
@@ -269,7 +315,12 @@ void vkb_sv_vkEndCommandBuffer(vkb_srv_call *c)
         ncmds++;
     }
     vkb_enc_free(&scratch);
+    replay_note("vkEndCommandBuffer (the driver's)", NULL, 0);
+    vkb_srv_current_cmd = "vkEndCommandBuffer (the driver's)";
     VkResult r = c->dt->vkEndCommandBuffer(cb);
+    vkb_srv_current_cmd = vkb_cmd_names[VKB_CMD_vkEndCommandBuffer];
+    t_replay_cb = VK_NULL_HANDLE;
+    if (r == VK_SUCCESS) vkb_cbtrack_ended(c->table, cb);
     if (begin_r != VK_SUCCESS) r = begin_r;
     if (vkb_verbose) VKB_DBG("command buffer %p: %u commands, %zu bytes -> %d", (void *)cb, ncmds, len, r);
     vkb_enc_u32(&c->r, (uint32_t)r);
@@ -449,6 +500,8 @@ static int srv_recv(vkb_srv_conn *conn, vkb_msg_hdr *h, uint8_t **payload, int *
  */
 static __thread sigjmp_buf *t_guard;
 static __thread volatile sig_atomic_t t_fault;
+static __thread void *t_fault_addr;
+static __thread uintptr_t t_fault_pc;
 static struct sigaction prev_segv, prev_bus;
 static pthread_once_t guard_once = PTHREAD_ONCE_INIT;
 
@@ -458,6 +511,14 @@ static void guard_handler(int sig, siginfo_t *si, void *uc)
     if (g) {
         t_guard = NULL;
         t_fault = sig;
+        t_fault_addr = si ? si->si_addr : NULL;
+#if defined(__aarch64__)
+        t_fault_pc = uc ? (uintptr_t)((ucontext_t *)uc)->uc_mcontext.pc : 0;
+#elif defined(__x86_64__)
+        t_fault_pc = uc ? (uintptr_t)((ucontext_t *)uc)->uc_mcontext.gregs[REG_RIP] : 0;
+#else
+        t_fault_pc = 0;
+#endif
         siglongjmp(*g, 1);
     }
     struct sigaction *p = sig == SIGBUS ? &prev_bus : &prev_segv;
@@ -532,6 +593,18 @@ static void *conn_main(void *arg)
                 if (sigsetjmp(jb, 1)) {
                     VKB_ERR("the GPU driver crashed (signal %d) in %s for process %d; that client is cut off, the app and "
                             "the other clients carry on", (int)t_fault, vkb_cmd_names[h.cmd], conn->proc ? conn->proc->pid : -1);
+                    {
+                        Dl_info di;
+                        memset(&di, 0, sizeof(di));
+                        int found = t_fault_pc && dladdr((void *)t_fault_pc, &di);
+                        VKB_ERR("crash detail: inside %s, fault address %p, pc %p = %s+0x%lx (%s)",
+                                vkb_srv_current_cmd ? vkb_srv_current_cmd : "?", t_fault_addr, (void *)t_fault_pc,
+                                found && di.dli_fname ? di.dli_fname : "?",
+                                found && di.dli_fbase ? (unsigned long)(t_fault_pc - (uintptr_t)di.dli_fbase) : 0ul,
+                                found && di.dli_sname ? di.dli_sname : "no symbol");
+                    }
+                    if (h.cmd == VKB_CMD_vkEndCommandBuffer && t_replay_cb) replay_dump(c.table);
+                    t_replay_cb = VK_NULL_HANDLE;
                     if (conn->proc) conn->proc->driver_crashed = 1;
                     vkb_srv_current_cmd = NULL;
                     vkb_srv_set_current_table(NULL);

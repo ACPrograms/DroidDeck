@@ -188,7 +188,8 @@ object SessionArtifacts {
                         "audio.log, device.txt) were on disk already and are as they were left.\n" +
                         (if (newest) "" else "Steam's logs are not included: a later session has overwritten them.\n") +
                         "crash.log holds Android's crash buffer as of the next app start - if this\n" +
-                        "session died of a crash, the entry is in there unless the device rebooted.\n"
+                        "session died of a crash, the entry is in there unless the device rebooted.\n" +
+                        (if (newest) exitReasons(context) else "")
                 )
                 val record = Record(dir)
                 if (newest) copySteamLogs(context, dir, record)
@@ -201,6 +202,39 @@ object SessionArtifacts {
                 Log.w(TAG, "could not finish $dir", e)
             }
         }
+    }
+
+    private fun exitReasons(context: Context): String {
+        if (android.os.Build.VERSION.SDK_INT < 30) return ""
+        return runCatching {
+            val am = context.getSystemService(android.app.ActivityManager::class.java) ?: return ""
+            val reasons = am.getHistoricalProcessExitReasons(context.packageName, 0, 3)
+            if (reasons.isEmpty()) return ""
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+            buildString {
+                append("\nAndroid's record of how this app's recent processes ended (newest first):\n")
+                reasons.forEach { r ->
+                    append("  ${fmt.format(java.util.Date(r.timestamp))} ${r.processName} pid ${r.pid}: reason ${reasonName(r.reason)}, " +
+                        "status ${r.status}, importance ${r.importance}, pss ${r.pss / 1024} MB, rss ${r.rss / 1024} MB" +
+                        (r.description?.let { " - $it" } ?: "") + "\n")
+                }
+            }
+        }.getOrDefault("")
+    }
+
+    private fun reasonName(reason: Int): String = when (reason) {
+        android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY (killed for memory)"
+        android.app.ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+        android.app.ApplicationExitInfo.REASON_CRASH -> "CRASH"
+        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
+        android.app.ApplicationExitInfo.REASON_ANR -> "ANR"
+        android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
+        android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+        android.app.ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+        android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+        android.app.ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+        android.app.ApplicationExitInfo.REASON_OTHER -> "OTHER"
+        else -> reason.toString()
     }
 
     @Synchronized

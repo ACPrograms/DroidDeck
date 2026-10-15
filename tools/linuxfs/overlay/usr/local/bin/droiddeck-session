@@ -132,13 +132,26 @@ if [ "${BL_VKBRIDGE:-0}" = 1 ]; then
       step "vkbridge self-test"
       bl_vkb_smoke=$(timeout 60 /usr/local/bin/droiddeck-vkbridge-smoke 2>&1)
       printf '%s\n' "$bl_vkb_smoke" | sed 's/^/== vkbridge: /'
-      if printf '%s\n' "$bl_vkb_smoke" | grep -qE '^FAIL (image clear|draw)' && [ -r "${BL_VKBRIDGE_FALLBACK_ICD:-}" ]; then
+      bl_vkb_why=
+      if printf '%s\n' "$bl_vkb_smoke" | grep -qE '^FAIL memory sharing'; then
+        bl_vkb_why=memory
+      elif printf '%s\n' "$bl_vkb_smoke" | grep -qE '^FAIL (image clear|draw)'; then
+        bl_vkb_why=draw
+      fi
+      if [ -n "$bl_vkb_why" ] && [ -r "${BL_VKBRIDGE_FALLBACK_ICD:-}" ]; then
         export VK_DRIVER_FILES=$BL_VKBRIDGE_FALLBACK_ICD VK_ICD_FILENAMES=$BL_VKBRIDGE_FALLBACK_ICD BL_VKBRIDGE=0
         export BL_OPEN_DRIVER=1 BL_DRM_STANDIN=/dev/mali0
         [ "${BL_STEAM_GPU_COMPOSITING:-0}" = 1 ] || export BL_STEAM_SOFT_COMPOSITING=1
-        echo "== vkbridge: self-test failed images or draws; this session uses the PanVK pair instead ($BL_VKBRIDGE_FALLBACK_ICD)"
-        [ -n "${BL_DEBUG_DIR:-}" ] && echo "$BL_VKBRIDGE_FALLBACK_ICD" > "$BL_DEBUG_DIR/vkbridge-fallback" 2>/dev/null
+        if [ "$bl_vkb_why" = memory ]; then
+          echo "== vkbridge: memory sharing = none (no method passed the server's self-test); this session uses the PanVK pair instead ($BL_VKBRIDGE_FALLBACK_ICD)"
+        else
+          echo "== vkbridge: self-test failed images or draws; this session uses the PanVK pair instead ($BL_VKBRIDGE_FALLBACK_ICD)"
+        fi
+        [ -n "${BL_DEBUG_DIR:-}" ] && printf '%s\n%s\n' "$BL_VKBRIDGE_FALLBACK_ICD" "$bl_vkb_why" > "$BL_DEBUG_DIR/vkbridge-fallback" 2>/dev/null
+      elif [ -n "$bl_vkb_why" ]; then
+        echo "== vkbridge: self-test failed ($bl_vkb_why) and no PanVK pair is installed to fall back on; expect a black screen or a lost device - set a Mali driver pair in Setup"
       fi
+      unset bl_vkb_why
       unset bl_vkb_smoke
       if command -v vulkaninfo >/dev/null 2>&1; then
         timeout 30 vulkaninfo --summary 2>&1 | sed -n '/^Devices:/,$p' | head -40 | sed 's/^/== vulkaninfo: /'
@@ -172,6 +185,15 @@ if [ "${BL_GAME_LOGS:-0}" = 1 ] && [ -z "${BL_INSIDE:-}" ] && [ -n "${BL_DEBUG_D
       if command -v vulkaninfo >/dev/null 2>&1; then
         timeout 10 vulkaninfo --summary
         echo "== vulkaninfo exit: $?"
+        if timeout 20 vulkaninfo > "$BL_DEBUG_DIR/vulkan-full.txt" 2>&1; then
+          echo "== device extensions (full list in vulkan-full.txt):"
+          sed -n '/^Device Extensions:/,/^$/p' "$BL_DEBUG_DIR/vulkan-full.txt" | grep -o 'VK_[A-Za-z0-9_]*' | sort -u | tr '\n' ' ' | fold -s -w 200
+          echo
+          echo "== key features:"
+          grep -E '^[[:space:]]+(robustBufferAccess2?|robustImageAccess2?|nullDescriptor|logicOp|fillModeNonSolid|shaderClipDistance|shaderCullDistance|dualSrcBlend|geometryShader|scalarBlockLayout|timelineSemaphore|dynamicRendering|synchronization2|maintenance4|maintenance5|maintenance6|shaderDrawParameters|descriptorIndexing|bufferDeviceAddress|vulkanMemoryModel|hostQueryReset|imagelessFramebuffer|samplerYcbcrConversion|shaderInt64|shaderFloat64|shaderInt16|shaderFloat16|storageBuffer16BitAccess|extendedDynamicState[23]?|vertexInputDynamicState|customBorderColors|customBorderColorWithoutFormat|depthClipEnable|multiViewport|textureCompressionBC|indexTypeUint8|rectangularLines|bresenhamLines|transformFeedback|geometryStreams|graphicsPipelineLibrary|pushDescriptor|primitiveTopologyListRestart|dynamicRenderingLocalRead|shaderDemoteToHelperInvocation|subgroupSizeControl|computeFullSubgroups|inlineUniformBlock|pipelineCreationCacheControl) = ' "$BL_DEBUG_DIR/vulkan-full.txt" | sed 's/^[[:space:]]*/  /' | sort -u
+        else
+          echo "== full vulkaninfo failed or timed out (exit $?)"
+        fi
       else
         echo "== vulkaninfo is not in this runtime; GPU nodes:"
         ls -l /dev/kgsl-3d0 /dev/mali0 /dev/dri 2>&1
@@ -994,7 +1016,10 @@ BUSCONF
       LIBGL_DEBUG=verbose MESA_LOG_LEVEL=debug timeout 20 /usr/local/bin/droiddeck-glprobe 2>&1 | grep -v drirc | head -60 | sed 's/^/== glprobe: /'
       if [ "${PIPESTATUS[0]}" = 1 ]; then
         VK_LOADER_DEBUG=error,warn timeout 20 /usr/local/bin/droiddeck-glprobe 2>&1 | grep -v drirc | head -40 | sed 's/^/== glprobe (loader): /'
-        DROIDDECK_MALI_COMPAT_TRACE=1 MESA_DEBUG=1 LIBGL_DEBUG=verbose timeout 20 /usr/local/bin/droiddeck-glprobe 2>&1 | grep -v drirc | head -80 | sed 's/^/== glprobe (trace): /'
+        DROIDDECK_MALI_COMPAT_TRACE=1 MESA_DEBUG=1 MESA_LOG_LEVEL=debug LIBGL_DEBUG=verbose ZINK_DEBUG=mem VN_DEBUG=init,result,log_ctx_info \
+          timeout 30 /usr/local/bin/droiddeck-glprobe > "${BL_DEBUG_DIR:-/tmp}/glprobe-trace.txt" 2>&1
+        grep -v drirc "${BL_DEBUG_DIR:-/tmp}/glprobe-trace.txt" | head -120 | sed 's/^/== glprobe (trace): /'
+        echo "== glprobe (trace): last pre-device query before Zink gave up: $(grep 'droiddeck-mali-compat: trace:' "${BL_DEBUG_DIR:-/tmp}/glprobe-trace.txt" | grep -v 'trace:   extensions:' | tail -1)"
         command -v vulkaninfo >/dev/null 2>&1 && DROIDDECK_MALI_COMPAT_TRACE=1 timeout 20 vulkaninfo --summary 2>&1 | head -40 | sed 's/^/== glprobe (vulkaninfo): /'
         bl_gl_ok=
         for bl_variant in "ZINK_DEBUG=" "ZINK_DEBUG= ZINK_DESCRIPTORS=auto" "ZINK_DEBUG= LIBGL_KOPPER_DISABLE=true" "ZINK_DEBUG= DROIDDECK_MALI_COMPAT=0"; do

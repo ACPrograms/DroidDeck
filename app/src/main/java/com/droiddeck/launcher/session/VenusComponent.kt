@@ -67,7 +67,16 @@ class VenusComponent(private val logFile: File?) : SessionPart() {
         @JvmStatic
         fun wanted(context: Context): Boolean =
             !DeviceSupport.adreno() && !com.droiddeck.launcher.gpu.SystemVulkanDriver.isAvailable() &&
-                SessionPrefs.venus(context) && available(context)
+                SessionPrefs.venus(context) && available(context) && hostVulkanTooOld(context) == null
+
+        /** The phone driver's Vulkan version when it is below 1.2: gamescope skips such a device, so Venus cannot run. */
+        @JvmStatic
+        fun hostVulkanTooOld(context: Context): String? {
+            val api = com.droiddeck.launcher.gpu.VulkanInfo.cachedOrNull()?.get("api") ?: SessionPrefs.hostVulkanApi(context)
+            val parts = api.split('.').mapNotNull { it.trim().toIntOrNull() }
+            if (parts.size < 2) return null
+            return api.takeIf { parts[0] < 1 || (parts[0] == 1 && parts[1] < 2) }
+        }
 
         /** Whether this apk carries the Venus component (tools/venus, venus.tzst). */
         @JvmStatic

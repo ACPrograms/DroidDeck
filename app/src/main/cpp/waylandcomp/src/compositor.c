@@ -152,6 +152,16 @@ static void on_client_destroyed(struct wl_listener *l, void *data) {
     free(ci);
 }
 
+/* libwayland's own reasons for dropping a client (a failed read or flush, an invalid object, a
+ * malformed request) go through wl_log, which on Android writes to a closed stderr. */
+static void wl_log_to_session(const char *fmt, va_list ap) {
+    char line[512];
+    vsnprintf(line, sizeof(line), fmt, ap);
+    size_t n = strlen(line);
+    while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
+    droiddeck_log("program", "libwayland: %s", line);
+}
+
 static void on_client_created(struct wl_listener *l, void *data) {
     struct wl_client *client = data;
     struct client_info *ci = calloc(1, sizeof(*ci));
@@ -3254,6 +3264,10 @@ int droiddeck_wayland_run(void) {
         return 1;
     }
     droiddeck_log("display", "Wayland compositor listening on %s/wayland-0", rt ? rt : "?");
+    wl_log_set_handler_server(wl_log_to_session);
+    /* A client that falls behind reading (gamescope at a few fps) must not be dropped for a full
+     * event buffer: libwayland's default is 4 KB per direction. */
+    wl_display_set_default_max_buffer_size(display, 1u << 20);
     wl_display_add_client_created_listener(display, &g_client_created);
 
     wl_global_create(display, &wl_compositor_interface, 6, NULL, bind_compositor);
