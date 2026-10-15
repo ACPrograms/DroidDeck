@@ -297,6 +297,17 @@ not be treated as correct synchronization. The desktop's dashboard helper also
 lacks X display authorization; no authentication or permission check was
 bypassed to work around that error.
 
+The Linux Vulkan GPU regression in `tools/vr/tests/test_vulkan_sync_fd.cpp`
+submits an actual GPU fill with an exportable SYNC_FD fence, checks its kernel
+sync-file payload, waits for the signal, and verifies every mapped value.
+The Quest run exported descriptor 5, reported one initially pending kernel
+fence, signaled successfully and matched all 1,024 values. This proves an
+explicit Vulkan GPU completion primitive on this graphics stack, not the
+as-yet-unimplemented cross-process producer lease or SteamVR game correctness.
+`tools/vr/build.sh` builds its ARM64 executable under `build/vr`; it is not
+bundled into the user-facing runtime. A valid already-signaled SYNC_FD value of
+-1 is handled according to the Vulkan specification.
+
 ## Remaining stages
 
 - Android/Linux eye-image bridge and frame ownership/synchronization.

@@ -31,6 +31,8 @@ compile() {
         mkdir -p build/vr/stub
         aarch64-linux-gnu-g++ -std=c++17 -O2 -Wall -Wextra -Werror -static-libstdc++ -static-libgcc -pthread \
             -o build/vr/out/droiddeck/bin/linuxarm64/xr-display-mode tools/vr/src/xr_display_mode.cpp
+        aarch64-linux-gnu-g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Ibuild/vr/include -o build/vr/test_vulkan_sync_fd tools/vr/tests/test_vulkan_sync_fd.cpp -ldl
         aarch64-linux-gnu-gcc -shared -fPIC -O2 -Wl,-soname,libwayland-client.so.0 -Itools/vr/third_party/wayland \
             -o build/vr/stub/libwayland-client.so tools/vr/src/wayland_client_stub.c
         aarch64-linux-gnu-gcc -c -fPIC -O2 -Itools/vr/third_party/wayland -o build/vr/xdg-shell-protocol.o \
