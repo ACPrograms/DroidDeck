@@ -309,6 +309,27 @@ bundled into the user-facing runtime. A valid already-signaled SYNC_FD value of
 
 ## Remaining stages
 
+### Touch input profile
+
+Fresh XR controller activation now selects SteamVR's built-in `oculus_touch`
+profile and handed Quest Plus render model instead of presenting real Touch
+controllers as Vive wands. Face buttons, joystick click, left menu, analog grip
+and capacitive touches are separate inputs. A/B and X/Y no longer double as
+trackpad or menu clicks; the Quest's reserved system button is not fabricated
+from its left application menu. Native OpenXR captures trigger, thumbstick,
+thumbrest and face-button touch actions in previously unused button bits, keeping
+the 296-byte tracking layout and existing low click bits compatible. Inactive
+hands clear every input; invalid analog values are sanitized. The flat Cardboard
+gamepad path retains its existing Vive profile and mappings.
+
+Host tests cover the input decoder's independent clicks, touch-versus-press,
+handed menu, analog ranges and inactive reset. The Android native frontend and
+Linux driver compile locally. SteamVR profile acceptance, game bindings and the
+physical right controller still require connected-device validation. Profile
+and component paths follow the [OpenXR Touch profile](https://registry.khronos.org/OpenXR/specs/1.0-khr/html/xrspec.html#_oculus_touch_controller_profile)
+and ALVR's [OpenVR properties](https://github.com/alvr-org/ALVR/blob/ebec107b7e5f81677fb9c631d239daf2110bf573/alvr/server_openvr/src/props.rs)
+and [input paths](https://github.com/alvr-org/ALVR/blob/ebec107b7e5f81677fb9c631d239daf2110bf573/alvr/server_openvr/cpp/alvr_server/Paths.cpp).
+
 ### Experimental producer lease
 
 `DROIDDECK_VR_PRODUCER_LEASE=1` opts the compositor into a private, same-UID,

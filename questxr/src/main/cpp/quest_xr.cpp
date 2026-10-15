@@ -9,6 +9,7 @@
 #include <openxr/openxr_platform.h>
 #include <array>
 #include <vector>
+#include <utility>
 #include <string>
 #include <stdexcept>
 #include <cstdio>
@@ -150,6 +151,8 @@ private:
     XrAction grip_ = XR_NULL_HANDLE, trigger_ = XR_NULL_HANDLE, vibration_ = XR_NULL_HANDLE;
     XrAction squeeze_ = XR_NULL_HANDLE, stick_ = XR_NULL_HANDLE, stickClick_ = XR_NULL_HANDLE;
     XrAction primary_ = XR_NULL_HANDLE, secondary_ = XR_NULL_HANDLE, menu_ = XR_NULL_HANDLE;
+    XrAction triggerTouch_ = XR_NULL_HANDLE, stickTouch_ = XR_NULL_HANDLE, primaryTouch_ = XR_NULL_HANDLE;
+    XrAction secondaryTouch_ = XR_NULL_HANDLE, thumbrestTouch_ = XR_NULL_HANDLE;
     DroidDeckXrHand inputs_[2]{};
     PFN_xrConvertTimeToTimespecTimeKHR convertTime_ = nullptr;
     bool timespecSupported_ = false;
@@ -347,17 +350,27 @@ private:
         action("primary", XR_ACTION_TYPE_BOOLEAN_INPUT, &primary_);
         action("secondary", XR_ACTION_TYPE_BOOLEAN_INPUT, &secondary_);
         action("menu", XR_ACTION_TYPE_BOOLEAN_INPUT, &menu_);
+        action("trigger_touch", XR_ACTION_TYPE_BOOLEAN_INPUT, &triggerTouch_);
+        action("stick_touch", XR_ACTION_TYPE_BOOLEAN_INPUT, &stickTouch_);
+        action("primary_touch", XR_ACTION_TYPE_BOOLEAN_INPUT, &primaryTouch_);
+        action("secondary_touch", XR_ACTION_TYPE_BOOLEAN_INPUT, &secondaryTouch_);
+        action("thumbrest_touch", XR_ACTION_TYPE_BOOLEAN_INPUT, &thumbrestTouch_);
         action("vibration", XR_ACTION_TYPE_VIBRATION_OUTPUT, &vibration_);
         std::vector<XrActionSuggestedBinding> bindings;
         for (const char *hand : {"left", "right"}) {
             std::string root = std::string("/user/hand/") + hand;
             bindings.push_back({grip_, path((root + "/input/grip/pose").c_str())});
             bindings.push_back({trigger_, path((root + "/input/trigger/value").c_str())});
+            bindings.push_back({triggerTouch_, path((root + "/input/trigger/touch").c_str())});
             bindings.push_back({squeeze_, path((root + "/input/squeeze/value").c_str())});
             bindings.push_back({stick_, path((root + "/input/thumbstick").c_str())});
             bindings.push_back({stickClick_, path((root + "/input/thumbstick/click").c_str())});
+            bindings.push_back({stickTouch_, path((root + "/input/thumbstick/touch").c_str())});
+            bindings.push_back({thumbrestTouch_, path((root + "/input/thumbrest/touch").c_str())});
             bindings.push_back({primary_, path((root + (std::strcmp(hand, "left") == 0 ? "/input/x/click" : "/input/a/click")).c_str())});
             bindings.push_back({secondary_, path((root + (std::strcmp(hand, "left") == 0 ? "/input/y/click" : "/input/b/click")).c_str())});
+            bindings.push_back({primaryTouch_, path((root + (std::strcmp(hand, "left") == 0 ? "/input/x/touch" : "/input/a/touch")).c_str())});
+            bindings.push_back({secondaryTouch_, path((root + (std::strcmp(hand, "left") == 0 ? "/input/y/touch" : "/input/b/touch")).c_str())});
             bindings.push_back({vibration_, path((root + "/output/haptic").c_str())});
         }
         bindings.push_back({menu_, path("/user/hand/left/input/menu/click")});
@@ -703,11 +716,16 @@ private:
                 inputs_[hand].stick[0] = stick.isActive ? stick.currentState.x : 0;
                 inputs_[hand].stick[1] = stick.isActive ? stick.currentState.y : 0;
                 inputs_[hand].buttons = 0;
-                XrAction buttons[] = {stickClick_, primary_, secondary_, menu_};
-                for (int button = 0; button < 4; button++) {
-                    get.action = buttons[button];
+                const std::pair<XrAction, uint32_t> buttons[] = {
+                    {stickClick_, DROIDDECK_XR_STICK_CLICK}, {primary_, DROIDDECK_XR_PRIMARY_CLICK},
+                    {secondary_, DROIDDECK_XR_SECONDARY_CLICK}, {menu_, DROIDDECK_XR_MENU_CLICK},
+                    {triggerTouch_, DROIDDECK_XR_TRIGGER_TOUCH}, {stickTouch_, DROIDDECK_XR_STICK_TOUCH},
+                    {primaryTouch_, DROIDDECK_XR_PRIMARY_TOUCH}, {secondaryTouch_, DROIDDECK_XR_SECONDARY_TOUCH},
+                    {thumbrestTouch_, DROIDDECK_XR_THUMBREST_TOUCH}};
+                for (const auto &button : buttons) {
+                    get.action = button.first;
                     XrActionStateBoolean value{XR_TYPE_ACTION_STATE_BOOLEAN}; check(xrGetActionStateBoolean(session_, &get, &value), "button state");
-                    if (value.isActive && value.currentState) inputs_[hand].buttons |= 1u << button;
+                    if (value.isActive && value.currentState) inputs_[hand].buttons |= button.second;
                 }
                 bool pressed = trigger.isActive && trigger.currentState > 0.8f;
                 if (pressed && !pressed_[hand]) {

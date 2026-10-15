@@ -20,6 +20,7 @@
 #include "xr_tracking_file.h"
 #include "xr_frame_math.h"
 #include "xr_vsync_timing.h"
+#include "xr_touch_input.h"
 
 #define DD_EXPORT extern "C" __attribute__((visibility("default")))
 
@@ -385,12 +386,17 @@ public:
     EVRInitError Activate(uint32_t id) override {
         id_ = id;
         PropertyContainerHandle_t c = VRProperties()->TrackedDeviceToPropertyContainer(id_);
-        VRProperties()->SetStringProperty(c, Prop_ModelNumber_String, "DroidDeck Pad Hand");
-        VRProperties()->SetStringProperty(c, Prop_ManufacturerName_String, "DroidDeck");
+        XrTrackingFile tracking;
+        DroidDeckXrTracking packet{};
+        xrMode_ = tracking.Read(&packet) && XrTrackingFile::Fresh(packet);
+        VRProperties()->SetStringProperty(c, Prop_ModelNumber_String, xrMode_ ? "DroidDeck Quest Touch" : "DroidDeck Pad Hand");
+        VRProperties()->SetStringProperty(c, Prop_ManufacturerName_String, xrMode_ ? "Meta" : "DroidDeck");
         VRProperties()->SetStringProperty(c, Prop_TrackingSystemName_String, "droiddeck");
-        VRProperties()->SetStringProperty(c, Prop_RenderModelName_String, "generic_controller");
-        VRProperties()->SetStringProperty(c, Prop_ControllerType_String, "vive_controller");
-        VRProperties()->SetStringProperty(c, Prop_InputProfilePath_String, "{htc}/input/vive_controller_profile.json");
+        VRProperties()->SetStringProperty(c, Prop_RenderModelName_String, xrMode_ ?
+            (right_ ? "oculus_quest_plus_controller_right" : "oculus_quest_plus_controller_left") : "generic_controller");
+        VRProperties()->SetStringProperty(c, Prop_ControllerType_String, xrMode_ ? "oculus_touch" : "vive_controller");
+        VRProperties()->SetStringProperty(c, Prop_InputProfilePath_String, xrMode_ ?
+            "{oculus}/input/touch_profile.json" : "{htc}/input/vive_controller_profile.json");
         VRProperties()->SetInt32Property(c, Prop_ControllerRoleHint_Int32,
                                          right_ ? TrackedControllerRole_RightHand : TrackedControllerRole_LeftHand);
         VRProperties()->SetInt32Property(c, Prop_DeviceClass_Int32, TrackedDeviceClass_Controller);
@@ -400,12 +406,21 @@ public:
         in->CreateBooleanComponent(c, "/input/grip/click", &grip_);
         in->CreateBooleanComponent(c, "/input/trigger/click", &triggerClick_);
         in->CreateScalarComponent(c, "/input/trigger/value", &trigger_, VRScalarType_Absolute, VRScalarUnits_NormalizedOneSided);
-        in->CreateScalarComponent(c, "/input/trackpad/x", &padX_, VRScalarType_Absolute, VRScalarUnits_NormalizedTwoSided);
-        in->CreateScalarComponent(c, "/input/trackpad/y", &padY_, VRScalarType_Absolute, VRScalarUnits_NormalizedTwoSided);
-        in->CreateBooleanComponent(c, "/input/trackpad/click", &padClick_);
-        in->CreateBooleanComponent(c, "/input/trackpad/touch", &padTouch_);
+        in->CreateScalarComponent(c, xrMode_ ? "/input/joystick/x" : "/input/trackpad/x", &padX_, VRScalarType_Absolute, VRScalarUnits_NormalizedTwoSided);
+        in->CreateScalarComponent(c, xrMode_ ? "/input/joystick/y" : "/input/trackpad/y", &padY_, VRScalarType_Absolute, VRScalarUnits_NormalizedTwoSided);
+        in->CreateBooleanComponent(c, xrMode_ ? "/input/joystick/click" : "/input/trackpad/click", &padClick_);
+        in->CreateBooleanComponent(c, xrMode_ ? "/input/joystick/touch" : "/input/trackpad/touch", &padTouch_);
+        if (xrMode_) {
+            in->CreateScalarComponent(c, "/input/grip/value", &gripValue_, VRScalarType_Absolute, VRScalarUnits_NormalizedOneSided);
+            in->CreateBooleanComponent(c, "/input/trigger/touch", &triggerTouch_);
+            in->CreateBooleanComponent(c, right_ ? "/input/a/click" : "/input/x/click", &primaryClick_);
+            in->CreateBooleanComponent(c, right_ ? "/input/b/click" : "/input/y/click", &secondaryClick_);
+            in->CreateBooleanComponent(c, right_ ? "/input/a/touch" : "/input/x/touch", &primaryTouch_);
+            in->CreateBooleanComponent(c, right_ ? "/input/b/touch" : "/input/y/touch", &secondaryTouch_);
+            in->CreateBooleanComponent(c, "/input/thumbrest/touch", &thumbrestTouch_);
+        }
         in->CreateHapticComponent(c, "/output/haptic", &haptic_);
-        Log("%s hand activated (game pad)", right_ ? "right" : "left");
+        Log("%s hand activated (%s)", right_ ? "right" : "left", xrMode_ ? "Quest Touch" : "game pad");
         return VRInitError_None;
     }
     void Deactivate() override { id_ = k_unTrackedDeviceIndexInvalid; }
@@ -430,16 +445,26 @@ public:
         pose.result = pose.poseIsValid ? TrackingResult_Running_OK : TrackingResult_Running_OutOfRange;
         pose_ = pose;
         VRServerDriverHost()->TrackedDevicePoseUpdated(id_, pose, sizeof(pose));
-        VRDriverInput()->UpdateScalarComponent(trigger_, hand.active ? hand.trigger : 0, 0);
-        VRDriverInput()->UpdateBooleanComponent(triggerClick_, hand.active && hand.trigger > 0.6f, 0);
-        VRDriverInput()->UpdateBooleanComponent(grip_, hand.active && hand.squeeze > 0.6f, 0);
-        VRDriverInput()->UpdateScalarComponent(padX_, hand.active ? hand.stick[0] : 0, 0);
-        VRDriverInput()->UpdateScalarComponent(padY_, hand.active ? hand.stick[1] : 0, 0);
-        VRDriverInput()->UpdateBooleanComponent(padClick_, hand.active && (hand.buttons & 3u), 0);
-        VRDriverInput()->UpdateBooleanComponent(padTouch_, hand.active &&
-            (std::abs(hand.stick[0]) + std::abs(hand.stick[1]) > 0.01f || (hand.buttons & 1u)), 0);
-        VRDriverInput()->UpdateBooleanComponent(menu_, hand.active && (hand.buttons & 12u), 0);
-        VRDriverInput()->UpdateBooleanComponent(system_, hand.active && !right_ && (hand.buttons & 8u), 0);
+        XrTouchInput input = xr_touch_input(hand, right_);
+        auto driverInput = VRDriverInput();
+        driverInput->UpdateScalarComponent(trigger_, input.trigger, 0);
+        driverInput->UpdateBooleanComponent(triggerClick_, input.triggerClick, 0);
+        driverInput->UpdateBooleanComponent(grip_, input.gripClick, 0);
+        driverInput->UpdateScalarComponent(padX_, input.stickX, 0);
+        driverInput->UpdateScalarComponent(padY_, input.stickY, 0);
+        driverInput->UpdateBooleanComponent(padClick_, input.stickClick, 0);
+        driverInput->UpdateBooleanComponent(padTouch_, input.stickTouch, 0);
+        driverInput->UpdateBooleanComponent(menu_, input.menuClick, 0);
+        driverInput->UpdateBooleanComponent(system_, false, 0);
+        if (xrMode_) {
+            driverInput->UpdateScalarComponent(gripValue_, input.grip, 0);
+            driverInput->UpdateBooleanComponent(triggerTouch_, input.triggerTouch, 0);
+            driverInput->UpdateBooleanComponent(primaryClick_, input.primaryClick, 0);
+            driverInput->UpdateBooleanComponent(secondaryClick_, input.secondaryClick, 0);
+            driverInput->UpdateBooleanComponent(primaryTouch_, input.primaryTouch, 0);
+            driverInput->UpdateBooleanComponent(secondaryTouch_, input.secondaryTouch, 0);
+            driverInput->UpdateBooleanComponent(thumbrestTouch_, input.thumbrestTouch, 0);
+        }
     }
 
     void Update(const HmdQuaternion_t &head, const PadState *pad) {
@@ -479,10 +504,13 @@ public:
 
 private:
     bool right_;
+    bool xrMode_ = false;
     uint32_t id_ = k_unTrackedDeviceIndexInvalid;
     DriverPose_t pose_ = {};
     VRInputComponentHandle_t system_ = 0, menu_ = 0, grip_ = 0, triggerClick_ = 0, trigger_ = 0, padX_ = 0, padY_ = 0,
                              padClick_ = 0, padTouch_ = 0, haptic_ = 0;
+    VRInputComponentHandle_t gripValue_ = 0, triggerTouch_ = 0, primaryClick_ = 0, secondaryClick_ = 0,
+                             primaryTouch_ = 0, secondaryTouch_ = 0, thumbrestTouch_ = 0;
 };
 
 class CardboardHmd : public ITrackedDeviceServerDriver, public IVRDisplayComponent {
