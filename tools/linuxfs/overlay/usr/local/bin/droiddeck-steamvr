@@ -78,6 +78,10 @@ JSON
     if [ -S /run/droiddeck/droiddeck-xr-frames ] && [ -z "${DROIDDECK_VR_PRESENT:-}" ]; then
         export DROIDDECK_VR_PRESENT=questframes
     fi
+    if [ -z "${DROIDDECK_VR_DISPLAY_MODE:-}" ] && [ -x "$driver/bin/linuxarm64/xr-display-mode" ]; then
+        mode=$("$driver/bin/linuxarm64/xr-display-mode") || mode=
+        if [ -n "$mode" ]; then export DROIDDECK_VR_DISPLAY_MODE="$mode"; fi
+    fi
 
     shims=$state/shims
     mkdir -p "$shims"
@@ -89,7 +93,9 @@ JSON
 
     : > "$state/active"
     cd "$steamvr/bin/linuxarm64" || exit 1
-    setsid ./vrstartup > "$state/vrstartup.log" 2>&1 < /dev/null &
+    startup_log=$logs/droiddeck-vrstartup.log
+    ln -sf "$startup_log" "$state/vrstartup.log"
+    setsid ./vrstartup > "$startup_log" 2>&1 < /dev/null &
     echo "SteamVR starting; logs in $logs and $state/vrstartup.log"
     ;;
 *)

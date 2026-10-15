@@ -1,4 +1,5 @@
 #include "../src/xr_tracking_file.h"
+#include "../src/xr_display_mode.h"
 #include <cassert>
 #include <cstdio>
 #include <limits>
@@ -23,6 +24,18 @@ int main(int argc, char **argv) {
         assert(reader.Read(&packet)); assert(XrTrackingFile::Fresh(packet));
         assert(packet.head.position[1] == 1.6f);
         assert(XrTrackingFile::Tracked(packet.head));
+        assert(XrDisplayMode(packet) == "3360x1760@72");
+        auto displayTracking = packet;
+        displayTracking.period_ns = 11111111;
+        assert(XrDisplayMode(displayTracking) == "3360x1760@90");
+        displayTracking.period_ns = 8333547;
+        assert(XrDisplayMode(displayTracking) == "3360x1760@120");
+        displayTracking.active = 0;
+        assert(XrDisplayMode(displayTracking).empty());
+        displayTracking = packet; displayTracking.sampled_ns -= 1000000000LL;
+        assert(XrDisplayMode(displayTracking).empty());
+        displayTracking = packet; displayTracking.period_ns = 0;
+        assert(XrDisplayMode(displayTracking).empty());
         auto invalidPose = packet.head; invalidPose.flags = 7;
         assert(!XrTrackingFile::Tracked(invalidPose));
         invalidPose = packet.head; invalidPose.orientation[3] = 0;

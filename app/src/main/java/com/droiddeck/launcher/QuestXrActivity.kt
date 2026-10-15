@@ -17,7 +17,7 @@ class QuestXrActivity : NativeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         if (intent.getBooleanExtra("guest_surface", false) || intent.getBooleanExtra("guest_frames", false)) {
             if (intent.getBooleanExtra("guest_surface", false)) intent.putExtra("surface_test", true)
-            SessionService.resume(this)
+            SessionService.setXrActivityVisible(this, true)
         }
         super.onCreate(savedInstanceState)
     }
@@ -78,5 +78,10 @@ class QuestXrActivity : NativeActivity() {
         closing = true
         SessionService.setXrActivityVisible(this, false)
         super.onDestroy()
+    }
+
+    override fun onStop() {
+        SessionService.setXrActivityVisible(this, false)
+        super.onStop()
     }
 }

@@ -269,7 +269,33 @@ The 2D panel's onStop could also suspend the guest after the XR surface became
 visible. XR visibility now has a separate service lease; panel transitions
 cannot overwrite it, and normal suspend rules return when XR visibility is
 lost. Focused visibility/background-policy tests pass. A signed full-app build
-and live validation of this lifecycle fix are pending.
+and live validation of this lifecycle fix are pending. The lease is acquired
+before native initialization so removing the old panel task cannot end the
+guest during the handoff, and it is explicitly released on stop/destruction.
+
+SteamVR's virtual display still advertised 1920x1080 at 60 Hz while the XR
+driver advertised 3360x1760 at 120 Hz. The compositor could not find a matching
+surface and crashed after its first submission. A controlled runtime override
+to the XR geometry restores the headless display surface and sustained 120 Hz
+submission: over 10,000 Present calls were observed. Owned images remain at
+zero because the producer-fence check correctly refuses them.
+
+The helper now obtains display geometry from fresh, validated tracking using a
+small ARM64 reader built against the same IPC headers. Explicit user overrides
+remain unchanged and older/stale sessions retain the normal fallback. Host
+tracking tests and four shell-helper regressions pass. The actual Quest reader
+prints 3360x1760@120, and automatic selection reproduces sustained submission.
+Startup stdout is now retained in Steam's guest log directory, with the old
+runtime-log path preserved as a symlink; a session restart no longer loses it.
+
+A minimal native Vulkan probe on the real Quest reports export/import support
+for SYNC_FD fences/semaphores, but not OPAQUE_FD handles. This distinguishes the
+unsupported implicit DMA-buf fence export from available explicit Vulkan GPU
+completion primitives. Implementing the explicit producer synchronization is
+still necessary; the existing shared-semaphore wait-dropping workaround must
+not be treated as correct synchronization. The desktop's dashboard helper also
+lacks X display authorization; no authentication or permission check was
+bypassed to work around that error.
 
 ## Remaining stages
 
