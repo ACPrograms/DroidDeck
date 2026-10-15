@@ -501,7 +501,12 @@ jobs:
         run: python3 -m unittest discover -s tools/tests -p 'test_*.py'
 
       - name: Unit tests
-        run: ./gradlew testReleaseUnitTest --console=plain -PndkVersion="$NDK_VERSION"
+        env:
+          JAVA_TOOL_OPTIONS: ${{ github.event_name == 'workflow_dispatch' && '-Drobolectric.logging=stderr' || '' }}
+        run: |
+          args=()
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then args+=(--info --stacktrace); fi
+          ./gradlew testReleaseUnitTest --console=plain -PndkVersion="$NDK_VERSION" "${args[@]}"
 
       - name: Sign with the testkey (v1 + v2 + v3)
         run: |
