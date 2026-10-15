@@ -559,13 +559,8 @@ public:
         VRProperties()->SetFloatProperty(c, Prop_DisplayFrequency_Float, hz);
         VRProperties()->SetFloatProperty(c, Prop_SecondsFromVsyncToPhotons_Float, 0.011f);
         VRProperties()->SetUint64Property(c, Prop_CurrentUniverseId_Uint64, 2);
-        if (xrMode_) {
-            char timestamp[32];
-            std::time_t now = std::time(nullptr); std::tm utc{}; gmtime_r(&now, &utc);
-            std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc);
-            const auto chaperone = xr_chaperone_json(xr.head, timestamp);
-            VRProperties()->SetStringProperty(c, Prop_DriverProvidedChaperoneJson_String, chaperone.c_str());
-        }
+        chaperone_.Reset();
+        if (xrMode_) PublishChaperone(xr);
         VRProperties()->SetBoolProperty(c, Prop_IsOnDesktop_Bool, false);
         VRProperties()->SetBoolProperty(c, Prop_DisplayDebugMode_Bool, false);
         directMode_ = VRSettings()->GetBool(kSettingsSection, "directMode");
@@ -680,6 +675,16 @@ public:
     }
 
 private:
+    void PublishChaperone(const DroidDeckXrTracking &tracking) {
+        chaperone_.Update(tracking, [this](const DroidDeckXrPose &head) {
+            char timestamp[32];
+            std::time_t now = std::time(nullptr); std::tm utc{}; gmtime_r(&now, &utc);
+            std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &utc);
+            const auto json = xr_chaperone_json(head, timestamp);
+            const auto container = VRProperties()->TrackedDeviceToPropertyContainer(id_);
+            return VRProperties()->SetStringProperty(container, Prop_DriverProvidedChaperoneJson_String, json.c_str()) == TrackedProp_Success;
+        });
+    }
     void PoseLoop() {
         uint32_t lastSeq = 0;
         auto lastSent = std::chrono::steady_clock::now();
@@ -687,6 +692,7 @@ private:
             DroidDeckXrTracking xr;
             if (xrMode_) {
                 bool fresh = xr_.Read(&xr) && XrTrackingFile::Fresh(xr);
+                if (fresh) PublishChaperone(xr);
                 DriverPose_t head = GetPose();
                 VRServerDriverHost()->TrackedDevicePoseUpdated(id_, head, sizeof(head));
                 for (int hand = 0; hand < 2; hand++) if (hands_[hand]) {
@@ -732,6 +738,7 @@ public:
 private:
     PoseFile pose_;
     XrTrackingFile xr_;
+    XrChaperoneOrigin chaperone_;
     bool xrMode_ = false;
     PadRing pad_;
     PadState lastPad_;

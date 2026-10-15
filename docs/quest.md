@@ -96,8 +96,9 @@ then acknowledges that buffer. Missing acknowledgements quarantine the transfer
 instead of allowing a producer to overwrite a possible reader. This still
 includes a CPU read and GLES upload; it is not GPU image import into OpenXR.
 
-The helper enables SteamVR's Linux Vulkan asynchronous queue and disables motion
-smoothing. It excludes the pinned Steam Frame package's optional CVP backend,
+The helper temporarily enables SteamVR's Linux Vulkan asynchronous queue and disables motion
+smoothing, backing up those preferences and restoring them on stop or the next start
+after an interrupted session. It excludes the pinned Steam Frame package's optional CVP backend,
 whose library constructor exits on Quest's unsupported SoC. The original library
 is retained with a `.droiddeck-disabled` suffix. SteamVR binaries are not patched.
 Cardboard retains its existing direct-mode path; `questframes` remains an explicit
@@ -125,8 +126,14 @@ images per second despite a 90 Hz XR session.
 That earlier measurement used the driver-direct presenter. With SteamVR's normal
 compositor, a native Vulkan scene passed its first submission and continued
 submitting stereo frames. Thumper and The Thrill of the Fight produced clean
-immersive scenes. SUPERHOT's Windows OpenXR build still showed shared-image
-corruption. A subsequent 60-second shared-buffer dashboard run delivered about
+immersive scenes. SUPERHOT's Windows OpenXR build initially showed shared-image
+corruption: DXVK supplied a restricted mutable-image format list while SteamVR
+created its corresponding opaque shared images without one. Turnip can select
+different memory layouts for those descriptions. On the Quest bridge, the layer
+normalizes the known opaque-FD creation chains to SteamVR's unrestricted list,
+without changing DMA-BUF/modifier images or other targets. A headset capture then
+showed clean SUPERHOT scene geometry; interactive gameplay remains unverified.
+A subsequent 60-second shared-buffer dashboard run delivered about
 43 new stereo images per second. Reusing Android pixel buffers raised the next
 60-second run to about 68 received and 65 uploaded images per second, with valid
 focused tracking and no rejected frames. These dashboard results do not establish refresh-rate gameplay: game input,

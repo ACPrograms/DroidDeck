@@ -25,7 +25,9 @@ class SteamVrHelperTest(unittest.TestCase):
         for directory in (self.commands, self.driver, self.steamvr / 'bin/linuxarm64'):
             directory.mkdir(parents=True)
         self.helper = self.root / 'droiddeck-steamvr'
-        self.helper.write_text(SOURCE.read_text(), encoding='utf-8')
+        self.assertIn('/run/droiddeck/droiddeck-xr-frames', SOURCE.read_text())
+        self.helper.write_text(SOURCE.read_text().replace('/run/droiddeck/droiddeck-xr-frames',
+                                                        str(self.runtime / 'droiddeck-xr-frames')), encoding='utf-8')
         self.executable(self.commands / 'pgrep', 'exit 1')
         self.executable(self.commands / 'sleep', 'exit 0')
         self.executable(self.commands / 'xset', 'exit 0')
@@ -40,6 +42,7 @@ class SteamVrHelperTest(unittest.TestCase):
         self.environment.pop('DROIDDECK_VR_PRODUCER_LEASE', None)
         self.environment.update(HOME=str(self.home), XDG_RUNTIME_DIR=str(self.runtime),
                                 STEAMVR=str(self.steamvr), DROIDDECK_VR_DIR=str(self.root / 'driver'),
+                                DROIDDECK_VR_SETTINGS_HELPER=str(SOURCE.with_name('droiddeck-steamvr-settings')),
                                 PATH=str(self.commands) + os.pathsep + os.environ['PATH'])
 
     def executable(self, destination, body):
@@ -117,6 +120,46 @@ class SteamVrHelperTest(unittest.TestCase):
                                 capture_output=True, text=True, timeout=5)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(path.read_text(), 'invalid json')
+
+    def test_quest_stop_restores_only_overridden_preferences(self):
+        self.environment['DROIDDECK_VR_PRESENT'] = 'questwsi'
+        path = self.home / '.local/share/Steam/config/steamvr.vrsettings'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({'steamvr': {'motionSmoothing': True, 'somePreference': 42}}))
+        self.start()
+        settings = json.loads(path.read_text())
+        settings['dashboard'] = {'changedDuringSession': True}
+        path.write_text(json.dumps(settings))
+        subprocess.run(['sh', str(self.helper), 'stop'], env=self.environment, check=True)
+        self.assertEqual(json.loads(path.read_text()), {'steamvr': {'motionSmoothing': True, 'somePreference': 42},
+                                                      'dashboard': {'changedDuringSession': True}})
+
+    def test_quest_update_preserves_previous_cvp_backup(self):
+        self.environment['DROIDDECK_VR_PRESENT'] = 'questwsi'
+        cvp = self.steamvr / 'drivers/cv/bin/linuxarm64/libArcturusPerception.so'
+        cvp.parent.mkdir(parents=True)
+        cvp.write_bytes(b'updated library')
+        backup = Path(str(cvp) + '.droiddeck-disabled')
+        backup.write_bytes(b'previous library')
+        self.start()
+        self.assertFalse(cvp.exists())
+        self.assertEqual(backup.read_bytes(), b'previous library')
+        self.assertEqual([p.read_bytes() for p in cvp.parent.glob('*.droiddeck-disabled.*')], [b'updated library'])
+
+    def test_start_failure_after_overrides_restores_preferences(self):
+        self.environment['DROIDDECK_VR_PRESENT'] = 'questwsi'
+        path = self.home / '.local/share/Steam/config/steamvr.vrsettings'
+        path.parent.mkdir(parents=True)
+        original = {'steamvr': {'enableLinuxVulkanAsync': False, 'motionSmoothing': True}}
+        path.write_text(json.dumps(original))
+        cvp = self.steamvr / 'drivers/cv/bin/linuxarm64/libArcturusPerception.so'
+        cvp.parent.mkdir(parents=True)
+        cvp.touch()
+        self.executable(self.commands / 'mv', 'exit 1')
+        result = subprocess.run(['sh', str(self.helper), 'start'], env=self.environment,
+                                capture_output=True, text=True, timeout=5)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(path.read_text()), original)
 
     def test_explicit_quest_presenter_enables_the_lease(self):
         self.environment['DROIDDECK_VR_PRESENT'] = 'questframes'

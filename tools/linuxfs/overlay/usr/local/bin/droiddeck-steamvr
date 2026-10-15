@@ -16,6 +16,12 @@ PKG_SHA256=90a600775eb3e8856dc475f83166a93a290a0b1f3b4e82a69c8e2a8f06b9ddc9
 
 running() { pgrep -x vrserver >/dev/null 2>&1; }
 installed() { [ -x "$steamvr/bin/linuxarm64/vrstartup" ]; }
+quest_settings() {
+    backup=$HOME/.local/share/droiddeck/steamvr-quest-settings.json
+    [ "$1" != restore ] || [ -f "$backup" ] || return 0
+    python3 "${DROIDDECK_VR_SETTINGS_HELPER:-/usr/local/bin/droiddeck-steamvr-settings}" "$1" \
+        "$HOME/.local/share/Steam/config/steamvr.vrsettings" "$backup"
+}
 
 stop() {
     rm -f "$state/active"
@@ -23,7 +29,16 @@ stop() {
         for p in $(pgrep -x "$n"); do kill "$p" 2>/dev/null; done
     done
     for p in $(pgrep -f "$steamvr/bin/linuxarm64/vrcompositor-launcher"); do kill "$p" 2>/dev/null; done
-    return 0
+    attempts=0
+    while pgrep -x 'vrserver|vrcompositor' >/dev/null 2>&1; do
+        attempts=$((attempts + 1))
+        if [ "$attempts" = 10 ]; then
+            for p in $(pgrep -x 'vrserver|vrcompositor'); do kill -KILL "$p" 2>/dev/null; done
+        fi
+        [ "$attempts" -lt 20 ] || { echo 'SteamVR did not stop; preferences remain backed up' >&2; return 1; }
+        sleep 0.1
+    done
+    quest_settings restore
 }
 
 case "${1:-status}" in
@@ -54,12 +69,12 @@ install)
     echo "SteamVR installed in $steamvr"
     ;;
 stop)
-    stop
+    stop || exit 1
     ;;
 start)
     installed || { echo "SteamVR is not installed (droiddeck-steamvr install)"; exit 1; }
     [ -f "$driver/bin/linuxarm64/driver_droiddeck.so" ] || { echo "the Cardboard driver is missing from $driver"; exit 1; }
-    stop
+    stop || exit 1
     sleep 1
     mkdir -p "$HOME/.config/openvr" "$HOME/.config/openxr/1" "$logs" "$HOME/.local/share/Steam/config"
     cat > "$HOME/.config/openvr/openvrpaths.vrpath" <<JSON
@@ -77,32 +92,19 @@ JSON
     export VK_LAYER_PATH="$layer${VK_LAYER_PATH:+:$VK_LAYER_PATH}"
     export VK_INSTANCE_LAYERS="VK_LAYER_DROIDDECK_vr${VK_INSTANCE_LAYERS:+:$VK_INSTANCE_LAYERS}"
     export VK_LOADER_LAYERS_DISABLE="${VK_LOADER_LAYERS_DISABLE:-~implicit~}"
-    if [ -S "${XDG_RUNTIME_DIR:-/run/droiddeck}/droiddeck-xr-frames" ] && [ -z "${DROIDDECK_VR_PRESENT:-}" ]; then
+    if [ -S "/run/droiddeck/droiddeck-xr-frames" ] && [ -z "${DROIDDECK_VR_PRESENT:-}" ]; then
         export DROIDDECK_VR_PRESENT=questwsi
     fi
     if [ "${DROIDDECK_VR_PRESENT:-}" = questwsi ]; then
-        python3 - "$HOME/.local/share/Steam/config/steamvr.vrsettings" <<'PY' || exit 1
-import json, os, sys
-path = sys.argv[1]
-try:
-    with open(path) as source:
-        settings = json.load(source)
-except FileNotFoundError:
-    settings = {}
-steamvr = settings.setdefault('steamvr', {})
-steamvr['enableLinuxVulkanAsync'] = True
-steamvr['motionSmoothing'] = False
-temporary = path + '.droiddeck.tmp'
-with open(temporary, 'w') as destination:
-    json.dump(settings, destination, indent=3)
-    destination.write('\n')
-os.replace(temporary, path)
-PY
+        quest_settings apply || exit 1
+        startup_handed_off=0
+        trap '[ "$startup_handed_off" = 1 ] || quest_settings restore' EXIT
         # The pinned Frame package's CVP constructor exits on Quest's unsupported SoC.
         cvp=$steamvr/drivers/cv/bin/linuxarm64/libArcturusPerception.so
         if [ -f "$cvp" ]; then
-            [ ! -e "$cvp.droiddeck-disabled" ] || { echo "CVP backup already exists: $cvp" >&2; exit 1; }
-            mv "$cvp" "$cvp.droiddeck-disabled" || exit 1
+            disabled=$cvp.droiddeck-disabled
+            if [ -e "$disabled" ]; then disabled=$(mktemp "$disabled.XXXXXX") || exit 1; fi
+            mv "$cvp" "$disabled" || exit 1
             echo "Disabled Frame-only CVP backend for Quest; SteamVR uses its normal compositor"
         fi
     fi
@@ -127,6 +129,7 @@ PY
     startup_log=$logs/droiddeck-vrstartup.log
     ln -sf "$startup_log" "$state/vrstartup.log"
     setsid ./vrstartup > "$startup_log" 2>&1 < /dev/null &
+    startup_handed_off=1
     echo "SteamVR starting; logs in $logs and $state/vrstartup.log"
     ;;
 *)

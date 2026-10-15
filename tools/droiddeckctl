@@ -421,7 +421,15 @@ def xr_capture(adb: str, serial: str, destination: Path, timeout: float) -> dict
         deadline = time.monotonic() + timeout
         metadata = None
         while time.monotonic() < deadline:
-            result = run_adb(adb, serial, 'shell', 'cat', remote + '.json')
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                result = run_adb(adb, serial, 'shell', 'cat', remote + '.json', timeout=remaining)
+            except ControlError as error:
+                if not isinstance(error.__cause__, subprocess.TimeoutExpired):
+                    raise
+                break
             try:
                 answer = json.loads(result.stdout)
                 if answer.get('id') == token:
@@ -431,7 +439,10 @@ def xr_capture(adb: str, serial: str, destination: Path, timeout: float) -> dict
                 pass
             time.sleep(0.2)
         if metadata is None:
-            run_adb(adb, serial, 'shell', 'rm', '-f', remote + '.request')
+            try:
+                run_adb(adb, serial, 'shell', 'rm', '-f', remote + '.request', timeout=1)
+            except ControlError:
+                pass
             raise ControlError('No fresh XR capture. Enter SteamVR using a build with XR capture support.', 'TIMEOUT')
         if not metadata.get('ok'):
             detail = 'No valid XR projection layer is being submitted' if not metadata.get('validLayer') else 'GPU readback or image write failed'
@@ -454,10 +465,13 @@ def xr_capture(adb: str, serial: str, destination: Path, timeout: float) -> dict
             unchanged = False
         if not unchanged:
             raise ControlError('XR capture was replaced by another request; retry', 'XR_CAPTURE_FAILED')
-    destination.mkdir(parents=True, exist_ok=True)
-    for eye, image in images.items():
-        (destination / (eye + '.png')).write_bytes(image)
-    (destination / 'capture.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
+    try:
+        destination.mkdir(parents=True, exist_ok=True)
+        for eye, image in images.items():
+            (destination / (eye + '.png')).write_bytes(image)
+        (destination / 'capture.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
+    except OSError as error:
+        raise ControlError(str(error), 'FILE_IO') from error
     return {'ok': True, 'command': 'xr-frame', 'deviceSerial': serial, 'capture': metadata,
             'left': str((destination / 'left.png').resolve()), 'right': str((destination / 'right.png').resolve()),
             **({'source': str((destination / 'source.png').resolve())} if 'source' in images else {}),

@@ -1,5 +1,5 @@
 #pragma once
-#include "xr_tracking.h"
+#include "xr_tracking_file.h"
 #include <cmath>
 #include <iomanip>
 #include <locale>
@@ -8,6 +8,17 @@
 
 struct XrSeatedOrigin {
     double yaw, translation[3];
+};
+
+class XrChaperoneOrigin {
+public:
+    void Reset() { published_ = false; }
+    template <typename Publish> void Update(const DroidDeckXrTracking &tracking, Publish publish) {
+        if (!published_ && XrTrackingFile::Fresh(tracking) && XrTrackingFile::Tracked(tracking.head))
+            published_ = publish(tracking.head);
+    }
+private:
+    bool published_ = false;
 };
 
 inline XrSeatedOrigin xr_seated_origin(const DroidDeckXrPose &head) {

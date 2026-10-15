@@ -175,6 +175,12 @@ private:
             if (!xr_frame_peer(client)) { rejected_++; close(client); continue; }
             uint64_t lastFrame = 0;
             while (!stopping_) {
+                pollfd idle{client, POLLIN, 0};
+                int available;
+                do {
+                    available = poll(&idle, 1, 50);
+                } while (!stopping_ && (available == 0 || (available < 0 && errno == EINTR)));
+                if (stopping_ || available <= 0 || !(idle.revents & POLLIN)) break;
                 DroidDeckXrPixels frame;
                 XrFrameDescriptor shared;
                 int64_t deadline = xr_frame_now() + 200000000LL;

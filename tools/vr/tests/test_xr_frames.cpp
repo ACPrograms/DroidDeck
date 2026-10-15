@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
     assert(taken.header.frame_id == 1 && taken.pixels[0] == 17 && taken.header.eye_pose[0][0][3] == -0.032f);
     assert(taken.header.color_space == DROIDDECK_XR_COLOR_SRGB_RGBA8);
     assert(!receiver.Take(&taken));
+    usleep(350000);
     for (uint64_t id = 2; id <= 100; id++) {
         auto header = Header(id); header.eye_pose[0][0][3] = static_cast<float>(id);
         pixels.assign(header.bytes, static_cast<unsigned char>(id));

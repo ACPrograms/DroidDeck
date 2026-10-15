@@ -87,6 +87,33 @@ class XrCaptureTest(unittest.TestCase):
             self.assertEqual(result['source'], str((root / 'source.png').resolve()))
             self.assertEqual(len([c for c in calls if c[0] == 'exec-out']), 3)
 
+    def test_output_creation_and_write_failures_are_file_errors(self):
+        for operation in ('mkdir', 'write_bytes'):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                with patch.object(Path, operation, side_effect=PermissionError('output denied')):
+                    with self.assertRaises(ctl.ControlError) as caught:
+                        self.capture(Path(directory) / 'capture')
+                self.assertEqual(caught.exception.code, 'FILE_IO')
+                self.assertEqual(ctl.exit_code(caught.exception), 6)
+
+    def test_stalled_metadata_read_uses_capture_deadline_and_reports_timeout(self):
+        calls = []
+        def adb(_adb, _serial, *args, **kwargs):
+            calls.append((args, kwargs))
+            if args[:2] == ('shell', 'cat'):
+                self.assertGreater(kwargs['timeout'], 0)
+                self.assertLessEqual(kwargs['timeout'], 0.1)
+                try:
+                    raise subprocess.TimeoutExpired('adb', kwargs['timeout'])
+                except subprocess.TimeoutExpired as cause:
+                    raise ctl.ControlError('metadata stalled', 'ADB_FAILED') from cause
+            return subprocess.CompletedProcess(args, 0, b'', b'')
+        with tempfile.TemporaryDirectory() as directory, patch.object(ctl, 'run_adb', side_effect=adb):
+            with self.assertRaises(ctl.ControlError) as caught:
+                ctl.xr_capture('adb', 'quest', Path(directory) / 'capture', 0.1)
+        self.assertEqual(caught.exception.code, 'TIMEOUT')
+        self.assertTrue(any(args[:3] == ('shell', 'rm', '-f') for args, _ in calls))
+
 
 if __name__ == '__main__':
     unittest.main()

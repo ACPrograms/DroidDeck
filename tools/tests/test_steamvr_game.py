@@ -16,7 +16,9 @@ class SteamVrGameTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.helper = self.root / 'helper'
-        self.helper.write_text(SOURCE.read_text(), encoding='utf-8')
+        self.assertIn('/run/droiddeck/droiddeck-xr-frames', SOURCE.read_text())
+        self.helper.write_text(SOURCE.read_text().replace('/run/droiddeck/droiddeck-xr-frames',
+                                                        str(self.root / 'droiddeck-xr-frames')), encoding='utf-8')
         self.command('pgrep', '#!/bin/sh\nexit 0\n')
         self.command('gamescope', '#!/usr/bin/env python3\nimport json, os, sys\n'
                      'print(json.dumps(dict(argv=sys.argv[1:], modifiers=os.getenv("gamescope_vr_use_modifiers"), '

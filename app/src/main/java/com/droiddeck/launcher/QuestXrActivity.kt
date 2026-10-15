@@ -49,7 +49,7 @@ class QuestXrActivity : NativeActivity() {
                         }
                     }
                     if (!started) {
-                        leaveXr("SteamVR start failed", true)
+                        if (!closing) leaveXr("SteamVR start failed", sessionAlive())
                         return@Thread
                     }
                     val startupDeadline = SystemClock.elapsedRealtime() + 30_000

@@ -9,6 +9,58 @@ static const VkSemaphoreWaitInfo *expected_wait;
 static unsigned create_calls;
 static unsigned destroyed;
 static VkResult submit_result = VK_SUCCESS;
+static const void *expected_image_chain;
+static const void *expected_external_tail;
+static int expect_cloned_external;
+
+static VkResult VKAPI_CALL mock_image(VkDevice device, const VkImageCreateInfo *info,
+                                      const VkAllocationCallbacks *allocator, VkImage *output) {
+    (void)device; (void)allocator; (void)output;
+    if (expect_cloned_external) {
+        const VkExternalMemoryImageCreateInfo *external = info->pNext;
+        assert(external != expected_image_chain);
+        assert(external->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
+        assert(external->handleTypes == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
+        assert(external->pNext == expected_external_tail);
+    } else assert(info->pNext == expected_image_chain);
+    return VK_ERROR_FORMAT_NOT_SUPPORTED;
+}
+
+static void check_shared_images(VkDevice device) {
+    VkBaseInStructure tail = {VK_STRUCTURE_TYPE_APPLICATION_INFO, NULL};
+    VkExternalMemoryImageCreateInfo external = {VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+        &tail, VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT};
+    VkFormat formats[] = {VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_UNORM};
+    VkImageFormatListCreateInfo list = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, &external, 2, formats};
+    VkImageCreateInfo image = {0};
+    image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image.pNext = &list;
+    image.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    VkImage output;
+    /* Other targets, nonmutable, linear and DMA-BUF images retain their caller's chain. */
+    expected_image_chain = &list;
+    assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    g_dev[0].quest_images = 1;
+    image.flags = 0;
+    assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    image.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    image.tiling = VK_IMAGE_TILING_LINEAR;
+    assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+    expected_image_chain = &external;
+    assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    assert(image.pNext == &list && list.pNext == &external && external.pNext == &tail);
+    /* The reverse chain order preserves its tail without modifying caller memory. */
+    external.pNext = &list; list.pNext = &tail; image.pNext = &external;
+    expect_cloned_external = 1; expected_external_tail = &tail;
+    assert(CreateImage(device, &image, NULL, &output) == VK_ERROR_FORMAT_NOT_SUPPORTED);
+    assert(image.pNext == &external && external.pNext == &list && list.pNext == &tail);
+    expect_cloned_external = 0; g_dev[0].quest_images = 0;
+}
 
 static VkResult VKAPI_CALL mock_submit(VkQueue queue, uint32_t count, const VkSubmitInfo *submits, VkFence fence) {
     assert(queue && count == 1 && fence == VK_NULL_HANDLE);
@@ -49,15 +101,36 @@ static void VKAPI_CALL mock_destroy(VkDevice device, VkSemaphore semaphore, cons
 }
 
 static int expect_queue_lock;
+static VkQueue other_queue;
+static _Atomic int other_submitted;
+
+static void *signal_from_other_queue(void *unused) {
+    (void)unused;
+    assert(QueueSubmit(other_queue, 1, expected_submit, VK_NULL_HANDLE) == VK_SUCCESS);
+    atomic_store(&other_submitted, 1);
+    return NULL;
+}
 
 static void check_queue_lock(void) {
     int acquired = pthread_mutex_trylock(&g_submission_lock);
-    assert(acquired == (expect_queue_lock ? EBUSY : 0));
+    assert(acquired == 0);
     if (!acquired) pthread_mutex_unlock(&g_submission_lock);
+    assert(g_producer_idle_calls == (unsigned)expect_queue_lock);
+    if (expect_queue_lock) assert(!producer_acquire(droiddeck_producer_now() + 10000000LL));
 }
 
 static VkResult VKAPI_CALL mock_queue_idle(VkQueue queue) {
-    assert(queue); check_queue_lock(); return VK_ERROR_DEVICE_LOST;
+    assert(queue); check_queue_lock();
+    if (expect_queue_lock) {
+        VkSubmitInfo signal = {VK_STRUCTURE_TYPE_SUBMIT_INFO, NULL, 1, NULL, NULL, 0, NULL, 0, NULL};
+        expected_submit = &signal;
+        pthread_t worker; atomic_store(&other_submitted, 0);
+        assert(pthread_create(&worker, NULL, signal_from_other_queue, NULL) == 0);
+        int64_t deadline = droiddeck_producer_now() + 1000000000LL;
+        while (!atomic_load(&other_submitted) && droiddeck_producer_now() < deadline) usleep(1000);
+        assert(atomic_load(&other_submitted)); pthread_join(worker, NULL);
+    }
+    return VK_ERROR_DEVICE_LOST;
 }
 
 static VkResult VKAPI_CALL mock_device_idle(VkDevice device) {
@@ -66,6 +139,7 @@ static VkResult VKAPI_CALL mock_device_idle(VkDevice device) {
 
 static PFN_vkVoidFunction VKAPI_CALL mock_proc(VkDevice device, const char *name) {
     (void)device;
+    if (!strcmp(name, "vkCreateImage")) return (PFN_vkVoidFunction)mock_image;
     if (!strcmp(name, "vkQueueWaitIdle")) return (PFN_vkVoidFunction)mock_queue_idle;
     if (!strcmp(name, "vkDeviceWaitIdle")) return (PFN_vkVoidFunction)mock_device_idle;
     if (!strcmp(name, "vkQueueSubmit")) return (PFN_vkVoidFunction)mock_submit;
@@ -82,7 +156,11 @@ int main(void) {
     void *dispatch = &dispatch;
     VkDevice device = (VkDevice)&dispatch;
     VkQueue queue = (VkQueue)&dispatch;
-    g_dev[0] = (struct dev){device, mock_proc, NULL, 1, 0, 0};
+    void *other_dispatch = dispatch;
+    other_queue = (VkQueue)&other_dispatch;
+    g_producer_retry_at = INT64_MAX;
+    g_dev[0] = (struct dev){device, mock_proc, NULL, 1, 0, 0, 0};
+    check_shared_images(device);
     g_poller_started = 1;
     PFN_vkQueueWaitIdle queue_idle = (PFN_vkQueueWaitIdle)semaphore_hook("vkQueueWaitIdle");
     PFN_vkDeviceWaitIdle device_idle = (PFN_vkDeviceWaitIdle)semaphore_hook("vkDeviceWaitIdle");
@@ -92,6 +170,7 @@ int main(void) {
         expect_queue_lock = producer;
         assert(queue_idle(queue) == VK_ERROR_DEVICE_LOST);
         assert(device_idle(device) == VK_ERROR_DEVICE_LOST);
+        assert(g_producer_idle_calls == 0);
     }
     g_dev[0].producer = 0;
     VkExportSemaphoreCreateInfo export_info = {VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO, NULL,

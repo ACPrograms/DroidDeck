@@ -54,7 +54,7 @@ int main(void) {
     VkDeviceCreateInfo create_device = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &timeline_feature, 0, 1, &queue_info, 0, NULL, 0, NULL, NULL};
     assert(vkCreateDevice(physical, &create_device, NULL, &test_device) == VK_SUCCESS);
     vkGetDeviceQueue(test_device, family, 0, &test_queue);
-    g_dev[0] = (struct dev){test_device, vkGetDeviceProcAddr, NULL, 1, 0, 1};
+    g_dev[0] = (struct dev){test_device, vkGetDeviceProcAddr, NULL, 1, 0, 1, 0};
     g_producer_started = 1;
     VkBufferCreateInfo create_buffer = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, 4096, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                          VK_SHARING_MODE_EXCLUSIVE, 0, NULL};

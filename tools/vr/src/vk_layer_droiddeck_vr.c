@@ -101,6 +101,7 @@ struct dev {
     int active;
     int display;
     int producer;
+    int quest_images;
 };
 
 static int steamvr_running(void) {
@@ -256,7 +257,7 @@ static VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice pd, const VkDeviceCreat
     for (int i = 0; i < MAX_OBJS; i++) {
         if (!g_dev[i].handle) {
             g_dev[i] = (struct dev){*out, next_gdpa, (PFN_vkDestroyDevice)next_gdpa(*out, "vkDestroyDevice"), active, display,
-                                   in && in->producer};
+                                   in && in->producer, active && access("/run/droiddeck/droiddeck-xr-frames", F_OK) == 0};
             break;
         }
     }
@@ -526,6 +527,7 @@ static PFN_vkVoidFunction display_device_hook(const char *name) {
 #define POLL_US 300
 
 static pthread_mutex_t g_submission_lock = PTHREAD_MUTEX_INITIALIZER;
+static unsigned g_producer_idle_calls;
 struct producer_queue {
     VkQueue queue;
     VkDevice device;
@@ -547,7 +549,7 @@ static int producer_acquire(int64_t deadline) {
         usleep(100);
     }
     int queues = 0;
-    if (g_producer_overflow) goto fail;
+    if (g_producer_overflow || g_producer_idle_calls) goto fail;
     for (unsigned index = 0; index < MAX_OBJS; index++) {
         struct producer_queue *entry = &g_producer_queues[index];
         if (!entry->queue) continue;
@@ -931,18 +933,34 @@ static VkResult VKAPI_CALL QueueBindSparse(VkQueue queue, uint32_t count, const 
 static VkResult VKAPI_CALL QueueWaitIdle(VkQueue queue) {
     struct dev *device = dev_for(queue);
     PFN_vkQueueWaitIdle next = (PFN_vkQueueWaitIdle)device->gdpa(device->handle, "vkQueueWaitIdle");
-    if (device->producer) pthread_mutex_lock(&g_submission_lock);
+    if (device->producer) {
+        pthread_mutex_lock(&g_submission_lock);
+        g_producer_idle_calls++;
+        pthread_mutex_unlock(&g_submission_lock);
+    }
     VkResult result = next(queue);
-    if (device->producer) pthread_mutex_unlock(&g_submission_lock);
+    if (device->producer) {
+        pthread_mutex_lock(&g_submission_lock);
+        g_producer_idle_calls--;
+        pthread_mutex_unlock(&g_submission_lock);
+    }
     return result;
 }
 
 static VkResult VKAPI_CALL DeviceWaitIdle(VkDevice handle) {
     struct dev *device = dev_for(handle);
     PFN_vkDeviceWaitIdle next = (PFN_vkDeviceWaitIdle)device->gdpa(handle, "vkDeviceWaitIdle");
-    if (device->producer) pthread_mutex_lock(&g_submission_lock);
+    if (device->producer) {
+        pthread_mutex_lock(&g_submission_lock);
+        g_producer_idle_calls++;
+        pthread_mutex_unlock(&g_submission_lock);
+    }
     VkResult result = next(handle);
-    if (device->producer) pthread_mutex_unlock(&g_submission_lock);
+    if (device->producer) {
+        pthread_mutex_lock(&g_submission_lock);
+        g_producer_idle_calls--;
+        pthread_mutex_unlock(&g_submission_lock);
+    }
     return result;
 }
 
@@ -959,6 +977,29 @@ static VkResult VKAPI_CALL GetSemaphoreCounterValue(VkDevice d, VkSemaphore s, u
 }
 
 static VkResult VKAPI_CALL CreateImage(VkDevice d, const VkImageCreateInfo *ci, const VkAllocationCallbacks *a, VkImage *out) {
+    VkImageCreateInfo compatible = *ci;
+    VkExternalMemoryImageCreateInfo shared;
+    const VkBaseInStructure *first = ci->pNext;
+    // SteamVR omits a format list, but DXVK adds one; Turnip can choose a different shared-memory layout.
+    if (dev_for(d)->quest_images && (ci->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) && ci->tiling == VK_IMAGE_TILING_OPTIMAL
+        && first && first->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
+        const VkBaseInStructure *second = first->pNext;
+        if (second && second->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO
+            && ((const VkExternalMemoryImageCreateInfo *)second)->handleTypes == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT) {
+            compatible.pNext = second; ci = &compatible;
+            say("%s", "matching opaque shared image layout to SteamVR's unrestricted format list");
+        }
+    }
+    if (dev_for(d)->quest_images && (ci->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) && ci->tiling == VK_IMAGE_TILING_OPTIMAL
+        && first && first->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO) {
+        const VkExternalMemoryImageCreateInfo *external = (const void *)first;
+        const VkBaseInStructure *second = external->pNext;
+        if (external->handleTypes == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT && second
+            && second->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
+            shared = *external; shared.pNext = second->pNext; compatible.pNext = &shared; ci = &compatible;
+            say("%s", "matching opaque shared image layout to SteamVR's unrestricted format list");
+        }
+    }
     VkResult r = NEXT(d, CreateImage)(d, ci, a, out);
     if (!sem_trace_on()) return r;
     const VkExternalMemoryImageCreateInfo *ext = NULL;
@@ -974,6 +1015,8 @@ static VkResult VKAPI_CALL CreateImage(VkDevice d, const VkImageCreateInfo *ci, 
                      ci->tiling, ci->arrayLayers, ci->mipLevels, ci->samples, ext->handleTypes);
     for (uint32_t i = 0; list && i < list->viewFormatCount && n < (int)sizeof(line) - 8; i++)
         n += snprintf(line + n, sizeof(line) - n, " %d", list->pViewFormats[i]);
+    for (const VkBaseInStructure *p = ci->pNext; p && n < (int)sizeof(line) - 16; p = p->pNext)
+        n += snprintf(line + n, sizeof(line) - n, " chain:%d", p->sType);
     say("%s", line);
     return r;
 }
