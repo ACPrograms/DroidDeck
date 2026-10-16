@@ -180,6 +180,13 @@ performance for the running OpenXR session. These are runtime-managed hints;
 device power and thermal policies remain authoritative. Unsupported or rejected
 requests do not prevent startup. This does not change render resolution.
 
+The manifest declares the supported Quest models using Meta's standard
+`com.oculus.supportedDevices` metadata. Without it, Quest 3 used compatibility
+mode and its refresh-rate API returned an empty capability list. With the
+declaration, the test runtime reported 72/80/90/120 Hz; a fresh normal launch
+used 72 Hz in both OpenXR telemetry and SteamVR's HMD property. DroidDeck leaves
+the refresh choice to the runtime. No forced refresh override is included.
+
 ### Experimental flat games in SteamVR
 
 Start SteamVR first, then add `droiddeck-steamvr-game %command%` to a flat
