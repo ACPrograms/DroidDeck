@@ -25,6 +25,7 @@
 #include "xr_tracking.h"
 #include "xr_frame_channel.h"
 #include "xr_frame_math.h"
+#include "gpu_frames.h"
 
 static void check(XrResult result, const char *operation) {
     if (XR_FAILED(result)) throw std::runtime_error(std::string(operation) + ": " + std::to_string(result));
@@ -75,14 +76,16 @@ public:
             "\"headPosition\":[%.6f,%.6f,%.6f],\"controllersActive\":[%s,%s],"
             "\"periodNs\":%lld,\"surfaceSwapchain\":%s,\"source\":\"%s\",\"guestFrames\":%lld,\"steamvrState\":%d,"
             "\"receivedFrames\":%llu,\"rejectedFrames\":%llu,\"uploadedFrames\":%llu,\"sourceFrameId\":%llu,"
-            "\"gpuVerifiedFrameId\":%llu,\"gpuChecksum\":%u,\"error\":\"%s\"}\n",
+            "\"gpuReceivedFrames\":%llu,\"gpuDroppedFrames\":%llu,\"gpuVerifiedFrameId\":%llu,\"gpuChecksum\":%u,\"error\":\"%s\"}\n",
             (unsigned long long)frames_, (unsigned long long)rendered_, state_,
             (unsigned long long)head_.locationFlags,
             head_.pose.position.x, head_.pose.position.y, head_.pose.position.z,
             handActive_[0] ? "true" : "false", handActive_[1] ? "true" : "false",
             (long long)period_, "false", "frames",
-            0LL, steamvrState, (unsigned long long)receiver_.Received(), (unsigned long long)receiver_.Rejected(),
+            0LL, steamvrState, (unsigned long long)(receiver_.Received() + gpuFrames_.Received()),
+            (unsigned long long)(receiver_.Rejected() + gpuFrames_.Rejected()),
             (unsigned long long)uploadedFrames_, (unsigned long long)sourceHeader_.frame_id,
+            (unsigned long long)gpuFrames_.Received(), (unsigned long long)gpuFrames_.Dropped(),
             (unsigned long long)verifiedFrame_, gpuChecksum_, error);
         std::fclose(file);
         std::rename(temp.c_str(), path.c_str());
@@ -114,10 +117,12 @@ private:
     bool running_ = false, exit_ = false, quitRequested_ = false;
     bool guestAttached_ = false, verifyPixels_ = false;
     XrFrameReceiver receiver_;
+    QuestGpuFrames gpuFrames_;
     DroidDeckXrFrameHeader sourceHeader_{};
     uint64_t uploadedFrames_ = 0, verifiedFrame_ = 0;
     uint32_t gpuChecksum_ = 0;
     GLuint sourceTexture_ = 0, sourceProgram_ = 0;
+    GLuint cpuTexture_ = 0;
     jmethodID frameCallback_ = nullptr;
     jmethodID activeCallback_ = nullptr;
     jmethodID statusCallback_ = nullptr;
@@ -326,6 +331,8 @@ private:
         {
             std::string filename = std::string(app_->activity->internalDataPath) + "/.wayland-rt/" DROIDDECK_XR_FRAME_SOCKET;
             if (!receiver_.Start(filename)) throw std::runtime_error("XR frame receiver unavailable");
+            bool gpu = !verifyPixels_ && gpuFrames_.Start(std::string(app_->activity->internalDataPath) + "/.wayland-rt/" DROIDDECK_XR_GPU_SOCKET, display_);
+            __android_log_print(ANDROID_LOG_INFO, "DroidDeckXR", "GPU frame channel available=%d", gpu);
         }
         health();
     }
@@ -533,6 +540,7 @@ private:
         GLint linked = 0; glGetProgramiv(sourceProgram_, GL_LINK_STATUS, &linked);
         if (!linked) throw std::runtime_error("Frame shader link failed");
         glGenTextures(1, &sourceTexture_); glBindTexture(GL_TEXTURE_2D, sourceTexture_);
+        cpuTexture_ = sourceTexture_;
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -540,11 +548,17 @@ private:
     }
 
     void receiveFrame() {
+        if (gpuFrames_.Take(sourceHeader_, sourceTexture_)) {
+            uploadedFrames_++;
+            if (uploadedFrames_ % 72 == 1) health();
+            return;
+        }
         DroidDeckXrPixels frame;
         if (!receiver_.Take(&frame)) return;
         GLint maximum = 0; glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum);
         if (frame.header.width > static_cast<uint32_t>(maximum) || frame.header.height > static_cast<uint32_t>(maximum))
             throw std::runtime_error("XR source exceeds GPU texture limit");
+        sourceTexture_ = cpuTexture_;
         glBindTexture(GL_TEXTURE_2D, sourceTexture_);
         GLenum encoding = frame.header.color_space == DROIDDECK_XR_COLOR_SRGB_RGBA8 ? GL_SRGB8_ALPHA8 : GL_RGBA8;
         glTexImage2D(GL_TEXTURE_2D, 0, encoding, frame.header.width, frame.header.height, 0,
@@ -723,6 +737,7 @@ private:
 
     void cleanup() {
         receiver_.Stop();
+        gpuFrames_.Stop();
         try { attachGuest(false); } catch (const std::exception &error) {
             __android_log_print(ANDROID_LOG_ERROR, "DroidDeckXR", "cleanup: %s", error.what());
         }
@@ -733,7 +748,7 @@ private:
         if (haptics_) munmap(haptics_, sizeof(DroidDeckXrHaptics));
         if (display_ != EGL_NO_DISPLAY && context_ != EGL_NO_CONTEXT) {
             glDeleteFramebuffers(1, &framebuffer_); glDeleteVertexArrays(1, &vertexArray_);
-            glDeleteTextures(1, &sourceTexture_); glDeleteProgram(sourceProgram_);
+            glDeleteTextures(1, &cpuTexture_); glDeleteProgram(sourceProgram_);
         }
         for (auto &eye : eyes_) if (eye.swapchain) xrDestroySwapchain(eye.swapchain);
         for (auto space : handSpaces_) if (space) xrDestroySpace(space);

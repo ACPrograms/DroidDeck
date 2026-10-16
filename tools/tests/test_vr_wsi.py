@@ -14,7 +14,7 @@ class VrWsiTest(unittest.TestCase):
         if headers is None:
             self.skipTest('needs Vulkan headers')
         with tempfile.TemporaryDirectory() as directory:
-            for name in ('test_wsi_capture', 'test_xr_shared', 'test_xr_frames'):
+            for name in ('test_wsi_capture', 'test_xr_shared', 'test_xr_frames', 'test_xr_gpu'):
                 with self.subTest(name=name):
                     executable = Path(directory) / name
                     subprocess.run(['g++', '-std=c++17', '-O2', '-pthread', '-Wall', '-Wextra', '-Werror',

@@ -2,6 +2,7 @@
 #include "wsi_capture.h"
 #include "xr_tracking_file.h"
 #include "xr_frame_channel.h"
+#include "xr_gpu_channel.h"
 #include <algorithm>
 #include <cstdio>
 #include <memory>
@@ -21,6 +22,8 @@ namespace {
 struct Device {
     VkDevice handle{};
     VkPhysicalDeviceMemoryProperties memory{};
+    bool foreign{};
+    PFN_vkGetMemoryFdPropertiesKHR GetMemoryFdPropertiesKHR{};
     std::unordered_map<VkQueue, uint32_t> queues;
 #define MEMBER(name) PFN_vk##name name{};
     FUNCTIONS(MEMBER)
@@ -40,7 +43,8 @@ struct CaptureSlot {
     VkFence fence{};
     bool busy{}, queued{};
     DroidDeckXrFrameHeader header{};
-    ~CaptureSlot() {
+    ~CaptureSlot() { Clear(); }
+    void Clear() {
         if (!device) return;
         if (busy && fence) device->WaitForFences(device->handle, 1, &fence, VK_TRUE, UINT64_MAX);
         if (sharedFd >= 0) close(sharedFd);
@@ -51,8 +55,11 @@ struct CaptureSlot {
         if (rgbaMemory) device->FreeMemory(device->handle, rgbaMemory, nullptr);
         if (mapping) device->UnmapMemory(device->handle, memory);
         if (memory) device->FreeMemory(device->handle, memory, nullptr);
+        device = nullptr; pool = VK_NULL_HANDLE; command = VK_NULL_HANDLE; buffer = VK_NULL_HANDLE;
+        memory = VK_NULL_HANDLE; rgbaImage = VK_NULL_HANDLE; rgbaMemory = VK_NULL_HANDLE;
+        sharedFd = -1; mapping = nullptr; fence = VK_NULL_HANDLE; busy = queued = rgbaInitialized = false;
     }
-    bool Initialize(Device &d, VkExtent2D extent, VkFormat format, uint32_t family) {
+    bool Initialize(Device &d, VkExtent2D extent, VkFormat format, uint32_t family, int imported = -1, uint64_t size = 0) {
         device = &d;
         VkCommandPoolCreateInfo pc{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         pc.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; pc.queueFamilyIndex = family;
@@ -66,10 +73,17 @@ struct CaptureSlot {
         bc.size = uint64_t(extent.width) * extent.height * 4; bc.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         if (d.CreateBuffer(d.handle, &bc, nullptr, &buffer)) return false;
         VkMemoryRequirements requirements{}; d.GetBufferMemoryRequirements(d.handle, buffer, &requirements);
+        VkImportMemoryFdInfoKHR import{VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR};
+        VkMemoryFdPropertiesKHR fdProperties{VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR};
+        if (imported >= 0) {
+            if (!d.GetMemoryFdPropertiesKHR || size < requirements.size
+                || d.GetMemoryFdPropertiesKHR(d.handle, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, imported, &fdProperties)) return false;
+            requirements.memoryTypeBits &= fdProperties.memoryTypeBits;
+        }
         uint32_t type = d.memory.memoryTypeCount;
         for (uint32_t i = 0; i < d.memory.memoryTypeCount; i++) {
             auto flags = d.memory.memoryTypes[i].propertyFlags;
-            if (!(requirements.memoryTypeBits & (1u << i)) || !(flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) continue;
+            if (!(requirements.memoryTypeBits & (1u << i)) || (imported < 0 && !(flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))) continue;
             type = i;
             if (flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) break;
         }
@@ -78,26 +92,36 @@ struct CaptureSlot {
         VkExportMemoryAllocateInfo exported{VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO};
         exported.handleTypes = external.handleTypes; alloc.pNext = &exported;
         alloc.allocationSize = requirements.size; alloc.memoryTypeIndex = type;
-        std::fprintf(stderr, "[droiddeck-vr-layer] WSI readback memory type %u flags %x\n", type, d.memory.memoryTypes[type].propertyFlags);
-        if (d.AllocateMemory(d.handle, &alloc, nullptr, &memory) || d.BindBufferMemory(d.handle, buffer, memory, 0)) return false;
-        if (d.MapMemory(d.handle, memory, 0, VK_WHOLE_SIZE, 0, &mapping)) return false;
-        VkMemoryGetFdInfoKHR getFd{VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR};
-        getFd.memory = memory; getFd.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-        if (d.GetMemoryFdKHR(d.handle, &getFd, &sharedFd)) return false;
-        VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-        image.imageType = VK_IMAGE_TYPE_2D; image.extent = {extent.width, extent.height, 1};
-        image.mipLevels = image.arrayLayers = 1; image.samples = VK_SAMPLE_COUNT_1_BIT;
-        image.format = (format == VK_FORMAT_R8G8B8A8_SRGB || format == VK_FORMAT_B8G8R8A8_SRGB)
-            ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-        image.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        if (d.CreateImage(d.handle, &image, nullptr, &rgbaImage)) return false;
-        d.GetImageMemoryRequirements(d.handle, rgbaImage, &requirements);
-        type = 0;
-        while (type < d.memory.memoryTypeCount && !(requirements.memoryTypeBits & (1u << type))) type++;
-        if (type == d.memory.memoryTypeCount) return false;
-        alloc.pNext = nullptr; alloc.allocationSize = requirements.size; alloc.memoryTypeIndex = type;
-        if (d.AllocateMemory(d.handle, &alloc, nullptr, &rgbaMemory)
-            || d.BindImageMemory(d.handle, rgbaImage, rgbaMemory, 0)) return false;
+        if (imported >= 0) {
+            import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT; import.fd = dup(imported);
+            if (import.fd < 0) return false;
+            alloc.pNext = &import; alloc.allocationSize = size;
+        }
+        VkResult allocated = d.AllocateMemory(d.handle, &alloc, nullptr, &memory);
+        if (allocated && import.fd >= 0 && imported >= 0) close(import.fd);
+        if (allocated || d.BindBufferMemory(d.handle, buffer, memory, 0)) return false;
+        if (imported < 0) {
+            if (d.MapMemory(d.handle, memory, 0, VK_WHOLE_SIZE, 0, &mapping)) return false;
+            VkMemoryGetFdInfoKHR getFd{VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR};
+            getFd.memory = memory; getFd.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+            if (d.GetMemoryFdKHR(d.handle, &getFd, &sharedFd)) return false;
+        }
+        if (imported < 0) {
+            VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+            image.imageType = VK_IMAGE_TYPE_2D; image.extent = {extent.width, extent.height, 1};
+            image.mipLevels = image.arrayLayers = 1; image.samples = VK_SAMPLE_COUNT_1_BIT;
+            image.format = (format == VK_FORMAT_R8G8B8A8_SRGB || format == VK_FORMAT_B8G8R8A8_SRGB)
+                ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+            image.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            if (d.CreateImage(d.handle, &image, nullptr, &rgbaImage)) return false;
+            d.GetImageMemoryRequirements(d.handle, rgbaImage, &requirements);
+            type = 0;
+            while (type < d.memory.memoryTypeCount && !(requirements.memoryTypeBits & (1u << type))) type++;
+            if (type == d.memory.memoryTypeCount) return false;
+            alloc.pNext = nullptr; alloc.allocationSize = requirements.size; alloc.memoryTypeIndex = type;
+            if (d.AllocateMemory(d.handle, &alloc, nullptr, &rgbaMemory)
+                || d.BindImageMemory(d.handle, rgbaImage, rgbaMemory, 0)) return false;
+        }
         VkFenceCreateInfo fc{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
         if (d.CreateFence(d.handle, &fc, nullptr, &fence)) return false;
         return true;
@@ -114,6 +138,8 @@ struct Swapchain {
     uint64_t frame{};
     XrTrackingFile tracking;
     XrFrameSender sender;
+    XrGpuSender gpuSender;
+    bool gpu{};
     bool initialized{}, attempted{};
     uint32_t family{};
     std::mutex sendMutex;
@@ -154,19 +180,22 @@ struct Swapchain {
             VkResult result = d.WaitForFences(d.handle, 1, &fence, VK_TRUE, UINT64_MAX);
             int64_t waited = XrTrackingFile::Now();
             VkMappedMemoryRange range{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE}; range.memory = memory; range.size = VK_WHOLE_SIZE;
-            if (result == VK_SUCCESS) result = d.InvalidateMappedMemoryRanges(d.handle, 1, &range);
+            if (result == VK_SUCCESS && !gpu) result = d.InvalidateMappedMemoryRanges(d.handle, 1, &range);
             int64_t invalidated = XrTrackingFile::Now();
             if (result == VK_SUCCESS && XrTrackingFile::Now() - header.captured_ns < 200000000LL) {
-                sender.SendShared("/run/droiddeck/" DROIDDECK_XR_FRAME_SOCKET, header, sharedFd);
+                if (gpu) {
+                    uint32_t flags = (format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_B8G8R8A8_SRGB) ? XR_GPU_BGRA : 0;
+                    if (!gpuSender.Send(header, static_cast<uint32_t>(slot - slots.data()), flags)) result = VK_ERROR_DEVICE_LOST;
+                } else sender.SendShared("/run/droiddeck/" DROIDDECK_XR_FRAME_SOCKET, header, sharedFd);
             }
             if (header.frame_id % 120 == 0) std::fprintf(stderr, "[droiddeck-vr-layer] WSI ms wait=%.2f invalidate=%.2f shared=%.2f\n",
                 (waited-begin)/1e6, (invalidated-waited)/1e6, (XrTrackingFile::Now()-invalidated)/1e6);
             std::lock_guard<std::mutex> lock(sendMutex);
-            slot->busy = false;
             if (result != VK_SUCCESS || sender.SharedLeaseLost()) {
                 std::fprintf(stderr, "[droiddeck-vr-layer] WSI buffer quarantined: result=%d leaseLost=%d; restart SteamVR\n", result, sender.SharedLeaseLost());
                 failed = true; return;
             }
+            slot->busy = false;
         }
     }
     bool Initialize(VkSwapchainKHR chain, VkQueue queue) {
@@ -184,10 +213,21 @@ struct Swapchain {
         ready.resize(count);
         VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         for (auto &semaphore : ready) if (d.CreateSemaphore(d.handle, &semaphoreInfo, nullptr, &semaphore)) return false;
-        for (auto &slot : slots) if (!slot.Initialize(d, extent, format, family)) return false;
+        XrGpuPoolInfo info;
+        std::array<int, XR_GPU_SLOTS> fds{{-1, -1, -1}};
+        gpu = d.foreign && gpuSender.Connect("/run/droiddeck/" DROIDDECK_XR_GPU_SOCKET, extent.width, extent.height, info, fds);
+        if (gpu) {
+            for (unsigned index = 0; index < slots.size(); index++)
+                if (!slots[index].Initialize(d, extent, format, family, fds[index], info.sizes[index])) { gpu = false; break; }
+            for (int fd : fds) if (fd >= 0) close(fd);
+        }
+        if (!gpu) {
+            gpuSender.Close();
+            for (auto &slot : slots) { slot.Clear(); if (!slot.Initialize(d, extent, format, family)) return false; }
+        }
         sendThread = std::thread([this] { Run(); });
         initialized = true;
-        std::fprintf(stderr, "[droiddeck-vr-layer] capturing compositor swapchain %ux%u format %d\n", extent.width, extent.height, format);
+        std::fprintf(stderr, "[droiddeck-vr-layer] capturing compositor swapchain %ux%u format %d channel=%s\n", extent.width, extent.height, format, gpu ? "gpu" : "cpu");
         return true;
     }
     VkResult Fail(VkResult result, CaptureSlot &slot) {
@@ -251,26 +291,36 @@ struct Swapchain {
         d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &image);
         VkBufferImageCopy copy{}; copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         copy.imageExtent = {extent.width, extent.height, 1};
-        VkImageMemoryBarrier rgba = image;
-        rgba.image = rgbaImage; rgba.srcAccessMask = rgbaInitialized ? VK_ACCESS_TRANSFER_READ_BIT : 0;
-        rgba.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        rgba.oldLayout = rgbaInitialized ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        rgba.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &rgba);
-        VkImageBlit blit{}; blit.srcSubresource = blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        blit.srcOffsets[1] = blit.dstOffsets[1] = {static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1};
-        d.CmdBlitImage(command, images[index], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rgbaImage,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
-        rgba.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; rgba.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        rgba.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; rgba.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &rgba);
-        d.CmdCopyImageToBuffer(command, rgbaImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1, &copy);
+        if (!gpu) {
+            VkImageMemoryBarrier rgba = image;
+            rgba.image = rgbaImage; rgba.srcAccessMask = rgbaInitialized ? VK_ACCESS_TRANSFER_READ_BIT : 0;
+            rgba.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            rgba.oldLayout = rgbaInitialized ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            rgba.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &rgba);
+            VkImageBlit blit{}; blit.srcSubresource = blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            blit.srcOffsets[1] = blit.dstOffsets[1] = {static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1};
+            d.CmdBlitImage(command, images[index], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rgbaImage,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
+            rgba.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; rgba.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            rgba.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; rgba.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &rgba);
+        }
+        VkBufferMemoryBarrier ownership{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        ownership.srcQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT; ownership.dstQueueFamilyIndex = family;
+        ownership.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; ownership.buffer = buffer; ownership.size = VK_WHOLE_SIZE;
+        if (gpu) d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     0, 0, nullptr, 1, &ownership, 0, nullptr);
+        d.CmdCopyImageToBuffer(command, gpu ? images[index] : rgbaImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1, &copy);
         image.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT; image.dstAccessMask = 0;
         image.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; image.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
         host.srcQueueFamilyIndex = host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; host.buffer = buffer; host.size = VK_WHOLE_SIZE;
-        d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        if (gpu) {
+            host.dstAccessMask = 0; host.srcQueueFamilyIndex = family; host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT;
+        }
+        d.CmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT, (gpu ? 0 : VK_PIPELINE_STAGE_HOST_BIT) | VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                              0, 0, nullptr, 1, &host, 1, &image);
         if ((result = d.EndCommandBuffer(command)) || (result = d.ResetFences(d.handle, 1, &fence))) return Fail(result, slot);
         std::vector<VkPipelineStageFlags> stages(present.waitSemaphoreCount, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -295,6 +345,9 @@ extern "C" void droiddeck_wsi_device(VkDevice device, VkPhysicalDevice physical,
     const char *mode = getenv("DROIDDECK_VR_PRESENT");
     if (!mode || strcmp(mode, "questwsi") || strcmp(program_invocation_short_name, "vrcompositor")) return;
     auto d = std::make_unique<Device>(); d->handle = device;
+    d->GetMemoryFdPropertiesKHR = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(gdpa(device, "vkGetMemoryFdPropertiesKHR"));
+    for (uint32_t index = 0; index < create->enabledExtensionCount; index++)
+        if (!strcmp(create->ppEnabledExtensionNames[index], "VK_EXT_queue_family_foreign")) d->foreign = true;
 #define LOAD(name) d->name = reinterpret_cast<PFN_vk##name>(gdpa(device, "vk" #name)); if (!d->name) return;
     FUNCTIONS(LOAD)
 #undef LOAD

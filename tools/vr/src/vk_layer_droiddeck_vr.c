@@ -242,17 +242,38 @@ static VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice pd, const VkDeviceCreat
     const int display = in && in->stripped;
 
     VkDeviceCreateInfo mine = *ci;
-    const char **names = calloc(ci->enabledExtensionCount + 1, sizeof(*names));
+    const char **names = calloc(ci->enabledExtensionCount + 4, sizeof(*names));
+    if (!names) return VK_ERROR_OUT_OF_HOST_MEMORY;
     uint32_t n = 0;
     for (uint32_t i = 0; i < ci->enabledExtensionCount; i++) {
         if (display && !strcmp(ci->ppEnabledExtensionNames[i], "VK_EXT_display_control")) { say("taking %s off the device", ci->ppEnabledExtensionNames[i]); continue; }
         names[n++] = ci->ppEnabledExtensionNames[i];
     }
+#ifdef DROIDDECK_WSI_CAPTURE
+    const char *present_mode = getenv("DROIDDECK_VR_PRESENT");
+    if (present_mode && !strcmp(present_mode, "questwsi") && !strcmp(program_invocation_short_name, "vrcompositor")) {
+        PFN_vkEnumerateDeviceExtensionProperties enumerate = (PFN_vkEnumerateDeviceExtensionProperties)
+            next_gipa(in ? in->handle : VK_NULL_HANDLE, "vkEnumerateDeviceExtensionProperties");
+        uint32_t count = 0;
+        if (enumerate && enumerate(pd, NULL, &count, NULL) == VK_SUCCESS && count) {
+            VkExtensionProperties *supported = calloc(count, sizeof(*supported));
+            if (supported && enumerate(pd, NULL, &count, supported) == VK_SUCCESS) {
+                const char *required[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf", "VK_EXT_queue_family_foreign"};
+                for (unsigned j = 0; j < 3; j++) {
+                    int enabled = 0, available = 0;
+                    for (uint32_t k = 0; k < n; k++) if (!strcmp(names[k], required[j])) enabled = 1;
+                    for (uint32_t k = 0; k < count; k++) if (!strcmp(supported[k].extensionName, required[j])) available = 1;
+                    if (!enabled && available) names[n++] = required[j];
+                }
+            }
+            free(supported);
+        }
+    }
+#endif
     mine.enabledExtensionCount = n;
     mine.ppEnabledExtensionNames = names;
     VkResult r = next_create(pd, &mine, alloc, out);
-    free(names);
-    if (r != VK_SUCCESS) return r;
+    if (r != VK_SUCCESS) { free(names); return r; }
     pthread_mutex_lock(&g_lock);
     for (int i = 0; i < MAX_OBJS; i++) {
         if (!g_dev[i].handle) {
@@ -263,8 +284,9 @@ static VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice pd, const VkDeviceCreat
     }
     pthread_mutex_unlock(&g_lock);
 #ifdef DROIDDECK_WSI_CAPTURE
-    if (in) droiddeck_wsi_device(*out, pd, in->handle, in->gipa, next_gdpa, ci);
+    if (in) droiddeck_wsi_device(*out, pd, in->handle, in->gipa, next_gdpa, &mine);
 #endif
+    free(names);
     return VK_SUCCESS;
 }
 

@@ -3,6 +3,8 @@
 
 static VkResult resetResult = VK_SUCCESS;
 static unsigned submitted, presented, copied, blitted;
+static bool gpuTest;
+static unsigned acquired, released;
 static VkSemaphore originalWaits[2]{(VkSemaphore)10, (VkSemaphore)11};
 static VkSemaphore expectedPresent;
 static VkResult VKAPI_CALL Present(VkQueue, const VkPresentInfoKHR *info) {
@@ -30,8 +32,18 @@ int main() {
     device->CmdPipelineBarrier = [](VkCommandBuffer, VkPipelineStageFlags, VkPipelineStageFlags,
         VkDependencyFlags, uint32_t, const VkMemoryBarrier *, uint32_t buffers, const VkBufferMemoryBarrier *host,
         uint32_t images, const VkImageMemoryBarrier *image) {
+        if (gpuTest && !images) {
+            assert(buffers == 1 && host->srcQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT
+                && host->dstQueueFamilyIndex == 7 && host->dstAccessMask == VK_ACCESS_TRANSFER_WRITE_BIT);
+            acquired++; return;
+        }
         assert(images == 1 && image->srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED);
-        if (buffers) assert(host->dstAccessMask == VK_ACCESS_HOST_READ_BIT);
+        if (buffers) {
+            if (gpuTest) {
+                assert(host->srcQueueFamilyIndex == 7 && host->dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT
+                    && !host->dstAccessMask); released++;
+            } else assert(host->dstAccessMask == VK_ACCESS_HOST_READ_BIT);
+        }
     };
     device->CmdBlitImage = [](VkCommandBuffer, VkImage, VkImageLayout source, VkImage, VkImageLayout destination,
         uint32_t count, const VkImageBlit *blit, VkFilter filter) {
@@ -68,11 +80,16 @@ int main() {
     assert(droiddeck_wsi_present(handle, queue, &info, Present) == VK_SUCCESS);
     assert(submitted == 3 && presented == 4 && copied == 3 && blitted == 3);
     for (const auto &slot : swapchains[swapchain]->slots) assert(slot.busy && slot.queued && xr_frame_valid(slot.header));
+    gpuTest = swapchains[swapchain]->gpu = true;
+    swapchains[swapchain]->slots[0].busy = false;
+    expectedPresent = (VkSemaphore)30;
+    assert(droiddeck_wsi_present(handle, queue, &info, Present) == VK_SUCCESS);
+    assert(acquired == 1 && released == 1 && copied == 4 && blitted == 3);
     swapchains[swapchain]->slots[0].busy = false;
     resetResult = VK_ERROR_DEVICE_LOST;
     assert(droiddeck_wsi_present(handle, queue, &info, Present) == VK_ERROR_DEVICE_LOST);
     assert(droiddeck_wsi_present(handle, queue, &info, Present) == VK_ERROR_DEVICE_LOST);
-    assert(submitted == 3 && presented == 4);
+    assert(submitted == 4 && presented == 5);
     droiddeck_wsi_destroy(handle); unlink(path);
     std::puts("WSI synchronization passed: original waits retained, per-image completion, bounded in-flight buffers and fatal error propagation");
 }

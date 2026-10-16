@@ -89,12 +89,22 @@ started within a millimetre of zero while standing and raw height stayed unchang
 Quest uses SteamVR's normal Linux compositor through its display component.
 The Vulkan layer captures only the HMD display swapchain, retains its present
 waits, and chains a GPU copy before presentation. Three bounded capture buffers
-allow rendering and transfer to overlap. Color conversion happens on the GPU;
-the readback allocation travels as a DMA-BUF descriptor through `SCM_RIGHTS`.
-Android brackets its CPU read with `DMA_BUF_IOCTL_SYNC`, copies to owned pixels,
-then acknowledges that buffer. Missing acknowledgements quarantine the transfer
-instead of allowing a producer to overwrite a possible reader. This still
-includes a CPU read and GLES upload; it is not GPU image import into OpenXR.
+allow rendering and transfer to overlap. Where native GLES supports
+`GL_EXT_external_buffer` and texture views, Android allocates three
+`AHardwareBuffer` BLOBs and passes their DMA-BUF allocations to Linux through
+`SCM_RIGHTS`. Vulkan imports them as buffers and transfers foreign queue-family
+ownership before and after copying the display image. A native compute shader
+reads each shared buffer into a private RGBA8 texture; an sRGB texture view
+preserves hardware transfer decoding. Native GPU completion precedes the
+acknowledgement, so Linux cannot overwrite an active reader. This removes the CPU
+pixel copy and upload, but still includes GPU copies and explicit completion waits.
+
+If capability negotiation or buffer import fails before frames are submitted,
+the existing CPU transport remains available. It brackets the DMA-BUF read with
+`DMA_BUF_IOCTL_SYNC`, copies to owned pixels, then acknowledges and uploads them.
+Both channels authenticate the peer UID and bound buffer sizes. Missing
+acknowledgements after submission quarantine the transfer and fail presentation
+instead of falling back while a reader might still own a buffer.
 
 The helper temporarily enables SteamVR's Linux Vulkan asynchronous queue and disables motion
 smoothing, backing up those preferences and restoring them on stop or the next start
@@ -146,6 +156,16 @@ A subsequent 60-second shared-buffer dashboard run delivered about
 focused tracking and no rejected frames. These dashboard results do not establish refresh-rate gameplay: game input,
 sustained game performance, and exact association with SteamVR's final compositor
 pose still require validation.
+
+The native GPU-buffer channel passed 256 full-size buffer reuse cycles, including
+head/tail pixel checks and sRGB texture-view decoding. A subsequent SUPERHOT
+scene run delivered about 43 new stereo images/s and 58 XR draws/s over one
+minute, with focused tracking and no rejected frames. The earlier CPU-path
+SUPERHOT run uploaded about 28 images/s; these are separate runs, not a controlled
+benchmark. Capturing the source and eye images can delay frame consumption;
+the GPU receiver acknowledges stale frames without reading them and keeps the
+last private image until a fresh frame arrives. Missing completion still fails
+closed. `frame_verify` explicitly selects the CPU path for byte comparison.
 
 The frame channel supports linear and sRGB RGBA8. SteamVR's final display image
 uses sRGB display values; Android decodes those during texture sampling and writes
