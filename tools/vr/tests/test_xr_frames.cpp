@@ -75,6 +75,16 @@ int main(int argc, char **argv) {
     valid.projection[0][0][2] = 0.2f; valid.projection[0][1][2] = -0.1f;
     view = xr_frame_view(valid, 0);
     assert(std::abs(std::tan(view.fov[0]) + 0.8f) < 0.00001f && std::abs(std::tan(view.fov[2]) - 0.9f) < 0.00001f);
+    float left, right, top, bottom;
+    xr_frame_projection_raw(view.fov, &left, &right, &top, &bottom);
+    float xScale = 2 / (right - left), xOffset = (right + left) / (right - left);
+    float yScale = 2 / (bottom - top), yOffset = (bottom + top) / (bottom - top);
+    assert(std::abs(xScale - valid.projection[0][0][0]) < 0.00001f);
+    assert(std::abs(yScale - valid.projection[0][1][1]) < 0.00001f);
+    assert(std::abs(xOffset - valid.projection[0][0][2]) < 0.00001f);
+    assert(std::abs(yOffset - valid.projection[0][1][2]) < 0.00001f);
+    assert(std::abs(yScale * std::tan(view.fov[2]) - yOffset - 1) < 0.00001f);
+    assert(std::abs(yScale * std::tan(view.fov[3]) - yOffset + 1) < 0.00001f);
     XrFrameReceiver receiver; assert(receiver.Start(socketPath));
     struct stat status{}; assert(stat(socketPath.c_str(), &status) == 0 && (status.st_mode & 0777) == 0600);
     XrFrameReceiver other; assert(!other.Start(socketPath));

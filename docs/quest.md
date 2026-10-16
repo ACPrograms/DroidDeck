@@ -187,6 +187,12 @@ declaration, the test runtime reported 72/80/90/120 Hz; a fresh normal launch
 used 72 Hz in both OpenXR telemetry and SteamVR's HMD property. DroidDeck leaves
 the refresh choice to the runtime. No forced refresh override is included.
 
+The OpenVR driver maps OpenXR's asymmetric eye FOV to OpenVR's lower/upper Y
+projection bounds. A live Quest 3 check confirmed that SteamVR and native
+OpenXR now report the same vertical projection center; the previous mapping
+mirrored that offset. This applies to every VR scene, without game-specific
+rendering changes.
+
 ### Experimental flat games in SteamVR
 
 Start SteamVR first, then add `droiddeck-steamvr-game %command%` to a flat

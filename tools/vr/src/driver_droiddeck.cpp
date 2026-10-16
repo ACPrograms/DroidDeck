@@ -656,8 +656,7 @@ public:
         DroidDeckXrTracking xr;
         if (xrMode_ && xr_.Read(&xr) && XrTrackingFile::Fresh(xr)) {
             const float *fov = xr.eyes[eye == Eye_Right ? 1 : 0].fov;
-            *left = std::tan(fov[0]); *right = std::tan(fov[1]);
-            *top = -std::tan(fov[2]); *bottom = -std::tan(fov[3]);
+            xr_frame_projection_raw(fov, left, right, top, bottom);
             return;
         }
         *left = -tanHalf_ * eyeAspect_; *right = tanHalf_ * eyeAspect_;
