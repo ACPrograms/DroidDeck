@@ -134,6 +134,32 @@ class SteamVrHelperTest(unittest.TestCase):
         self.assertEqual(json.loads(path.read_text()), {'steamvr': {'motionSmoothing': True, 'somePreference': 42},
                                                       'dashboard': {'changedDuringSession': True}})
 
+    def test_invalid_backup_preserves_preferences_until_repaired(self):
+        settings = self.root / 'steamvr.vrsettings'
+        backup = self.root / 'quest-backup.json'
+        helper = SOURCE.with_name('droiddeck-steamvr-settings')
+        original = {'steamvr': {'motionSmoothing': True}, 'dashboard': {'unchanged': 42}}
+        settings.write_text(json.dumps(original))
+        subprocess.run([str(helper), 'apply', str(settings), str(backup)], check=True)
+        valid_backup = backup.read_bytes()
+        applied = settings.read_bytes()
+        invalid = ['truncated {', '{}', '{"section": true, "values": []}',
+                   '{"section": false, "values": {"motionSmoothing": [false]}}']
+        for content in invalid:
+            for operation in ('apply', 'restore'):
+                with self.subTest(content=content, operation=operation):
+                    backup.write_text(content)
+                    result = subprocess.run([str(helper), operation, str(settings), str(backup)],
+                                            capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('repair the saved section/values and retry restore', result.stderr)
+                    self.assertEqual(backup.read_text(), content)
+                    self.assertEqual(settings.read_bytes(), applied)
+        backup.write_bytes(valid_backup)
+        subprocess.run([str(helper), 'restore', str(settings), str(backup)], check=True)
+        self.assertEqual(json.loads(settings.read_text()), original)
+        self.assertFalse(backup.exists())
+
     def test_quest_update_preserves_previous_cvp_backup(self):
         self.environment['DROIDDECK_VR_PRESENT'] = 'questwsi'
         cvp = self.steamvr / 'drivers/cv/bin/linuxarm64/libArcturusPerception.so'
