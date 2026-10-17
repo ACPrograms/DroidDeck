@@ -2113,6 +2113,8 @@ class FrontEndActivity : ComponentActivity() {
         offline = OfflineMode.enabled(this)
         installed = LinuxRuntimeInstaller.installedVersion(this)
         ready = LinuxRuntime.isInstalled(this)
+        vkBridge = SessionPrefs.vkBridge(this)
+        vkBridgeSafe = SessionPrefs.vkBridgeSafe(this)
         removalPending = LinuxRuntimeInstaller.hasRemovalPending(this)
         frameGenLabel = FrameGen.label(this)
         romsDir = SessionPrefs.romsDir(this).takeIf { it.isNotEmpty() }

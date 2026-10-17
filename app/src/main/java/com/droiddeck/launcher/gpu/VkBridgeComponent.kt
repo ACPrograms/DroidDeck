@@ -36,11 +36,14 @@ class VkBridgeComponent(private val socket: File, private val logFile: File) : S
             Log.w(TAG, "server exited with status $status")
             runCatching { logFile.appendText("== vkbridge server exited with status $status\n") }
         }, { line -> Log.i(TAG, line) })
-        val deadline = System.currentTimeMillis() + 15_000L
+        val began = System.currentTimeMillis()
+        val deadline = began + 15_000L
         while (!socket.exists() && !exited && System.currentTimeMillis() < deadline) {
             try { Thread.sleep(50L) } catch (e: InterruptedException) { Thread.currentThread().interrupt(); break }
         }
-        Log.i(TAG, if (socket.exists()) "server ready (pid $pid) at $socket" else "server NOT ready (pid $pid, exited=$exited); see $logFile")
+        val waited = System.currentTimeMillis() - began
+        Log.i(TAG, if (socket.exists()) "server ready (pid $pid) at $socket after $waited ms"
+            else "server NOT ready (pid $pid, exited=$exited) after $waited ms; see $logFile")
         if (!socket.exists() && VkBridgeNative.start(app(), socket, logFile, cacheDir)) Log.i(TAG, "server ready in the app's process at $socket")
     }
 
