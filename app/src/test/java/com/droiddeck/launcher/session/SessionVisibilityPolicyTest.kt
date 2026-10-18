@@ -85,6 +85,10 @@ class SessionVisibilityPolicyTest {
         ))
     }
 
+    @Test fun xrGlassesKeepTheSessionVisibleWithTheHandsetScreenOff() {
+        assertFalse(SessionVisibilityPolicy.isHidden(false, false, true, false, xrActivityVisible = true))
+    }
+
     @Test fun manualPolicyDoesNotResumeOnVisibleTransition() {
         val wasHidden = SessionVisibilityPolicy.isHidden(true, false, true, true)
         val isHidden = SessionVisibilityPolicy.isHidden(true, true, true, true)

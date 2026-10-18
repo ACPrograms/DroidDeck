@@ -6,7 +6,12 @@ internal object SessionVisibilityPolicy {
         screenOn: Boolean,
         activityOnDefaultDisplay: Boolean,
         activityDisplayOn: Boolean,
-    ): Boolean = !activityStarted || if (activityOnDefaultDisplay) !screenOn else !activityDisplayOn
+        xrActivityVisible: Boolean = false,
+    ): Boolean = !sessionHasVisibleSurface(
+        panelVisible = activityStarted,
+        screenOn = if (activityOnDefaultDisplay) screenOn else activityDisplayOn,
+        xrVisible = xrActivityVisible,
+    )
 
     fun shouldResumeOnVisibleTransition(
         previouslyHidden: Boolean?,
