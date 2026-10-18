@@ -32,7 +32,7 @@ object DeckyManager {
         private set
 
     data class Release(val tag: String, val prerelease: Boolean, val asset: String, val url: String, val digest: String?, val shaUrl: String?, val size: Long, val machine: Int)
-    data class ReleaseChannels(val stable: List<Release>, val prerelease: List<Release>)
+    data class ReleaseChannels(val stable: List<Release>, val prerelease: List<Release>, val newest: List<Release>)
 
     fun installed(context: Context): String? {
         val loader = loader(context)
@@ -80,11 +80,13 @@ object DeckyManager {
     }
 
     fun releaseChannels(context: Context): ReleaseChannels {
-        val body = Downloader.downloadString(RELEASES) ?: return ReleaseChannels(emptyList(), emptyList())
+        val body = Downloader.downloadString(RELEASES) ?: return ReleaseChannels(emptyList(), emptyList(), emptyList())
         return try {
             val array = JSONArray(body)
             val stable = mutableListOf<Release>()
             val prerelease = mutableListOf<Release>()
+            // GitHub lists releases newest first, so this keeps one ordered list across both channels.
+            val newest = mutableListOf<Release>()
             for (i in 0 until array.length()) {
                 val release = array.getJSONObject(i)
                 if (release.optBoolean("draft", false)) continue
@@ -106,9 +108,10 @@ object DeckyManager {
                 if (size <= 0) continue
                 val row = Release(release.optString("tag_name", "unknown"), isPrerelease, name, url, digest, checksum, size, if (name == "PluginLoader-arm64") 183 else 62)
                 (if (isPrerelease) prerelease else stable).add(row)
+                newest.add(row)
             }
-            ReleaseChannels(stable, prerelease)
-        } catch (e: Exception) { Log.w(TAG, "release metadata", e); ReleaseChannels(emptyList(), emptyList()) }
+            ReleaseChannels(stable, prerelease, newest)
+        } catch (e: Exception) { Log.w(TAG, "release metadata", e); ReleaseChannels(emptyList(), emptyList(), emptyList()) }
     }
 
     fun install(context: Context, release: Release, progress: (String, Int) -> Unit): String? {
