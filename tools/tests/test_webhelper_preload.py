@@ -67,6 +67,13 @@ class WebhelperPreloadTest(unittest.TestCase):
                                "--enable-features=A"])
         self.assertNotIn("--in-process-gpu", out)
 
+    def test_vulkan_compositing_features_join_steams_feature_list(self):
+        out = self.argv(WEBHELPER, "--enable-features=PlatformHEVCDecoderSupport,V4L2VideoDecode",
+                        spec="--use-gl=angle --use-angle=vulkan +Vulkan +VulkanFromANGLE +DefaultANGLEVulkan")
+        self.assertEqual(out, [WEBHELPER, "--use-gl=angle", "--use-angle=vulkan",
+                               "--enable-features=PlatformHEVCDecoderSupport,V4L2VideoDecode,"
+                               "Vulkan,VulkanFromANGLE,DefaultANGLEVulkan"])
+
     def test_an_empty_setting_means_the_default(self):
         self.assertIn("--no-zygote", self.argv(WEBHELPER, spec=""))
 
