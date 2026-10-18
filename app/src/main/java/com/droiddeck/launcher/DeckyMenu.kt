@@ -27,7 +27,7 @@ internal class DeckyMenu(private val activity: android.app.Activity, private val
                 .getOrElse { DeckyManager.ReleaseChannels(emptyList(), emptyList()) }
             ui.post {
                 if (request == deckyReleaseRequest) {
-                    deckyReleases = channels.stable.ifEmpty { channels.prerelease }
+                    deckyReleases = channels.prerelease.ifEmpty { channels.stable }
                     deckyChecking = false
                 }
             }
