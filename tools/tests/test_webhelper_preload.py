@@ -61,6 +61,12 @@ class WebhelperPreloadTest(unittest.TestCase):
         args = [WEBHELPER, "--enable-features=A"]
         self.assertEqual(self.argv(*args, spec="stock"), args)
 
+    def test_angle_switches_are_appended_with_the_gpu_process_kept_out_of_process(self):
+        out = self.argv(WEBHELPER, "-lang=en_US", "--enable-features=A", spec="--use-gl=angle --use-angle=vulkan")
+        self.assertEqual(out, [WEBHELPER, "-lang=en_US", "--use-gl=angle", "--use-angle=vulkan",
+                               "--enable-features=A"])
+        self.assertNotIn("--in-process-gpu", out)
+
     def test_an_empty_setting_means_the_default(self):
         self.assertIn("--no-zygote", self.argv(WEBHELPER, spec=""))
 
