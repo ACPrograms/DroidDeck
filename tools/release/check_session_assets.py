@@ -11,7 +11,9 @@ SESSION_FILES = OVERLAY.parents[2] / 'app/src/main/java/com/droiddeck/launcher/s
 
 
 def check_extraction(overlay, source):
-    deployed = set(re.findall(r'"(usr/local/bin/droiddeck-[^"]+)"\s+to\s+"\1"', source))
+    # Extracted to its own path, or (like droiddeck-steam-taskset, which PATH puts in front of
+    # Steam's own taskset only for the client) to another path in the runtime.
+    deployed = set(re.findall(r'"(usr/local/bin/droiddeck-[^"]+)"\s+to\s+"usr/[^"]+"', source))
     return ['not extracted at session start: ' + path.relative_to(overlay).as_posix()
             for path in sorted((overlay / 'usr/local/bin').glob('droiddeck-*'))
             if path.relative_to(overlay).as_posix() not in deployed]
