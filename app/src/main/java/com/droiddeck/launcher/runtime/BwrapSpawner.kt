@@ -186,8 +186,9 @@ object BwrapSpawner {
         if (x86) {
             fex(rootfs, dir, env)?.forEach { addBind(it) }
                 ?: throw IOException("this app is built for x86-64 and the Linux runtime has no FEX to run it")
-            // FEX finds FEXServer through /proc/self/exe, and Flatpak's ldconfig sandbox has neither /proc nor /dev.
+            // FEXServer needs /proc (to find itself) and a writable /tmp, and Flatpak's ldconfig sandbox has no /tmp.
             for (path in listOf("/proc", "/dev")) if (binds.none { it.guest == path }) bindsFor(session, rootfs, path, path).forEach { addBind(it) }
+            if (!File(hostPath(binds, root.path, "/tmp")).isDirectory) addBind(Bind(newScratch().apply { mkdirs(); chmod(this, 0x3ff) }.path, "/tmp"))
             fakeEvdev(session, rootfs, env).forEach { addBind(it) }
         } else {
             if (binds.any { it.guest == "/dev" }) gpu(rootfs, root, env)?.forEach { addBind(it) }

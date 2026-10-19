@@ -166,6 +166,7 @@ class BwrapSpawnerPlanTest {
             assertEquals("/run/droiddeck-fex/config/", plan.env["FEX_APP_CONFIG_LOCATION"])
             assertTrue(plan.binds.any { it.guest == "/proc" })
             assertTrue(plan.binds.any { it.guest == "/dev" })
+            assertTrue(File(plan.binds.single { it.guest == "/tmp" }.host).isDirectory)
         } finally {
             rootfs.deleteRecursively()
         }
