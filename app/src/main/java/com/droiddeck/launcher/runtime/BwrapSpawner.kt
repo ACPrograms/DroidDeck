@@ -354,6 +354,8 @@ object BwrapSpawner {
             put("PROOT_TMP_DIR", LinuxRuntime.prootTempDir(context).path)
             if (SessionPrefs.prootNoSeccomp(context)) put("PROOT_NO_SECCOMP", "1")
             LinuxRuntime.prootLibraryPath(context).takeIf { it.isNotEmpty() }?.let { put("LD_LIBRARY_PATH", it) }
+            // A launcher (FEX) reads its own settings from the environment proot hands it, not from env -i's.
+            if (plan.launcher.isNotEmpty()) plan.env.filterKeys { it.startsWith("FEX_") || it == "HOME" }.forEach { (k, v) -> put(k, v) }
         }
         val process = builder.start()
         val pid = HostProcess.pidOf(process)
