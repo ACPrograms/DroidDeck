@@ -2669,6 +2669,16 @@
     <string name="boot_movie_converting_started">Convirtiendo %1$s para Steam. Mantén DroidDeck abierto.</string>
     <string name="boot_movie_unsupported">Este dispositivo no puede decodificar ese video.</string>
     <string name="boot_movie_import_failed">No se pudo importar ese video</string>
+    <string name="stores_itch_key">Clave de API</string>
+    <string name="stores_itch_get_key">Obtener una clave</string>
+    <string name="stores_itch_key_rejected">Clave rechazada</string>
+    <string name="stores_itch_not_owned">No está en tu biblioteca de itch.io</string>
+    <string name="stores_itch_no_upload">Este juego no tiene descarga para Windows</string>
+    <string name="stores_itch_no_exe">No se encontró un juego de Windows en la descarga</string>
+    <string name="stores_itch_extract_failed">No se pudo extraer la descarga (salida %1$d)</string>
+    <string name="stores_itch_no_catalog">itch.io no respondió</string>
+    <string name="stores_itch_archive">Los archivos %1$s no son compatibles</string>
+    <string name="stores_itch_download_failed">itch.io respondió HTTP %1$d</string>
     <string name="glasses_experimental">Cámaras Luma Ultra — Experimental</string>
     <string name="glasses_joycons">Seguimiento de posición de los Joy-Con</string>
     <string name="glasses_joycons_hint">Usa las cámaras de las gafas inteligentes para posicionar tus mandos Joy-Con emparejados. La rotación y las pulsaciones de los botones provienen de los mandos Joy-Con. La posición se estima cuando tus muñecas están ocultas. Reemplaza los mandos operados con las manos desnudas y pausa el seguimiento de la cámara del teléfono. Apunta los mandos Joy-Con hacia adelante al conectar o restablecer el centro de seguimiento.</string>
