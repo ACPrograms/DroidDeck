@@ -1100,7 +1100,11 @@ public:
     void UpdateXr(const DroidDeckXrHand &hand, int64_t predicted) {
         if (id_ == k_unTrackedDeviceIndexInvalid) return;
         DriverPose_t pose{};
-        pose.qWorldFromDriverRotation.w = pose.qDriverFromHeadRotation.w = 1;
+        pose.qWorldFromDriverRotation.w = 1;
+        pose.qDriverFromHeadRotation = {.94147, .3371, 0, 0};
+        pose.vecDriverFromHeadTranslation[0] = right_ ? .007 : -.007;
+        pose.vecDriverFromHeadTranslation[1] = .036124;
+        pose.vecDriverFromHeadTranslation[2] = -.037617;
         pose.qRotation.w = 1;
         pose.deviceIsConnected = hand.active;
         pose.poseIsValid = hand.active && XrTrackingFile::Tracked(hand.pose);
