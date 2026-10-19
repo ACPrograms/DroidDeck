@@ -105,14 +105,28 @@ Known to fail:
 
 ## x86_64 apps
 
-Flathub lists x86_64-only apps (Heroic, Discord, Spotify, Steam), and the store hides them. Running them
-would need an x86 emulator in the sandbox. There's no FEX or box64 package in Arch Linux ARM; Valve's
-ARM64 Steam can install its FEX compatibility tool, but only through the Steam client. With a FEX binary
-available, the path would be:
+Flathub lists x86_64-only apps (Heroic, Discord, Spotify, Steam), and the store still hides them. They can be
+added from the Desktop page's "Add app" dialog instead: by Flathub ID (`droiddeck-flatpak install` falls back to
+x86_64 when the app has no ARM64 build and the rootfs has FEX), from a `.flatpak` bundle, or from a
+`.flatpakrepo` link (`install-repo`), which adds that remote and installs the one app it carries. NVIDIA's
+GeForce NOW is the case in point: `https://international.download.nvidia.com/GFNLinux/flatpak/geforcenow.flatpakrepo`,
+x86_64 only, on the Freedesktop 24.08 runtime, which Flatpak then pulls from Flathub for x86_64.
+`droiddeck-flatpak-run` passes `--arch=x86_64` for an app installed only for that arch.
 
-1. `flatpak install --arch=x86_64`. Flatpak accepts it, and the x86 runtime is also the x86 root FEX needs.
-2. `BwrapSpawner` starts those sandboxes with `proot -q`, through a small wrapper that runs FEXInterpreter.
-   `-q` passes QEMU-style arguments.
-3. GPU drivers would need FEX's thunks, or Mesa runs emulated on the CPU.
+`BwrapSpawner` looks at the sandbox's `/usr/bin/env`. When it is an x86 ELF, the sandbox starts as
+`/run/droiddeck-fex/bin/FEX /usr/bin/env ...`, and no RootFS is set: the sandbox's own tree is the x86 root.
+
+- The rootfs's FEX and FEXServer go in under `/run/droiddeck-fex/bin`. FEXServer has no RUNPATH, so the ARM64
+  loader, libc, libm, libstdc++, libgcc_s and libxxhash are bound into `/usr/lib`, where the ARM64 loader looks by
+  default. x86 programs search `/usr/lib/x86_64-linux-gnu` first and skip an ARM64 library.
+- `/etc/ld.so.preload` lists `/run/droiddeck-fex/$LIB/libblsession.so` and `libfakeinput.so`. `$LIB` is `lib` for
+  the ARM64 loader and `lib/x86_64-linux-gnu` or `lib/i386-linux-gnu` for the runtime's, so FEX gets the rootfs's
+  ARM64 builds and the app the x86 builds `droiddeck-fex` uses. The ARM64 libblsession matters: without binfmt_misc,
+  FEX starts an x86 child with `execveat(fd, "/proc/self/exe")`, which proot refuses, and libblsession turns it into
+  an `execve`.
+- Each sandbox gets its own FEXServer socket (`FEX_SERVERSOCKETPATH`), because the session's x86 Steam runs one on
+  the default socket for its own RootFS. FEX's code cache is kept in `/root/.cache/droiddeck-fex-flatpak`.
+- The GPU and preload additions for ARM64 sandboxes are skipped. There are no FEX thunks yet, so Mesa runs
+  emulated on the CPU (llvmpipe): fine for a launcher or a video stream at a modest size, slow for 3D.
 
 x86 AppImages would also need an x86 rootfs for the libraries they don't bundle.

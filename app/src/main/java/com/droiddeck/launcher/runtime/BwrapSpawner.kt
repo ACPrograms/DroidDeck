@@ -75,7 +75,10 @@ object BwrapSpawner {
         }
     }
 
-    class Plan(val root: File, val binds: List<Bind>, val cwd: String, val argv: List<String>, val env: Map<String, String>)
+    class Plan(
+        val root: File, val binds: List<Bind>, val cwd: String, val argv: List<String>, val env: Map<String, String>,
+        val launcher: List<String> = emptyList(),
+    )
 
     data class Bind(val host: String, val guest: String) {
         val spec: String get() = if (host == guest) host else "$host:$guest"
@@ -179,10 +182,67 @@ object BwrapSpawner {
         val argv = request.getJSONArray("argv").let { a -> (0 until a.length()).map { a.getString(it) } }
         val env = LinkedHashMap<String, String>()
         request.optJSONObject("env")?.let { e -> e.keys().forEach { k -> env[k] = e.getString(k) } }
-        if (binds.any { it.guest == "/dev" }) gpu(rootfs, root, env)?.forEach { addBind(it) }
-        preload(session, rootfs, env).forEach { addBind(it) }
+        val x86 = LinuxFex.isX86(LinuxFex.elfMachine(File(hostPath(binds, root.path, "/usr/bin/env"))))
+        if (x86) {
+            fex(rootfs, dir, env)?.forEach { addBind(it) }
+                ?: throw IOException("this app is built for x86-64 and the Linux runtime has no FEX to run it")
+            fakeEvdev(session, rootfs, env).forEach { addBind(it) }
+        } else {
+            if (binds.any { it.guest == "/dev" }) gpu(rootfs, root, env)?.forEach { addBind(it) }
+            preload(session, rootfs, env).forEach { addBind(it) }
+        }
         browserSandboxes(env)
-        return Plan(root, binds, request.optString("cwd", "/").ifEmpty { "/" }, argv, env)
+        return Plan(root, binds, request.optString("cwd", "/").ifEmpty { "/" }, argv, env,
+                    if (x86) listOf("$FEX_DIR/bin/FEX") else emptyList())
+    }
+
+    private const val FEX_DIR = "/run/droiddeck-fex"
+    private val FEX_HOST_LIBS = listOf("ld-linux-aarch64.so.1", "libc.so.6", "libm.so.6", "libstdc++.so.6", "libgcc_s.so.1")
+    private val FEX_PRELOADS = listOf("libblsession.so", "libfakeinput.so")
+
+    // An x86-64 runtime starts under the rootfs's FEX. The sandbox's own tree is the x86 root, so FEX needs no RootFS.
+    internal fun fex(rootfs: String, dir: File, env: MutableMap<String, String>): List<Bind>? {
+        val bin = File(rootfs, "usr/local/bin")
+        val fex = File(bin, "FEX")
+        val server = File(bin, "FEXServer")
+        if (!fex.isFile || !server.isFile) return null
+        val binds = arrayListOf(Bind(fex.path, "$FEX_DIR/bin/FEX"), Bind(server.path, "$FEX_DIR/bin/FEXServer"))
+        // FEXServer has no RUNPATH, so the ARM64 libraries go where the ARM64 loader looks by default. x86 programs
+        // search /usr/lib/x86_64-linux-gnu first and skip an ARM64 library they meet.
+        for (name in FEX_HOST_LIBS + "libxxhash.so.0") {
+            val lib = listOf(File(rootfs, "usr/lib/$name"), File(rootfs, "usr/local/lib/$name")).firstOrNull { it.exists() }
+                ?: run { Log.w(TAG, "fex: the runtime has no $name"); return null }
+            binds.add(Bind(lib.canonicalPath, "/usr/lib/$name"))
+        }
+        // One ld.so.preload serves both: $LIB is lib for the ARM64 loader and lib/x86_64-linux-gnu (or i386) for the
+        // runtime's. libblsession turns FEX's execveat of /proc/self/exe into the execve proot supports.
+        val listed = FileUtils.readString(File(rootfs, "etc/ld.so.preload")) ?: ""
+        val lines = ArrayList<String>()
+        for (name in FEX_PRELOADS) {
+            val builds = listOf(
+                File(rootfs, "usr/local/lib/$name") to "lib",
+                File(rootfs, "usr/local/lib/droiddeck-fex/x86_64/$name") to "lib/x86_64-linux-gnu",
+                File(rootfs, "usr/local/lib/droiddeck-fex/i386/$name") to "lib/i386-linux-gnu",
+            )
+            if (name !in listed || builds.any { !it.first.isFile }) continue
+            builds.forEach { (lib, sub) -> binds.add(Bind(lib.path, "$FEX_DIR/$sub/$name")) }
+            lines.add("$FEX_DIR/\$LIB/$name")
+        }
+        if ("libblsession.so" !in lines.joinToString()) Log.w(TAG, "fex: no libblsession; x86 programs cannot start others")
+        val preload = File(dir, "ld.so.preload").apply { writeText(lines.joinToString("\n", postfix = "\n")) }
+        binds.add(Bind(preload.path, "/etc/ld.so.preload"))
+        val config = File(dir, "fex-config").apply { mkdirs() }
+        val cache = File(rootfs, "root/.cache/droiddeck-fex-flatpak").apply { mkdirs() }
+        binds.add(Bind(config.path, "$FEX_DIR/config"))
+        binds.add(Bind(cache.path, "$FEX_DIR/cache"))
+        env["FEX_APP_CONFIG_LOCATION"] = "$FEX_DIR/config/"
+        env["FEX_APP_DATA_LOCATION"] = "$FEX_DIR/config/"
+        env["FEX_APP_CACHE_LOCATION"] = "$FEX_DIR/cache/"
+        // Each sandbox gets its own server: the session's x86 Steam has one on the default socket, set up for its RootFS.
+        env["FEX_SERVERSOCKETPATH"] = "droiddeck-bwrap-${dir.name}-${android.os.SystemClock.elapsedRealtime()}.FEXServer.Socket"
+        // The session's tunables are for the ARM64 libc; an x86 ld.so copying them under FEX fails in sbrk.
+        env.remove("GLIBC_TUNABLES")
+        return binds
     }
 
     private const val GPU_DIR = "/run/droiddeck-gpu"
@@ -219,11 +279,11 @@ object BwrapSpawner {
         val binds = ArrayList<Bind>()
         val paths = libs.map { lib -> "$PRELOAD_DIR/${lib.substringAfterLast('/')}".also { binds.add(Bind(rootfs + lib, it)) } }
         env["LD_PRELOAD"] = (paths + listOfNotNull(env["LD_PRELOAD"]?.takeIf { it.isNotBlank() })).joinToString(":")
-        env["FAKE_EVDEV_DIR"]?.let { File(it).parent }?.let { dev ->
-            binds.addAll(bindsFor(session, rootfs, dev, dev))
-        }
-        return binds
+        return binds + fakeEvdev(session, rootfs, env)
     }
+
+    private fun fakeEvdev(session: List<Bind>, rootfs: String, env: Map<String, String>): List<Bind> =
+        env["FAKE_EVDEV_DIR"]?.let { File(it).parent }?.let { dev -> bindsFor(session, rootfs, dev, dev) } ?: emptyList()
 
     private const val PRELOAD_DIR = "/run/droiddeck-preload"
 
@@ -282,6 +342,7 @@ object BwrapSpawner {
         val verbose = plan.env["DROIDDECK_PROOT_VERBOSE"]?.toIntOrNull()
         if (verbose != null) { cmd.add(1, "-v"); cmd.add(2, verbose.toString()) }
         plan.binds.forEach { cmd.add("-b"); cmd.add(it.spec) }
+        cmd.addAll(plan.launcher)
         cmd.add("/usr/bin/env")
         cmd.add("-i")
         plan.env.forEach { (k, v) -> cmd.add("$k=$v") }

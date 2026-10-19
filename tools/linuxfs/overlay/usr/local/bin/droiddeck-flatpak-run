@@ -11,6 +11,11 @@ if [ -n "${BL_INSIDE:-}" ] || [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
   export XDG_SESSION_TYPE=x11
   socket=(--nosocket=wayland --socket=x11)
 fi
+# An app installed only for x86-64 is found only when asked for; droiddeck-bwrap starts it under FEX.
+apps=$HOME/.local/share/flatpak/app
+if [ -n "${1:-}" ] && [ -d "$apps/$1/x86_64" ] && [ ! -d "$apps/$1/$(flatpak --default-arch 2>/dev/null)" ]; then
+  socket+=(--arch=x86_64)
+fi
 echo "== flatpak run ${socket[*]} $*"
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then
   exec dbus-run-session -- flatpak run "${socket[@]}" "$@"

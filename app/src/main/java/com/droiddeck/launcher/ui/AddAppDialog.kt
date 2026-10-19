@@ -143,6 +143,7 @@ internal fun AddAppDialog(runtimeReady: Boolean, onDismiss: () -> Unit, onAdd: (
 
     val repoId = UserApps.githubRepo(repo)
     val flatpakId = UserApps.flatpakId(flatpak)
+    val flatpakRepo = UserApps.flatpakRepo(flatpak)
     val custom = name.trim().takeIf { it.isNotEmpty() }
     val request: Pair<UserApps.Request, String>? = when (source) {
         AddSource.SCRIPT -> scriptPath?.takeIf { it.endsWith(".sh", ignoreCase = true) }?.let { File(it) }
@@ -152,6 +153,7 @@ internal fun AddAppDialog(runtimeReady: Boolean, onDismiss: () -> Unit, onAdd: (
         AddSource.GITHUB -> repoId?.let { UserApps.Request(UserApps.Source.GitHub(it), custom, iconPath) to (custom ?: it) }
         AddSource.FLATPAK -> bundlePath?.takeIf { it.endsWith(".flatpak", ignoreCase = true) }?.let { File(it) }
             ?.let { UserApps.Request(UserApps.Source.FlatpakBundle(it), custom, iconPath) to (custom ?: it.nameWithoutExtension) }
+            ?: flatpakRepo?.let { UserApps.Request(UserApps.Source.FlatpakRepo(it), custom, iconPath) to (custom ?: it.substringAfterLast('/').substringBefore('.')) }
             ?: flatpakId?.let { UserApps.Request(UserApps.Source.Flatpak(it), custom, iconPath) to (custom ?: it) }
     }
     val busy = UserAppsState.working
@@ -201,7 +203,7 @@ internal fun AddAppDialog(runtimeReady: Boolean, onDismiss: () -> Unit, onAdd: (
                                     CheckedField(
                                         flatpak, { flatpak = it.take(200); bundlePath = null }, stringResource(R.string.add_app_flatpak_id),
                                         stringResource(R.string.add_app_flatpak_placeholder),
-                                        stringResource(R.string.add_app_flatpak_invalid).takeIf { flatpak.isNotBlank() && flatpakId == null },
+                                        stringResource(R.string.add_app_flatpak_invalid).takeIf { flatpak.isNotBlank() && flatpakId == null && flatpakRepo == null },
                                     )
                                     Small(stringResource(R.string.add_app_flatpak_bundle_hint))
                                     FileRow(bundlePath) {

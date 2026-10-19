@@ -4,12 +4,15 @@ import android.util.Base64
 import org.robolectric.RuntimeEnvironment
 import com.droiddeck.launcher.runtime.BwrapSpawner.Bind
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -117,5 +120,67 @@ class BwrapSpawnerPlanTest {
         assertEquals(listOf("/app/bin/game"), plan.argv)
         assertEquals("/app", plan.cwd)
         assertEquals("org.example.Game", plan.env["FLATPAK_ID"])
+    }
+
+    private fun elf(file: File, machine: Int) = file.apply {
+        parentFile!!.mkdirs()
+        writeBytes(ByteArray(64).also { b ->
+            "\u007fELF".toByteArray().copyInto(b); b[4] = 2; b[5] = 1; b[18] = machine.toByte()
+        })
+    }
+
+    private fun x86Request() = request(
+        op("t" to "bind", "src" to "/runtime-files", "dest" to "/usr", "ro" to true),
+        op("t" to "symlink", "target" to "usr/lib", "dest" to "/lib"),
+    )
+
+    private fun fexInRootfs(rootfs: File) {
+        for (name in listOf("usr/local/bin/FEX", "usr/local/bin/FEXServer", "usr/lib/ld-linux-aarch64.so.1", "usr/lib/libc.so.6",
+                            "usr/lib/libm.so.6", "usr/lib/libstdc++.so.6", "usr/lib/libgcc_s.so.1", "usr/local/lib/libxxhash.so.0")) {
+            elf(File(rootfs, name), LinuxFex.ELF_AARCH64)
+        }
+        for (dir in listOf("usr/local/lib", "usr/local/lib/droiddeck-fex/x86_64", "usr/local/lib/droiddeck-fex/i386")) {
+            for (name in listOf("libblsession.so", "libfakeinput.so")) File(rootfs, "$dir/$name").apply { parentFile!!.mkdirs(); writeText("") }
+        }
+        File(rootfs, "etc/ld.so.preload").apply { parentFile!!.mkdirs() }
+            .writeText("/usr/local/lib/libblsession.so\n/usr/local/lib/libfakeinput.so\n/usr/local/lib/libblfastpath.so\n")
+    }
+
+    @Test fun anX86RuntimeStartsUnderFexWithPreloadsForBothArches() {
+        val context = RuntimeEnvironment.getApplication()
+        val rootfs = LinuxRuntime.rootDir(context)
+        fexInRootfs(rootfs)
+        elf(File(runtime, "bin/env"), LinuxFex.ELF_X86_64)
+        try {
+            val plan = BwrapSpawner.plan(context, x86Request(), dir)
+            assertEquals(listOf("/run/droiddeck-fex/bin/FEX"), plan.launcher)
+            assertTrue(Bind(File(rootfs, "usr/local/bin/FEXServer").path, "/run/droiddeck-fex/bin/FEXServer") in plan.binds)
+            assertTrue(plan.binds.any { it.guest == "/usr/lib/ld-linux-aarch64.so.1" })
+            assertTrue(plan.binds.any { it.guest == "/usr/lib/libxxhash.so.0" })
+            assertTrue(plan.binds.any { it.guest == "/run/droiddeck-fex/lib/x86_64-linux-gnu/libblsession.so" })
+            val preload = File(plan.binds.single { it.guest == "/etc/ld.so.preload" }.host).readText()
+            assertEquals("/run/droiddeck-fex/\$LIB/libblsession.so\n/run/droiddeck-fex/\$LIB/libfakeinput.so\n", preload)
+            assertNull(plan.env["LD_PRELOAD"])
+            assertNull(plan.env["VK_ICD_FILENAMES"])
+            assertTrue(plan.env.getValue("FEX_SERVERSOCKETPATH").endsWith(".FEXServer.Socket"))
+            assertEquals("/run/droiddeck-fex/config/", plan.env["FEX_APP_CONFIG_LOCATION"])
+        } finally {
+            rootfs.deleteRecursively()
+        }
+    }
+
+    @Test fun anArmRuntimeIsStartedDirectly() {
+        val context = RuntimeEnvironment.getApplication()
+        elf(File(runtime, "bin/env"), LinuxFex.ELF_AARCH64)
+        val plan = BwrapSpawner.plan(context, x86Request(), dir)
+        assertEquals(emptyList<String>(), plan.launcher)
+        assertFalse(plan.binds.any { it.guest == "/etc/ld.so.preload" })
+    }
+
+    @Test fun anX86RuntimeWithoutFexIsRefused() {
+        val context = RuntimeEnvironment.getApplication()
+        elf(File(runtime, "bin/env"), LinuxFex.ELF_X86_64)
+        File(LinuxRuntime.rootDir(context), "usr/local/bin/FEX").delete()
+        assertThrows(IOException::class.java) { BwrapSpawner.plan(context, x86Request(), dir) }
     }
 }

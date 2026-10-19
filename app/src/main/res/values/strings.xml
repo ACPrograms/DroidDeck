@@ -181,7 +181,7 @@
     <string name="app_fex_not_ready">This program is built for %1$s PCs and runs through FEX, which is not set up yet. Open Steam once while signed in: DroidDeck has it download FEX and the Steam Linux Runtime it needs, then this opens.</string>
     <string name="session_end_program">This program</string>
     <string name="session_end_fex_missing">%1$s is built for x86 PCs and runs through FEX, which is not installed yet. Start Steam once while signed in and let it download FEX and the Steam Linux Runtime, then start this again.</string>
-    <string name="add_app_flatpak_hint">A Flathub app ID or its Flathub page. Flatpak is set up first if it is not yet.</string>
+    <string name="add_app_flatpak_hint">A Flathub app ID, its Flathub page, or a .flatpakrepo link such as GeForce NOW\'s. Flatpak is set up first if it is not yet. Apps with only an x86-64 build run under FEX.</string>
     <string name="add_app_file">File</string>
     <string name="add_app_no_file">No file chosen</string>
     <string name="add_app_choose_file">Choose file</string>
@@ -194,7 +194,7 @@
     <string name="add_app_repository_invalid">Not a GitHub repository</string>
     <string name="add_app_flatpak_id">App ID</string>
     <string name="add_app_flatpak_placeholder">org.ppsspp.PPSSPP</string>
-    <string name="add_app_flatpak_invalid">Not a Flathub app ID</string>
+    <string name="add_app_flatpak_invalid">Not a Flathub app ID or .flatpakrepo link</string>
     <string name="add_app_flatpak_bundle_hint">Or a .flatpak file, for an app not on Flathub.</string>
     <string name="add_app_pick_flatpak">Choose a .flatpak file</string>
     <string name="add_app_source">Source</string>

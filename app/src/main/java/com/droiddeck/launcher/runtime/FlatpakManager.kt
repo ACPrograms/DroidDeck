@@ -19,7 +19,7 @@ object FlatpakManager {
     @Volatile var busy: String? = null
         private set
 
-    class App(val id: String, val name: String, val icon: File?, val branch: String, val summary: String?)
+    class App(val id: String, val name: String, val icon: File?, val branch: String, val summary: String?, val arch: String = arch())
 
     fun ready(context: Context): Boolean {
         val root = LinuxRuntime.rootDir(context)
@@ -33,24 +33,28 @@ object FlatpakManager {
         else -> "aarch64"
     }
 
+    /** The arches apps can be installed for: this device's, then x86-64 under FEX. */
+    private fun arches(): List<String> = listOf(arch(), "x86_64").distinct()
+
+    private fun activeBranch(app: File): Pair<String, File>? = arches().firstNotNullOfOrNull { arch ->
+        File(app, arch).listFiles()?.firstOrNull { File(it, "active").exists() }?.let { arch to it }
+    }
+
     fun installedApps(context: Context): List<App> {
         val apps = File(LinuxRuntime.rootDir(context), "$USER_DIR/app")
-        val arch = arch()
         return apps.listFiles()?.mapNotNull { dir ->
             val id = dir.name
-            val archDir = File(dir, arch)
-            val branch = archDir.listFiles()?.firstOrNull { File(it, "active").exists() } ?: return@mapNotNull null
+            val (arch, branch) = activeBranch(dir) ?: return@mapNotNull null
             val active = File(branch, "active")
             val export = File(active, "export/share")
             val desktop = FileUtils.readString(File(export, "applications/$id.desktop"))
             val name = desktop?.let { entry(it, "Name") } ?: id.substringAfterLast('.')
             val summary = desktop?.let { entry(it, "Comment") }
-            App(id, name, icon(export, id), branch.name, summary)
+            App(id, name, icon(export, id), branch.name, summary, arch)
         }?.sortedBy { it.name.lowercase() } ?: emptyList()
     }
 
-    fun isInstalled(context: Context, id: String): Boolean =
-        File(LinuxRuntime.rootDir(context), "$USER_DIR/app/$id/${arch()}").listFiles()?.any { File(it, "active").exists() } == true
+    fun isInstalled(context: Context, id: String): Boolean = activeBranch(File(LinuxRuntime.rootDir(context), "$USER_DIR/app/$id")) != null
 
     private fun entry(desktop: String, key: String): String? {
         var inMain = false
@@ -173,6 +177,12 @@ object FlatpakManager {
     fun installBundle(context: Context, guestPath: String, onProgress: (String, Int) -> Unit): Pair<String?, String?> {
         var id: String? = null
         val problem = transaction(context, "install-bundle", guestPath, onProgress) { id = it.optString("id").ifEmpty { null } }
+        return id to problem
+    }
+    /** Adds the remote a .flatpakrepo file describes and installs the one app it carries (GeForce NOW's is one). */
+    fun installRepo(context: Context, url: String, onProgress: (String, Int) -> Unit): Pair<String?, String?> {
+        var id: String? = null
+        val problem = transaction(context, "install-repo", url, onProgress) { id = it.optString("id").ifEmpty { null } }
         return id to problem
     }
     fun update(context: Context, id: String?, onProgress: (String, Int) -> Unit) = transaction(context, "update", id, onProgress)

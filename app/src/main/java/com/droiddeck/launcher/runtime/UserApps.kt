@@ -58,6 +58,7 @@ object UserApps {
         class GitHub(val repo: String) : Source()
         class Flatpak(val id: String) : Source()
         class FlatpakBundle(val file: File) : Source()
+        class FlatpakRepo(val url: String) : Source()
     }
 
     class Request(val source: Source, val name: String?, val icon: String?, val meta: Map<String, String> = emptyMap())
@@ -111,6 +112,7 @@ object UserApps {
                 is Source.GitHub -> addFromGitHub(context, s.repo, name, icon, onProgress)
                 is Source.Flatpak -> addFlatpak(context, s.id, name, icon, onProgress)
                 is Source.FlatpakBundle -> addFlatpakBundle(context, s.file, name, icon, onProgress)
+                is Source.FlatpakRepo -> addFlatpakRepo(context, s.url, name, icon, onProgress)
             }
         }
     }
@@ -390,6 +392,17 @@ object UserApps {
     fun flatpakId(input: String): String? {
         val t = input.trim().removeSuffix("/").substringAfterLast('/')
         return t.takeIf { Regex("^[A-Za-z][\\w-]*(\\.[A-Za-z0-9_][\\w-]*){2,}$").matches(it) }
+    }
+
+    fun flatpakRepo(input: String): String? =
+        input.trim().takeIf { it.startsWith("https://") && it.substringBefore('?').endsWith(".flatpakrepo", ignoreCase = true) && ' ' !in it }
+
+    private fun addFlatpakRepo(context: Context, url: String, name: String?, icon: File?, onProgress: (String, Int) -> Unit): String? {
+        if (!FlatpakManager.ready(context)) FlatpakManager.setup(context, onProgress)?.let { return it }
+        val (id, problem) = FlatpakManager.installRepo(context, url, onProgress)
+        problem?.let { return it }
+        if (id != null) customiseFlatpak(context, id, name, icon)
+        return null
     }
 
     private fun addFlatpak(context: Context, id: String, name: String?, icon: File?, onProgress: (String, Int) -> Unit): String? {

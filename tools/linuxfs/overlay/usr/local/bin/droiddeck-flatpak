@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 import json
 import os
+import re
 import sys
+import urllib.request
 
 os.environ.setdefault("FLATPAK_BWRAP", "/usr/local/bin/droiddeck-bwrap")
 
@@ -11,6 +13,8 @@ gi.require_version("Flatpak", "1.0")
 from gi.repository import Flatpak, Gio, GLib
 
 REMOTE = "flathub"
+FEX = "/usr/local/bin/FEX"
+X86 = "x86_64"
 
 
 def prepare_rootfs():
@@ -109,31 +113,71 @@ def run(t, state, report_done=True):
     return 0
 
 
-def install(app_id):
+def arches():
+    """This device's arch, then x86-64 when FEX is there to run it (droiddeck-bwrap starts those sandboxes under it)."""
+    native = Flatpak.get_default_arch()
+    return [native] + ([X86] if native != X86 and os.access(FEX, os.X_OK) else [])
+
+
+def remote_branch(inst, remote, app_id):
+    """(arch, branch) of the first arch and branch the remote has the app for."""
+    last = None
+    for arch in arches():
+        for candidate in ("stable", "master"):
+            try:
+                return arch, inst.fetch_remote_ref_sync(remote, Flatpak.RefKind.APP, app_id, arch, candidate, None).get_branch()
+            except GLib.Error as err:
+                last = err
+    raise LookupError(last.message if last else "no branch")
+
+
+def install(app_id, remote=REMOTE):
     inst = installation()
-    arch = Flatpak.get_default_arch()
     if app_ref(inst, app_id) is not None:
-        emit(e="done", note="already installed")
+        emit(e="done", id=app_id, note="already installed")
         return 0
-    branch, last = None, None
-    for candidate in ("stable", "master"):
-        try:
-            branch = inst.fetch_remote_ref_sync(REMOTE, Flatpak.RefKind.APP, app_id, arch, candidate, None).get_branch()
-            break
-        except GLib.Error as err:
-            last = err
-    if branch is None:
-        emit(e="error", message="%s is not on Flathub for %s (%s)" % (app_id, arch, last.message if last else "no branch"))
+    try:
+        arch, branch = remote_branch(inst, remote, app_id)
+    except LookupError as err:
+        emit(e="error", message="%s is not on %s for %s (%s)" % (app_id, remote, " or ".join(arches()), err))
         return 1
+    if arch == X86:
+        emit(e="warning", message="%s has no %s build; installing the x86-64 one, which runs under FEX" % (app_id, arches()[0]))
     t, state = transaction(inst)
-    t.add_install(REMOTE, "app/%s/%s/%s" % (app_id, arch, branch), None)
+    t.add_install(remote, "app/%s/%s/%s" % (app_id, arch, branch), None)
     rc = run(t, state, report_done=False)
     if rc == 0 and app_ref(installation(), app_id) is None:
         emit(e="error", message="%s did not install; see flatpak-install.log" % app_id)
         return 1
     if rc == 0:
-        emit(e="done")
+        emit(e="done", id=app_id)
     return rc
+
+
+def install_repo(url):
+    """Adds the remote a .flatpakrepo file describes (like NVIDIA's for GeForce NOW) and installs the app it carries."""
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            data = response.read(1 << 20)
+    except (OSError, ValueError) as err:
+        emit(e="error", message="could not download %s (%s)" % (url, err))
+        return 1
+    title = re.search(rb"^Title=(.+)$", data, re.M)
+    name = re.sub(r"[^A-Za-z0-9_-]", "", (title.group(1).decode("utf-8", "replace") if title else "")) or "repo"
+    inst = installation()
+    try:
+        remote = Flatpak.Remote.new_from_file(name, GLib.Bytes.new(data))
+        inst.add_remote(remote, True, None)
+        inst.update_remote_sync(name, None)
+        refs = inst.list_remote_refs_sync(name, None)
+    except GLib.Error as err:
+        emit(e="error", message="%s is not a Flatpak repository file (%s)" % (url, err.message))
+        return 1
+    apps = sorted({r.get_name() for r in refs if r.get_kind() == Flatpak.RefKind.APP and r.get_arch() in arches()})
+    if len(apps) != 1:
+        emit(e="error", message="%s carries %s; add one by its ID" % (name, ", ".join(apps) if apps else "no app for " + " or ".join(arches())))
+        return 1
+    return install(apps[0], name)
 
 
 def install_bundle(path):
@@ -237,15 +281,17 @@ def updates():
 
 def main():
     if len(sys.argv) < 2:
-        sys.stderr.write(__doc__ or "usage: droiddeck-flatpak install|install-bundle|uninstall|update|updates|prune [app-id|file]\n")
+        sys.stderr.write(__doc__ or "usage: droiddeck-flatpak install|install-bundle|install-repo|uninstall|update|updates|prune [app-id|file]\n")
         return 2
     cmd, args = sys.argv[1], sys.argv[2:]
-    if cmd in ("install", "install-bundle", "update"):
+    if cmd in ("install", "install-bundle", "install-repo", "update"):
         prepare_rootfs()
     if cmd == "install" and args:
         return install(args[0])
     if cmd == "install-bundle" and args:
         return install_bundle(args[0])
+    if cmd == "install-repo" and args:
+        return install_repo(args[0])
     if cmd == "uninstall" and args:
         return uninstall(args[0])
     if cmd == "update":
@@ -254,7 +300,7 @@ def main():
         return updates()
     if cmd == "prune":
         return prune()
-    sys.stderr.write("usage: droiddeck-flatpak install|install-bundle|uninstall|update|updates|prune [app-id|file]\n")
+    sys.stderr.write("usage: droiddeck-flatpak install|install-bundle|install-repo|uninstall|update|updates|prune [app-id|file]\n")
     return 2
 
 
