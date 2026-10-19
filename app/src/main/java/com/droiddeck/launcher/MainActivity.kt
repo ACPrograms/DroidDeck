@@ -904,9 +904,10 @@ class MainActivity : ComponentActivity() {
                         onInstallPackage = { id -> installPackage(id) },
                         onRemovePackage = { id -> removePackage(id) },
                         onRuntime = { onRuntimeButton() },
-                        onVkBridge = { on -> SessionPrefs.setVkBridge(this, on); vkBridge = on },
+                        onVkBridge = { on -> SessionPrefs.setVkBridge(this, on); SessionPrefs.setMaliFallbackByAuto(this, ""); vkBridge = on },
                         onVenus = { on ->
                             SessionPrefs.setVenus(this, on)
+                            SessionPrefs.setMaliFallbackByAuto(this, "")
                             venus = on
                             if (on && !com.droiddeck.launcher.core.DeviceSupport.adreno()) Thread({
                                 com.droiddeck.launcher.gpu.VulkanInfo.query()["api"]?.let { SessionPrefs.setHostVulkanApi(this, it) }
@@ -1192,6 +1193,9 @@ class MainActivity : ComponentActivity() {
             com.droiddeck.launcher.frontend.GamesFolderMigration.run(this)
             SessionLogShare.clear(this)
             SessionArtifacts.finishAbandoned(this)
+            if (SessionPrefs.takeMemoryKillNotice(this)) runOnUiThread {
+                android.widget.Toast.makeText(this, R.string.session_killed_for_memory, android.widget.Toast.LENGTH_LONG).show()
+            }
             SessionArtifacts.scrubOlder(this)
             SessionArtifacts.prune(this)
         }, "finish-abandoned").start()

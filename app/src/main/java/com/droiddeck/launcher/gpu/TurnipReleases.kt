@@ -63,7 +63,7 @@ object TurnipReleases {
         // <Id>-Pair.zip: open drivers for GPUs that are not Adreno (PanVK for Mali, RADV for
         // Xclipse), both halves in one zip. One release per driver, replaced in place on each
         // rebuild; every one is a test build, published as a pre-release.
-        Source("Non-Adreno", NON_ADRENO_REPO, prerelease = true) { name, _ ->
+        Source(NON_ADRENO_LABEL, NON_ADRENO_REPO, prerelease = true) { name, _ ->
             val m = Regex("""^(RADV-Xclipse(?:-[A-Za-z0-9]+)*?|PanVK-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*?)-Pair\.zip$""").find(name) ?: return@Source null
             val key = DriverPairs.nonAdreno(m.groupValues[1])
             Kind(false, "Android + Linux · " + DriverPairs.nonAdrenoName(key), key, bundle = true)
@@ -71,6 +71,7 @@ object TurnipReleases {
     )
 
     private const val NON_ADRENO_REPO = "The412Banner/droiddeck-nonadreno-drivers"
+    const val NON_ADRENO_LABEL = "Non-Adreno"
 
     private fun sources(): List<Source> =
         if (com.droiddeck.launcher.core.DeviceSupport.adreno()) SOURCES.filter { it.repo != NON_ADRENO_REPO } else SOURCES
@@ -88,7 +89,10 @@ object TurnipReleases {
         val sources = sources()
         for (src in sources) {
             try {
-                val releases = JSONArray(get(context, "https://api.github.com/repos/${src.repo}/releases?per_page=15"))
+                // The non-Adreno repo keeps one release per driver plus many component builds (gamescope,
+                // Venus): its driver pairs fall past the first 15, so it is read in one full page.
+                val perPage = if (src.repo == NON_ADRENO_REPO) 100 else 15
+                val releases = JSONArray(get(context, "https://api.github.com/repos/${src.repo}/releases?per_page=$perPage"))
                 val seen = HashSet<String>()
                 var newest: String? = null
                 for (i in 0 until releases.length()) {

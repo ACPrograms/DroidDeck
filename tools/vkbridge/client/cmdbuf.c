@@ -170,8 +170,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkb_ep_vkBeginCommandBuffer(VkCommandBuffer comma
     vkb_enc *e = vkb_cmd_record_begin(commandBuffer, VKB_CMD_vkBeginCommandBuffer);
     vkb_enc_u64(e, cb->obj.remote);
     tls_encoding = cb;
-    vkb_enc_u8(e, pBeginInfo != NULL);
-    if (pBeginInfo) vkb_enc_VkCommandBufferBeginInfo(e, pBeginInfo);
+    /* The server decodes a present pointer as a count and that many structs (vkb_sv_vkBeginCommandBuffer,
+     * as vkb_wire_vkBeginCommandBuffer sends it). Without the count it read 0 and handed Mali a zeroed
+     * 16-byte begin info, so flags and pInheritanceInfo came from stale memory: the driver crashed in
+     * vkBeginCommandBuffer at 0x10 whenever those flags had RENDER_PASS_CONTINUE set. */
+    if (pBeginInfo) {
+        vkb_enc_u8(e, 1);
+        vkb_enc_u32(e, 1);
+        vkb_enc_VkCommandBufferBeginInfo(e, pBeginInfo);
+    } else {
+        vkb_enc_u8(e, 0);
+    }
     tls_encoding = NULL;
     vkb_cmd_record_end(commandBuffer);
     return cb->broken ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_SUCCESS;

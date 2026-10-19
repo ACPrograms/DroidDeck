@@ -483,6 +483,31 @@ object SessionPrefs {
         prefs(context).edit().putBoolean("steamGpuCompositing", on && steamGpuCompositingAllowed()).apply()
     }
 
+    /**
+     * The route Auto switched on for a Mali that has no open driver pair yet ("venus" or "bridge"),
+     * or "" when the user's own Setup switches are in charge. Auto turns only its own choice off
+     * again once a pair is installed; a Setup switch the user flips clears this.
+     */
+    /** The last session's process was killed by Android for memory; the launcher says so once. */
+    fun takeMemoryKillNotice(context: Context): Boolean {
+        val on = prefs(context).getBoolean("memoryKillNotice", false)
+        if (on) prefs(context).edit().putBoolean("memoryKillNotice", false).apply()
+        return on
+    }
+
+    fun setMemoryKillNotice(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("memoryKillNotice", on).apply()
+    }
+
+    fun maliFallbackByAuto(context: Context): String = prefs(context).getString("maliFallbackByAuto", "").orEmpty()
+
+    /** Whether [maliFallbackByAuto] was ever recorded (builds before it left the bridge on without saying who). */
+    fun maliFallbackKnown(context: Context): Boolean = prefs(context).contains("maliFallbackByAuto")
+
+    fun setMaliFallbackByAuto(context: Context, route: String) {
+        prefs(context).edit().putString("maliFallbackByAuto", route).apply()
+    }
+
     fun setVenus(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("venus", on).apply()
     }
