@@ -164,6 +164,8 @@ class BwrapSpawnerPlanTest {
             assertNull(plan.env["VK_ICD_FILENAMES"])
             assertTrue(plan.env.getValue("FEX_SERVERSOCKETPATH").endsWith(".FEXServer.Socket"))
             assertEquals("/run/droiddeck-fex/config/", plan.env["FEX_APP_CONFIG_LOCATION"])
+            assertTrue(plan.binds.any { it.guest == "/proc" })
+            assertTrue(plan.binds.any { it.guest == "/dev" })
         } finally {
             rootfs.deleteRecursively()
         }
