@@ -1041,8 +1041,13 @@ object ComponentsManager {
         val p = proton(context, protonId)
         val state = loadState(context)
         val entry = state.sub("active").optJSONObject(p.id)?.optJSONObject(comp)
-        if (entry?.optString("protonVersion") == p.version && originalFile(context, p, comp).isFile)
+        val sameProton = entry?.optString("protonVersion") == p.version
+        if (sameProton && originalFile(context, p, comp).isFile)
             return restore(context, protonId, comp, safeName(p.version))
+        if (sameProton) {
+            Log.w(TAG, "${p.name}: its own ${LABEL[comp]} copy is gone; keeping ${entry?.optString("label")}")
+            return "${LABEL[comp]}: ${p.name} keeps ${entry?.optString("label")} (its own copy is gone)"
+        }
         state.sub("active").optJSONObject(p.id)?.remove(comp)
         saveState(context, state)
         "${LABEL[comp]}: ${p.name} keeps its own copy"
@@ -1064,11 +1069,13 @@ object ComponentsManager {
         if (rules.isEmpty() && !bridgeSession) return null
         val installed = protons(context)
         val lines = mutableListOf<String>()
-        if (bridgeSession) {
+        fun each(p: Proton, what: () -> String): String =
+            runCatching(what).getOrElse { e -> Log.w(TAG, "${p.name}: ${e.message}", e); "${p.name}: ${e.message ?: e.javaClass.simpleName}" }
+        if (bridgeSession && vulkan != null) {
             val state = loadState(context)
             for (p in installed) {
                 val entry = state.optJSONObject("active")?.optJSONObject(p.id)?.optJSONObject("dxvk")
-                if (bridgeRule == null && autoChoiceStale(entry, null)) lines.add(undoAuto(p.id, "dxvk"))
+                if (bridgeRule == null && autoChoiceStale(entry, null)) lines.add(each(p) { undoAuto(p.id, "dxvk") })
             }
         }
         for ((rule, auto) in rules) {
@@ -1085,7 +1092,7 @@ object ComponentsManager {
                 continue
             }
             if (auto) lines.add("${vulkan?.label}: DXVK ${rule.file}")
-            lines.add(targets.joinToString("; ") { if (auto) applyAuto(it.id, rule.file) else apply(it.id, rule.file) })
+            lines.add(targets.joinToString("; ") { p -> if (auto) each(p) { applyAuto(p.id, rule.file) } else apply(p.id, rule.file) })
         }
         return lines.filter { it.isNotEmpty() }.joinToString("; ").ifEmpty { null }
     }

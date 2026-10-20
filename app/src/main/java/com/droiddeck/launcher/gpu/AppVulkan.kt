@@ -27,18 +27,23 @@ data class AppVulkan(
             if (!DeviceSupport.vkBridge(context)) return null
             val native = VulkanInfo.query()
             val file = File(VkBridgeComponent.cacheDir(context), BRIDGE_FILE)
-            val fromBridge = FileUtils.readString(file)?.let { fromBridgeFile(it, native["device"]) }
+            val fromBridge = FileUtils.readString(file)?.let { fromBridgeFile(it, native["device"], native["api"]) }
             val found = fromBridge ?: fromDriver(native)
             Log.i(TAG, found?.label ?: "unknown (driver query: ${native["error"] ?: "no api line"})")
             return found
         }
 
-        internal fun fromBridgeFile(text: String, driverDevice: String?): AppVulkan? {
+        internal fun fromBridgeFile(text: String, driverDevice: String?, driverApi: String? = null): AppVulkan? {
             val map = keyValues(text)
             val device = map["device"]
             if (device != null && driverDevice != null && device != driverDevice) return null
-            val (major, minor) = version(map["api"]) ?: return null
-            return AppVulkan(major, minor, bool(map["shader_int64"]), map["max_push_constants"]?.toIntOrNull(), "bridge")
+            val fileDriver = version(map["driver_api"])
+            val native = version(driverApi)
+            if (fileDriver != null && native != null && fileDriver != native) return null
+            val promoted = map["promotion"]?.trim()?.lowercase() == "on"
+            val (major, minor) = (if (promoted) version(map["api"]) else fileDriver ?: version(map["api"])) ?: return null
+            return AppVulkan(major, minor, bool(map["shader_int64"]), map["max_push_constants"]?.toIntOrNull(),
+                if (promoted) "bridge, promoted" else "bridge")
         }
 
         internal fun fromDriver(map: Map<String, String>): AppVulkan? {

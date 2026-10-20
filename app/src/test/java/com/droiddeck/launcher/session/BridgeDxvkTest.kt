@@ -59,11 +59,22 @@ class BridgeDxvkTest {
     }
 
     @Test fun theBridgesFileWinsForItsOwnGpuOnly() {
-        val text = "device=Mali-G710 MC10\napi=1.2.177\ndriver_api=1.1.177\nshader_int64=0\nmax_push_constants=128\n"
-        assertEquals(promoted, AppVulkan.fromBridgeFile(text, "Mali-G710 MC10"))
-        assertEquals(promoted, AppVulkan.fromBridgeFile(text, null))
+        val text = "device=Mali-G710 MC10\napi=1.2.177\ndriver_api=1.1.177\npromotion=on\nshader_int64=0\nmax_push_constants=128\n"
+        val on = promoted.copy(source = "bridge, promoted")
+        assertEquals(on, AppVulkan.fromBridgeFile(text, "Mali-G710 MC10"))
+        assertEquals(on, AppVulkan.fromBridgeFile(text, null))
+        assertEquals(on, AppVulkan.fromBridgeFile(text, "Mali-G710 MC10", "1.1.177"))
         assertNull(AppVulkan.fromBridgeFile(text, "Mali-G720 Immortalis MC12"))
         assertNull(AppVulkan.fromBridgeFile("device=x\n", null))
+    }
+
+    @Test fun withoutPromotionOnTheDriversVersionCounts() {
+        val g710File = g710.copy(source = "bridge")
+        val off = "device=Mali-G710 MC10\napi=1.1.177\ndriver_api=1.1.177\npromotion=off\nshader_int64=0\nmax_push_constants=128\n"
+        assertEquals(g710File, AppVulkan.fromBridgeFile(off, "Mali-G710 MC10", "1.1.177"))
+        val old = "device=Mali-G710 MC10\napi=1.3.177\ndriver_api=1.1.177\nshader_int64=0\nmax_push_constants=128\n"
+        assertEquals(g710File, AppVulkan.fromBridgeFile(old, "Mali-G710 MC10"))
+        assertNull(AppVulkan.fromBridgeFile(off, "Mali-G710 MC10", "1.3.212"))
     }
 
     @Test fun anAdrenoSessionIsNotTouched() {
@@ -118,6 +129,30 @@ class BridgeDxvkTest {
         run(full, applyAuto = auto, undoAuto = undo)
         assertEquals("bundled DXVK experimental-11", d3d11.readText())
         assertNull(state().getJSONObject("active").optJSONObject("proton-exp")?.optJSONObject("dxvk"))
+    }
+
+    @Test fun aFailedDetectionKeepsTheLastAutomaticChoice() {
+        proton("proton-exp")
+        writeState("proton-exp", JSONObject().put("file", old).put("protonVersion", "experimental-11").put("auto", true))
+        assertNull(run(null))
+        assertEquals(old, state().getJSONObject("active").getJSONObject("proton-exp").getJSONObject("dxvk").getString("file"))
+    }
+
+    @Test fun oneProtonFailingDoesNotStopTheOthers() {
+        proton("ge")
+        proton("proton-exp")
+        val applied = mutableListOf<String>()
+        val result = run(g710, applyAuto = { id, file -> if (id == "ge") error("disk full"); applied += "$id $file"; "swapped $id" })
+        assertEquals(listOf("proton-exp $old"), applied)
+        assertTrue(result!!, result.contains("disk full") && result.contains("swapped proton-exp"))
+    }
+
+    @Test fun aChoiceWhoseSavedCopyIsGoneIsKept() {
+        proton("proton-exp")
+        writeState("proton-exp", JSONObject().put("file", old).put("label", "DXVK 1.10.3").put("protonVersion", "experimental-11").put("auto", true))
+        val result = run(full, undoAuto = { id, comp -> ComponentsManager.undoAutoChoice(context, id, comp) })
+        assertTrue(result!!, result.contains("its own copy is gone"))
+        assertEquals(old, state().getJSONObject("active").getJSONObject("proton-exp").getJSONObject("dxvk").getString("file"))
     }
 
     @Test fun aProtonUpdateWithNoRuleLeftJustForgetsTheChoice() {
