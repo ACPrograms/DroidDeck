@@ -1017,6 +1017,7 @@
     <string name="games_empty">Permainan yang anda pasang dalam Steam muncul di sini selepas sesi.</string>
     <string name="games_play_steam">Main Steam</string>
     <string name="games_play_steamvr">Main SteamVR</string>
+    <string name="games_install_play_steamvr">Muat turun &amp; main SteamVR</string>
     <string name="games_launch_settings">Tetapan pelancaran</string>
     <string name="games_launch">Lancarkan</string>
     <string name="games_files">Fail permainan</string>
@@ -1343,9 +1344,12 @@
     <string name="session_proton_downloading_mb">memuat turun Proton Experimental (ARM64) · %1$d daripada %2$d MB</string>
     <string name="session_proton_checking">menyemak Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">menyahpak Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">memuat turun modul VR</string>
+    <string name="session_vr_downloading_mb">memuat turun modul VR · %1$d daripada %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Tidak dapat menghubungi katalog masa jalan. Semak sambungan dan tekan Main semula.</string>
     <string name="session_runtime_install_failed">Masa jalan Linux tidak berjaya dipasang. Semak masa jalan dalam Persediaan dan tekan Main semula.</string>
     <string name="session_desktop_install_failed">Desktop tidak berjaya dipasang (%1$s). Semak sambungan dan tekan Desktop semula.</string>
+    <string name="session_vr_install_failed">Modul VR tidak berjaya dipasang. Semak sambungan dan tekan Main SteamVR semula.</string>
     <string name="session_ended_named">%1$s terhenti secara tidak dijangka. Kongsi log dengan laporan pepijat, atau cuba lagi.</string>
     <string name="session_ended_program">Program terhenti secara tidak dijangka. Kongsi log dengan laporan pepijat, atau cuba lagi.</string>
     <string name="session_ended_desktop">Desktop terhenti secara tidak dijangka. Kongsi log dengan laporan pepijat, atau cuba lagi.</string>
@@ -2472,6 +2476,16 @@
     <string name="hand_camera_placement">Kedudukan kamera</string>
     <string name="hand_camera_placement_hint">Pastikan kamera boleh melihat anda sebelum bermain.</string>
     <string name="hand_camera_check">Semak</string>
+    <string name="vr_module_title">Modul VR</string>
+    <string name="vr_module_hint">SteamVR pada cermin mata, Quest dan Cardboard, serta penjejakan tangan dengan kamera · muat turun %1$s</string>
+    <string name="vr_module_installed">Dipasang · %1$s</string>
+    <string name="vr_module_downloading">Memuat turun modul VR</string>
+    <string name="vr_module_failed">Modul VR tidak dapat dimuat turun. Semak sambungan dan cuba lagi.</string>
+    <string name="vr_module_removing">Mengalih keluar modul VR</string>
+    <string name="vr_module_busy">Hentikan sesi sebelum mengalih keluar modul VR.</string>
+    <string name="vr_module_remove_failed">Modul VR tidak dapat dialih keluar</string>
+    <string name="vr_module_uninstall_title">Nyahpasang modul VR?</string>
+    <string name="vr_module_uninstall_text">SteamVR dan penjejakan tangan dengan kamera berhenti berfungsi sehingga anda memuat turunnya semula. SteamVR sendiri, permainan dan tetapan dikekalkan.</string>
     <string name="hand_camera_check_title">Kedudukan kamera</string>
     <string name="hand_camera_how_rear">Dirikan peranti sejauh 1.5 hingga 2 meter kira-kira pada paras dada, dengan kamera belakang menghadap anda. Kemudian masuk ke pandangan dengan tangan terhulur.</string>
     <string name="hand_camera_how_front">Dirikan peranti sejauh 1.5 hingga 2 meter kira-kira pada paras dada, dengan skrin menghadap anda. Kemudian masuk ke pandangan dengan tangan terhulur.</string>

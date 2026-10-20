@@ -11,6 +11,7 @@ import com.droiddeck.launcher.runtime.DesktopCatalog
 import com.droiddeck.launcher.runtime.LegacyNames
 import com.droiddeck.launcher.runtime.LinuxRuntime
 import com.droiddeck.launcher.runtime.ProotFastPath
+import com.droiddeck.launcher.runtime.VrPack
 import java.io.File
 
 object SessionFiles {
@@ -119,22 +120,6 @@ object SessionFiles {
         val msitools = listOf("msiinfo", "cabextract", "7z", "7z.so", "libmsi-1.0.so.0", "libgsf-1.so.114", "libgcab-1.0.so.0")
             .map { "usr/local/lib/droiddeck-msitools/$it" } +
             listOf("NOTICE", "GPL-2", "GPL-3", "LGPL-2.1", "7zip-License", "7zip-unRarLicense").map { "usr/local/share/licenses/droiddeck-msitools/$it" }
-        val handModels = listOf("left", "right").flatMap { side ->
-            listOf("droiddeck_hand_$side.json", "hand.mtl", "hand.png", "hand_open.obj", "hand_fist.obj", "thumb_index_open.obj",
-                "thumb_index_pinch.obj")
-                .map { "droiddeck/resources/rendermodels/droiddeck_hand_$side/$it" }
-        }
-        val vr = (listOf(
-            "droiddeck/bin/linuxarm64/driver_droiddeck.so",
-            "droiddeck/bin/linuxarm64/xr-display-mode",
-            "droiddeck/driver.vrdrivermanifest",
-            "droiddeck/resources/settings/default.vrsettings",
-            "layer/libVkLayer_droiddeck_vr.so",
-            "layer/libdroiddeck_vr_scheduling.so",
-            "layer/VK_LAYER_DROIDDECK_vr.json",
-        ) + handModels).map { "usr/local/lib/droiddeck-vr/$it" to "usr/local/lib/droiddeck-vr/$it" } +
-            listOf("usr/local/lib/droiddeck-vr/layer/VK_LAYER_DROIDDECK_vr_implicit.json" to
-                "usr/share/vulkan/implicit_layer.d/droiddeck_vr.json")
         val fexPreloads = listOf("x86_64", "i386").flatMap { arch ->
             listOf("libblsession.so", "libfakeinput.so", "libfaultreport.so").map { "$arch/$it" to "usr/local/lib/droiddeck-fex/$arch/$it" }
         } + listOf("libvulkan-thunk.so", "libwebkitinput.so").map { "x86_64/$it" to "usr/local/lib/droiddeck-fex/x86_64/$it" }
@@ -143,7 +128,7 @@ object SessionFiles {
             "usr/local/lib/droiddeck/uruntime" to "usr/local/lib/droiddeck/uruntime",
             "usr/local/lib/droiddeck-pipewire.tzst" to "usr/local/lib/droiddeck-pipewire.tzst",
             "usr/local/share/licenses/uruntime/LICENSE" to "usr/local/share/licenses/uruntime/LICENSE",
-        ) + mangoapp + msitools.map { it to it } + vr + fexPreloads).filter { (asset, _) ->
+        ) + mangoapp + msitools.map { it to it } + fexPreloads).filter { (asset, _) ->
             val dir = asset.substringBeforeLast('/')
             runCatching { context.assets.list("linuxfs/$dir")?.contains(asset.substringAfterLast('/')) == true }.getOrDefault(false)
         }
@@ -167,6 +152,7 @@ object SessionFiles {
             }
             if (installed) ledger.staged(relative, target) else Log.e(TAG, "$relative NOT staged")
         }
+        VrPack.stageGuest(context, root)
         File(root, "usr/local/bin/bannerlator-steam-compat").delete()
         LegacyNames.migrateRootfs(root)
         ComponentsManager.migrateLaunchDir(context)

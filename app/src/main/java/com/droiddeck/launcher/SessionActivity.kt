@@ -85,6 +85,8 @@ import com.droiddeck.launcher.input.TouchpadGestures
 import com.droiddeck.launcher.input.TouchscreenGestures
 import com.droiddeck.launcher.input.ScrollTouchGestures
 import com.droiddeck.launcher.runtime.LinuxRuntime
+import com.droiddeck.launcher.runtime.VrPack
+import com.droiddeck.launcher.core.AddonPack
 import com.droiddeck.launcher.session.LoadingState
 import com.droiddeck.launcher.session.PerfHud
 import com.droiddeck.launcher.session.PerfMode
@@ -467,6 +469,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
             SessionState.steamVr = intent.getBooleanExtra(EXTRA_STEAMVR, false)
         } else if (intent.getBooleanExtra(EXTRA_STEAMVR, false) && SessionState.mode == SessionService.MODE_STEAM) {
             SessionState.steamVr = true
+            if (!VrPack.installed(this)) VrPack.ensure(this)
         }
         if (SessionState.steamVr) Glasses.prepareSteamVrStart()
         if (intent.action == SessionService.ACTION_AGENT_START) {
@@ -574,7 +577,8 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 (repair || !com.droiddeck.launcher.runtime.DesktopCatalog.desktopInstalled(this))
             val needProton = (intent.getStringExtra(SessionService.EXTRA_MODE) ?: SessionService.MODE_STEAM) == SessionService.MODE_STEAM &&
                 com.droiddeck.launcher.runtime.DesktopCatalog.protonSeedNeeded(this)
-            if (needRuntime || needResume || needDesktop || needProton) installThenStart(needRuntime, needDesktop, needProton, needResume)
+            val needVr = intent.getBooleanExtra(EXTRA_STEAMVR, false) && !VrPack.installed(this)
+            if (needRuntime || needResume || needDesktop || needProton || needVr) installThenStart(needRuntime, needDesktop, needProton, needResume, needVr)
         }
         hud = PerfHud(this)
         hud.onPresentingWindowChanged = {
@@ -1500,17 +1504,17 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     @Volatile private var installingRuntime = false
     private var repairOffered by mutableStateOf(false)
 
-    private fun installThenStart(runtime: Boolean, desktop: Boolean, proton: Boolean = false, resume: Boolean = false) {
+    private fun installThenStart(runtime: Boolean, desktop: Boolean, proton: Boolean = false, resume: Boolean = false, vr: Boolean = false) {
         if (SessionState.stopRequested) return
         installingRuntime = true
-        SessionState.installing = if (runtime) "runtime" else if (resume) "package" else if (desktop) "desktop" else "proton"
+        SessionState.installing = if (runtime) "runtime" else if (resume) "package" else if (desktop) "desktop" else if (proton) "proton" else "vr"
         SessionEvents.transition(
             SessionPhase.INSTALLING_RUNTIME,
             "${SessionState.installing}.installing",
             mapOf("component" to SessionState.installing),
         )
-        val first = if (runtime || resume) RUNTIME_LINES else if (desktop) DESKTOP_LINES else PROTON_LINES
-        loading.say(getString(first.downloading), first.topic, readable = true)
+        val first = if (runtime || resume) RUNTIME_LINES else if (desktop) DESKTOP_LINES else if (proton) PROTON_LINES else null
+        loading.say(getString(first?.downloading ?: R.string.session_vr_downloading), first?.topic ?: LoadingState.Topic.RUNTIME, readable = true)
         loading.percent = -1
         Thread({
             var failedComponent: String? = null
@@ -1539,6 +1543,12 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 if (protonProblem == null) SessionEvents.record("proton.ready")
                 else SessionEvents.record("proton.skipped", mapOf("reason" to protonProblem))
             }
+            if (problem == null && vr && !SessionState.stopRequested) {
+                SessionState.installing = "vr"
+                SessionEvents.transition(SessionPhase.INSTALLING_RUNTIME, "vr.installing", mapOf("component" to "vr"))
+                problem = installVr()
+                if (problem == null) SessionEvents.record("vr.ready") else failedComponent = "vr"
+            }
             uiHandler.post {
                 installingRuntime = false
                 SessionState.installing = null
@@ -1553,6 +1563,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                     val code = when (failedComponent) {
                         "runtime" -> "RUNTIME_INSTALL_FAILED"
                         "package" -> "PACKAGE_RESUME_FAILED"
+                        "vr" -> "VR_PACK_INSTALL_FAILED"
                         else -> "DESKTOP_INSTALL_FAILED"
                     }
                     SessionEvents.fail(code, problem)
@@ -1624,6 +1635,19 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         val problem = com.droiddeck.launcher.runtime.DesktopCatalog.install(this, entry,
             progressFor(DESKTOP_LINES, entry.size / 1_000_000))
         return problem?.let { getString(R.string.session_desktop_install_failed, it) }
+    }
+
+    private fun installVr(): String? {
+        val mb = VrPack.size / 1_000_000
+        uiHandler.post { loading.percent = -1; loading.say(getString(R.string.session_vr_downloading), LoadingState.Topic.RUNTIME, readable = true) }
+        val ok = VrPack.await(this, { !SessionState.stopRequested }) { state ->
+            if (state is AddonPack.State.Downloading) uiHandler.post {
+                val percent = (state.progress * 100).toInt()
+                loading.percent = percent
+                loading.say(getString(R.string.session_vr_downloading_mb, percent * mb / 100, mb), LoadingState.Topic.RUNTIME, readable = true)
+            }
+        }
+        return if (ok || SessionState.stopRequested) null else getString(R.string.session_vr_install_failed)
     }
 
     private fun installProton(): String? {
@@ -3031,6 +3055,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (intent.getBooleanExtra(EXTRA_STEAMVR, false) && SessionState.mode == SessionService.MODE_STEAM) {
             SessionState.steamVr = true
             steamVrAutoTried = false
+            if (!VrPack.installed(this)) VrPack.ensure(this)
         }
         if (intent.action == SessionService.ACTION_HOME_GUIDE) {
             handleHomeGuideIntent(intent)

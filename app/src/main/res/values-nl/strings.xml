@@ -1023,6 +1023,7 @@
     <string name="games_empty">Games die je in Steam installeert, verschijnen hier na de sessie.</string>
     <string name="games_play_steam">Steam spelen</string>
     <string name="games_play_steamvr">SteamVR spelen</string>
+    <string name="games_install_play_steamvr">Downloaden en SteamVR spelen</string>
     <string name="games_launch_settings">Opstartinstellingen</string>
     <string name="games_launch">Starten</string>
     <string name="games_files">Gamebestanden</string>
@@ -1356,9 +1357,12 @@
     <string name="session_proton_downloading_mb">Proton Experimental (ARM64) downloaden · %1$d van %2$d MB</string>
     <string name="session_proton_checking">Proton Experimental (ARM64) controleren</string>
     <string name="session_proton_unpacking">Proton Experimental (ARM64) uitpakken</string>
+    <string name="session_vr_downloading">VR-module downloaden</string>
+    <string name="session_vr_downloading_mb">VR-module downloaden · %1$d van %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Kan de runtimecatalogus niet bereiken. Controleer de verbinding en druk opnieuw op Spelen.</string>
     <string name="session_runtime_install_failed">De Linux-runtime is niet geïnstalleerd. Controleer de runtime bij Installatie en druk opnieuw op Spelen.</string>
     <string name="session_desktop_install_failed">De desktop is niet geïnstalleerd (%1$s). Controleer de verbinding en druk opnieuw op Desktop.</string>
+    <string name="session_vr_install_failed">De VR-module is niet geïnstalleerd. Controleer de verbinding en druk opnieuw op SteamVR spelen.</string>
     <string name="session_ended_named">%1$s is onverwacht gestopt. Deel de logs in een bugrapport of probeer het opnieuw.</string>
     <string name="session_ended_program">Het programma is onverwacht gestopt. Deel de logs in een bugrapport of probeer het opnieuw.</string>
     <string name="session_ended_desktop">De desktop is onverwacht gestopt. Deel de logs in een bugrapport of probeer het opnieuw.</string>
@@ -2497,6 +2501,16 @@
     <string name="hand_camera_placement">Cameraplaatsing</string>
     <string name="hand_camera_placement_hint">Controleer of de camera je kan zien voordat je gaat spelen.</string>
     <string name="hand_camera_check">Controleren</string>
+    <string name="vr_module_title">VR-module</string>
+    <string name="vr_module_hint">SteamVR op brillen, Quest en Cardboard, plus handtracking met de camera · %1$s download</string>
+    <string name="vr_module_installed">Geïnstalleerd · %1$s</string>
+    <string name="vr_module_downloading">VR-module downloaden</string>
+    <string name="vr_module_failed">De VR-module kon niet worden gedownload. Controleer de verbinding en probeer het opnieuw.</string>
+    <string name="vr_module_removing">VR-module verwijderen</string>
+    <string name="vr_module_busy">Stop de sessie voordat je de VR-module verwijdert.</string>
+    <string name="vr_module_remove_failed">De VR-module kon niet worden verwijderd</string>
+    <string name="vr_module_uninstall_title">De VR-module verwijderen?</string>
+    <string name="vr_module_uninstall_text">SteamVR en handtracking met de camera werken niet meer totdat je de module opnieuw downloadt. SteamVR zelf, games en instellingen blijven behouden.</string>
     <string name="hand_camera_check_title">Cameraplaatsing</string>
     <string name="hand_camera_how_rear">Zet het apparaat rechtop op 1,5 tot 2 meter afstand, op borsthoogte, met de achtercamera naar je toe. Stap dan in beeld met je handen vooruit.</string>
     <string name="hand_camera_how_front">Zet het apparaat rechtop op 1,5 tot 2 meter afstand, op borsthoogte, met het scherm naar je toe. Stap dan in beeld met je handen vooruit.</string>

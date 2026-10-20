@@ -371,16 +371,18 @@ private fun DesktopFiles(s: FrontEndState, a: FrontEndActions) {
 }
 
 @Composable
-private fun UninstallDesktop(enabled: Boolean, onUninstall: () -> Unit) {
+private fun UninstallDesktop(enabled: Boolean, onUninstall: () -> Unit) =
+    UninstallButton(stringResource(R.string.desktop_uninstall_title), stringResource(R.string.desktop_remove_text), enabled, onUninstall = onUninstall)
+
+@Composable
+internal fun UninstallButton(title: String, note: String, enabled: Boolean, modifier: Modifier = Modifier, onUninstall: () -> Unit) {
     val canUninstall by rememberUpdatedState(enabled)
     val colors = MaterialTheme.colorScheme
     val label = stringResource(R.string.common_uninstall)
-    val title = stringResource(R.string.desktop_uninstall_title)
-    val note = stringResource(R.string.desktop_remove_text)
     val keep = stringResource(R.string.flathub_keep)
     var at by remember { mutableStateOf<Rect?>(null) }
     Box(Modifier.onGloballyPositioned { at = it.boundsInRoot() }) {
-        SecondaryButton(label, enabled = enabled, compact = true) {
+        SecondaryButton(label, enabled = enabled, compact = true, modifier = modifier) {
             val from = at ?: return@SecondaryButton
             Steps.ask(StepAsk(
                 anchor = from, side = StepSide.Left, accent = colors.error, pillCorner = 12.dp, items = 3,

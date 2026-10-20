@@ -54,4 +54,26 @@ class AddonPackTest {
         installed("b".repeat(64))
         assertFalse(AddonPack("sample", "", 0L, listOf("tool"), reuseDeviceCopy = false).installed(context))
     }
+
+    @Test fun onlyAnotherBuildsCompletePackIsOutdated() {
+        val pack = AddonPack("sample", "a".repeat(64), 1L, listOf("tool"))
+        installed("c".repeat(64), complete = false)
+        assertFalse(pack.outdated(context))
+        installed("b".repeat(64))
+        assertTrue(pack.outdated(context))
+        installed("a".repeat(64))
+        assertFalse(pack.outdated(context))
+        assertFalse(AddonPack("sample", "", 0L, listOf("missing"), reuseDeviceCopy = true).outdated(context))
+    }
+
+    @Test fun removeDeletesEveryVersion() {
+        installed("a".repeat(64))
+        installed("b".repeat(64))
+        val pack = AddonPack("sample", "a".repeat(64), 1L, listOf("tool"))
+        assertEquals(AddonPack.State.Ready, pack.refresh(context))
+
+        assertTrue(pack.remove(context))
+        assertFalse(root.exists())
+        assertEquals(AddonPack.State.Missing, pack.state.value)
+    }
 }

@@ -1031,6 +1031,7 @@
     <string name="games_empty">Les jeux installés sur Steam apparaîtront ici après la fin de la session.</string>
     <string name="games_play_steam">Lancer Steam</string>
     <string name="games_play_steamvr">Lancer SteamVR</string>
+    <string name="games_install_play_steamvr">Télécharger et lancer SteamVR</string>
     <string name="games_launch_settings">Paramètres de lancement</string>
     <string name="games_launch">Lancer</string>
     <string name="games_files">Fichiers du jeu</string>
@@ -1371,9 +1372,12 @@
     <string name="session_proton_downloading_mb">téléchargement de Proton Experimental (ARM64) · %1$d sur %2$d Mo</string>
     <string name="session_proton_checking">vérification de Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">décompression de Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">téléchargement du module VR</string>
+    <string name="session_vr_downloading_mb">téléchargement du module VR · %1$d sur %2$d Mo</string>
     <string name="session_runtime_catalog_unreachable">Impossible d\'accéder au catalogue des environnements d\'exécution. Vérifiez la connexion et appuyez à nouveau sur Play.</string>
     <string name="session_runtime_install_failed">L\'environnement d\'exécution Linux ne s\'est pas installé. Vérifiez-le dans « Paramètres » et appuyez à nouveau sur Play.</string>
     <string name="session_desktop_install_failed">Le bureau ne s\'est pas installé (%1$s). Vérifiez la connexion et appuyez à nouveau sur Bureau.</string>
+    <string name="session_vr_install_failed">Le module VR ne s\'est pas installé. Vérifiez la connexion et appuyez à nouveau sur Lancer SteamVR.</string>
     <string name="session_ended_named">%1$s s\'est arrêté de manière inattendue. Partagez les journaux dans un rapport de bug, ou réessayez.</string>
     <string name="session_ended_program">Le programme s\'est arrêté de manière inattendue. Partagez les journaux dans un rapport de bug, ou réessayez.</string>
     <string name="session_ended_desktop">Le bureau s\'est arrêté de manière inattendue. Partagez les journaux dans un rapport de bug, ou réessayez.</string>
@@ -2521,6 +2525,16 @@
     <string name="hand_camera_placement">Positionnement de la caméra</string>
     <string name="hand_camera_placement_hint">Vérifiez que la caméra peut vous voir avant de jouer.</string>
     <string name="hand_camera_check">Vérifier</string>
+    <string name="vr_module_title">Module VR</string>
+    <string name="vr_module_hint">SteamVR sur lunettes, Quest et Cardboard, et suivi des mains par la caméra · %1$s à télécharger</string>
+    <string name="vr_module_installed">Installé · %1$s</string>
+    <string name="vr_module_downloading">Téléchargement du module VR</string>
+    <string name="vr_module_failed">Le module VR n\'a pas pu être téléchargé. Vérifiez la connexion et réessayez.</string>
+    <string name="vr_module_removing">Suppression du module VR</string>
+    <string name="vr_module_busy">Arrêtez la session avant de supprimer le module VR.</string>
+    <string name="vr_module_remove_failed">Le module VR n\'a pas pu être supprimé</string>
+    <string name="vr_module_uninstall_title">Désinstaller le module VR ?</string>
+    <string name="vr_module_uninstall_text">SteamVR et le suivi des mains par la caméra ne fonctionneront plus tant que vous ne l\'aurez pas retéléchargé. SteamVR lui-même, les jeux et les paramètres sont conservés.</string>
     <string name="hand_camera_check_title">Positionnement de la caméra</string>
     <string name="hand_camera_how_rear">Installez l\'appareil debout, entre 1,5 et 2 mètres de vous, à hauteur de poitrine, caméra arrière tournée vers vous. Puis entrez dans le champ, les mains tendues.</string>
     <string name="hand_camera_how_front">Installez l\'appareil debout, entre 1,5 et 2 mètres de vous, à hauteur de poitrine, écran tourné vers vous. Puis entrez dans le champ, les mains tendues.</string>

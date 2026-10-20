@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.droiddeck.launcher.R
 import com.droiddeck.launcher.core.AppUiPrefs
 import com.droiddeck.launcher.glasses.CalibrationDistance
-import com.droiddeck.launcher.handtracking.TrackingPack
+import com.droiddeck.launcher.runtime.VrPack
 import com.droiddeck.launcher.glasses.Glasses
 import com.droiddeck.launcher.glasses.SpatialCalibrationProgress
 import com.droiddeck.launcher.glasses.SpatialTracking
@@ -95,7 +95,7 @@ class SpatialTrackingActivity : ComponentActivity() {
     }
     override fun onPause() { SpatialTracking.diagnostics(false);super.onPause() }
     private fun printBoard() {
-        if(!TrackingPack.loadNative(this)) return
+        if(!VrPack.loadNative(this)) return
         val c=StereoCalibrator(this);val mat=Mat()
         c.board.generateImage(Size(1500.0,2100.0),mat,0,1)
         val bitmap=Bitmap.createBitmap(1500,2100,Bitmap.Config.ARGB_8888)

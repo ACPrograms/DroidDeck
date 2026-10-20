@@ -1023,6 +1023,7 @@
     <string name="games_empty">A Steamben telepített játékok a munkamenet után itt jelennek meg.</string>
     <string name="games_play_steam">Steam elindítása</string>
     <string name="games_play_steamvr">SteamVR elindítása</string>
+    <string name="games_install_play_steamvr">Letöltés és SteamVR indítása</string>
     <string name="games_launch_settings">Indítási beállítások</string>
     <string name="games_launch">Indítás</string>
     <string name="games_files">Játékfájlok</string>
@@ -1356,9 +1357,12 @@
     <string name="session_proton_downloading_mb">a Proton Experimental (ARM64) letöltése · %1$d/%2$d MB</string>
     <string name="session_proton_checking">a Proton Experimental (ARM64) ellenőrzése</string>
     <string name="session_proton_unpacking">a Proton Experimental (ARM64) kicsomagolása</string>
+    <string name="session_vr_downloading">a VR-modul letöltése</string>
+    <string name="session_vr_downloading_mb">a VR-modul letöltése · %1$d/%2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Nem sikerült elérni a futtatókörnyezet-katalógust. Ellenőrizze a kapcsolatot, és nyomja meg újra a Játék gombot.</string>
     <string name="session_runtime_install_failed">A Linux futtatókörnyezet telepítése sikertelen. Ellenőrizze a futtatókörnyezetet a Beállításban, és nyomja meg újra a Játék gombot.</string>
     <string name="session_desktop_install_failed">Az asztal telepítése sikertelen (%1$s). Ellenőrizze a kapcsolatot, és nyomja meg újra az Asztal gombot.</string>
+    <string name="session_vr_install_failed">A VR-modul telepítése sikertelen. Ellenőrizze a kapcsolatot, és nyomja meg újra a SteamVR elindítása gombot.</string>
     <string name="session_ended_named">%1$s váratlanul leállt. Ossza meg a naplókat egy hibajelentésben, vagy próbálja újra.</string>
     <string name="session_ended_program">A program váratlanul leállt. Ossza meg a naplókat egy hibajelentésben, vagy próbálja újra.</string>
     <string name="session_ended_desktop">Az asztal váratlanul leállt. Ossza meg a naplókat egy hibajelentésben, vagy próbálja újra.</string>
@@ -2497,6 +2501,16 @@
     <string name="hand_camera_placement">Kamera elhelyezése</string>
     <string name="hand_camera_placement_hint">Játék előtt ellenőrizze, hogy a kamera látja-e Önt.</string>
     <string name="hand_camera_check">Ellenőrzés</string>
+    <string name="vr_module_title">VR-modul</string>
+    <string name="vr_module_hint">SteamVR szemüvegen, Questen és Cardboardon, valamint kamerás kézkövetés · %1$s letöltés</string>
+    <string name="vr_module_installed">Telepítve · %1$s</string>
+    <string name="vr_module_downloading">A VR-modul letöltése</string>
+    <string name="vr_module_failed">A VR-modult nem sikerült letölteni. Ellenőrizze a kapcsolatot, és próbálja újra.</string>
+    <string name="vr_module_removing">A VR-modul eltávolítása</string>
+    <string name="vr_module_busy">A VR-modul eltávolítása előtt állítsa le a munkamenetet.</string>
+    <string name="vr_module_remove_failed">A VR-modult nem sikerült eltávolítani</string>
+    <string name="vr_module_uninstall_title">Eltávolítja a VR-modult?</string>
+    <string name="vr_module_uninstall_text">A SteamVR és a kamerás kézkövetés nem működik, amíg újra le nem tölti. Maga a SteamVR, a játékok és a beállítások megmaradnak.</string>
     <string name="hand_camera_check_title">Kamera elhelyezése</string>
     <string name="hand_camera_how_rear">Állítsa az eszközt függőlegesen 1,5–2 méter távolságra, nagyjából mellkasmagasságban úgy, hogy a hátlapi kamera Ön felé nézzen. Ezután lépjen a látótérbe kinyújtott kezekkel.</string>
     <string name="hand_camera_how_front">Állítsa az eszközt függőlegesen 1,5–2 méter távolságra, nagyjából mellkasmagasságban úgy, hogy a képernyő Ön felé nézzen. Ezután lépjen a látótérbe kinyújtott kezekkel.</string>

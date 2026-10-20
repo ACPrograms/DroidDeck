@@ -1037,6 +1037,7 @@
     <string name="games_empty">Игры, установленные в Steam, появятся здесь после завершения сессии.</string>
     <string name="games_play_steam">Запустить Steam</string>
     <string name="games_play_steamvr">Запустить SteamVR</string>
+    <string name="games_install_play_steamvr">Скачать и запустить SteamVR</string>
     <string name="games_launch_settings">Настройки запуска</string>
     <string name="games_launch">Запустить</string>
     <string name="games_files">Файлы игры</string>
@@ -1384,9 +1385,12 @@
     <string name="session_proton_downloading_mb">загрузка Proton Experimental (ARM64) · %1$d из %2$d МБ</string>
     <string name="session_proton_checking">проверка Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">распаковка Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">загрузка VR-модуля</string>
+    <string name="session_vr_downloading_mb">загрузка VR-модуля · %1$d из %2$d МБ</string>
     <string name="session_runtime_catalog_unreachable">Не удалось получить каталог сред выполнения. Проверьте подключение и снова нажмите Play.</string>
     <string name="session_runtime_install_failed">Среда выполнения Linux не установилась. Проверьте ее на странице «Настройка» и снова нажмите Play.</string>
     <string name="session_desktop_install_failed">Рабочий стол не установился (%1$s). Проверьте подключение и снова нажмите «Рабочий стол».</string>
+    <string name="session_vr_install_failed">VR-модуль не установился. Проверьте подключение и снова нажмите «Запустить SteamVR».</string>
     <string name="session_ended_named">Работа %1$s неожиданно прервалась. Приложите журналы к отчету об ошибке или попробуйте снова.</string>
     <string name="session_ended_program">Программа неожиданно завершила работу. Приложите журналы к отчету об ошибке или попробуйте снова.</string>
     <string name="session_ended_desktop">Рабочий стол неожиданно завершил работу. Приложите журналы к отчету об ошибке или попробуйте снова.</string>
@@ -2546,6 +2550,16 @@
     <string name="hand_camera_placement">Расположение камеры</string>
     <string name="hand_camera_placement_hint">Проверьте, что камера видит вас, прежде чем начать игру.</string>
     <string name="hand_camera_check">Проверить</string>
+    <string name="vr_module_title">VR-модуль</string>
+    <string name="vr_module_hint">SteamVR на очках, Quest и Cardboard, а также отслеживание рук камерой · загрузка %1$s</string>
+    <string name="vr_module_installed">Установлен · %1$s</string>
+    <string name="vr_module_downloading">Загрузка VR-модуля</string>
+    <string name="vr_module_failed">Не удалось скачать VR-модуль. Проверьте подключение и повторите попытку.</string>
+    <string name="vr_module_removing">Удаление VR-модуля</string>
+    <string name="vr_module_busy">Остановите сеанс перед удалением VR-модуля.</string>
+    <string name="vr_module_remove_failed">Не удалось удалить VR-модуль</string>
+    <string name="vr_module_uninstall_title">Удалить VR-модуль?</string>
+    <string name="vr_module_uninstall_text">SteamVR и отслеживание рук камерой перестанут работать, пока вы не скачаете его снова. Сам SteamVR, игры и настройки сохранятся.</string>
     <string name="hand_camera_check_title">Расположение камеры</string>
     <string name="hand_camera_how_rear">Поставьте устройство вертикально на расстоянии от 1,5 до 2 метров, примерно на уровне груди, направив заднюю камеру на себя. Затем встаньте в кадр, вытянув руки.</string>
     <string name="hand_camera_how_front">Поставьте устройство вертикально на расстоянии от 1,5 до 2 метров, примерно на уровне груди, направив экран на себя. Затем встаньте в кадр, вытянув руки.</string>

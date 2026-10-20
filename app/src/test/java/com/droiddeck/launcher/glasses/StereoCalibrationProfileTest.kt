@@ -1,18 +1,17 @@
 package com.droiddeck.launcher.glasses
 
+import java.io.File
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class StereoCalibrationProfileTest {
-    private fun base() = RuntimeEnvironment.getApplication().assets.open(StereoCalibrationProfile.BASE_ASSET)
-        .bufferedReader().use { it.readText() }
+    private fun base() = File("../tools/packs/vr/luma-ultra-640x480.json").readText()
     private fun device(verified: Boolean = true) = JSONObject(base()).put("identity", "my-glasses")
         .put("verified", verified).toString()
     private fun select(saved: String? = null, identity: String? = "my-glasses", width: Int = 640, height: Int = 480) =

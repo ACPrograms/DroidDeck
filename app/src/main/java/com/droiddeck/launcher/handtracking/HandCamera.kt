@@ -1,5 +1,6 @@
 package com.droiddeck.launcher.handtracking
 
+import com.droiddeck.launcher.runtime.VrPack
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -186,8 +187,8 @@ internal class HandCamera(
     private fun prepare() {
         if (stopped) return
         runCatching {
-            check(TrackingPack.loadNative(context)) { "hand tracking download is not installed" }
-            val model = TrackingPack.model(context, TrackingPack.POSE)
+            check(VrPack.loadNative(context)) { "the VR pack is not installed" }
+            val model = VrPack.model(context, VrPack.POSE)
             val options = PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(model).setDelegate(Delegate.CPU).build())
                 .setRunningMode(RunningMode.VIDEO)

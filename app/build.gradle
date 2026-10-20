@@ -84,10 +84,10 @@ def commitTime = (gitValue(['show', '-s', '--format=%ct', '--end-of-options', so
 def desktopKde = rootProject.file('tools/desktop-kde/release.env').readLines()
     .findAll { it.contains('=') && !it.startsWith('#') }
     .collectEntries { def kv = it.split('=', 2); [(kv[0].trim()): kv[1].trim()] }
-def trackingPack = rootProject.file('tools/packs/tracking/release.env').readLines()
+def vrPack = rootProject.file('tools/packs/vr/release.env').readLines()
     .findAll { it.contains('=') && !it.startsWith('#') }
     .collectEntries { def kv = it.split('=', 2); [(kv[0].trim()): kv[1].trim()] }
-def addonPacks = ['proot', 'directaudio', 'tracking', 'xbox', 'comet'].collectEntries { name ->
+def addonPacks = ['proot', 'directaudio', 'vr', 'xbox', 'comet'].collectEntries { name ->
     def pack = file("build/packs/${name}.tar.zst")
     if (!pack.isFile()) {
         if (ciBuild) throw new GradleException("Add-on pack ${pack} is missing: run tools/packs/build.sh app/build/packs")
@@ -195,7 +195,7 @@ android {
 
     androidResources {
         // aapt's default ignore list, plus the trees shipped as add-on packs (tools/packs).
-        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:<dir>droiddeck-xbox:<dir>droiddeck-comet:<dir>directaudio'
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:<dir>droiddeck-xbox:<dir>droiddeck-comet:<dir>droiddeck-vr:<dir>directaudio'
     }
 
     packagingOptions {
@@ -205,7 +205,7 @@ android {
         jniLibs {
             useLegacyPackaging = true
             pickFirsts += ['**/libtermux.so']
-            // Shipped in the proot and tracking packs (tools/packs) and run or loaded from there.
+            // Shipped in the proot and VR packs (tools/packs) and run or loaded from there.
             excludes += ['**/libproot.so', '**/libproot-loader.so', '**/libopencv_java4.so', '**/libmediapipe_tasks_jni.so']
         }
     }
@@ -317,7 +317,7 @@ if (!skipRust) android.sourceSets.main.jniLibs.srcDir(rustJniLibsDir)
 tasks.named('preBuild').configure { dependsOn(buildRustStores) }
 
 dependencies {
-    implementation "org.opencv:opencv:${trackingPack.OPENCV_VERSION}"
+    implementation "org.opencv:opencv:${vrPack.OPENCV_VERSION}"
     implementation 'org.khronos.openxr:openxr_loader_for_android:1.1.49'
     implementation 'com.github.luben:zstd-jni:1.5.7-4@aar'
     implementation 'org.apache.commons:commons-compress:1.27.1'
@@ -337,7 +337,7 @@ dependencies {
     implementation 'androidx.camera:camera-camera2:1.4.2'
     implementation 'androidx.camera:camera-lifecycle:1.4.2'
     implementation 'androidx.webkit:webkit:1.12.1'
-    implementation("com.google.mediapipe:tasks-vision:${trackingPack.MEDIAPIPE_VERSION}") {
+    implementation("com.google.mediapipe:tasks-vision:${vrPack.MEDIAPIPE_VERSION}") {
         exclude group: 'com.google.auto.value', module: 'auto-value'
     }
 

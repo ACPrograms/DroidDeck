@@ -45,7 +45,7 @@ class HandTrackingTest {
         assertEquals(TrackingCameras.REAR, s.side)
     }
 
-    @Test fun trackingNeedsThePermissionACameraAndTheTrackingPack() {
+    @Test fun trackingNeedsThePermissionACameraAndTheVrPack() {
         val context = RuntimeEnvironment.getApplication()
         assertFalse(both.copy(enabled = true, downloaded = true).ready)
         assertFalse(both.copy(enabled = true, permitted = true).ready)

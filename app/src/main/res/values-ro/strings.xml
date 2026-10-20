@@ -1029,6 +1029,7 @@
     <string name="games_empty">Jocurile pe care le instalezi în Steam apar aici după sesiune.</string>
     <string name="games_play_steam">Joacă Steam</string>
     <string name="games_play_steamvr">Joacă SteamVR</string>
+    <string name="games_install_play_steamvr">Descarcă și joacă SteamVR</string>
     <string name="games_launch_settings">Setări de lansare</string>
     <string name="games_launch">Lansează</string>
     <string name="games_files">Fișierele jocului</string>
@@ -1369,9 +1370,12 @@
     <string name="session_proton_downloading_mb">se descarcă Proton Experimental (ARM64) · %1$d din %2$d MB</string>
     <string name="session_proton_checking">se verifică Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">se despachetează Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">se descarcă modulul VR</string>
+    <string name="session_vr_downloading_mb">se descarcă modulul VR · %1$d din %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Catalogul mediului de execuție nu a putut fi accesat. Verifică conexiunea și apasă din nou Play.</string>
     <string name="session_runtime_install_failed">Mediul de execuție Linux nu s-a instalat. Verifică mediul de execuție în Configurare și apasă din nou Play.</string>
     <string name="session_desktop_install_failed">Desktopul nu s-a instalat (%1$s). Verifică conexiunea și apasă din nou Desktop.</string>
+    <string name="session_vr_install_failed">Modulul VR nu s-a instalat. Verifică conexiunea și apasă din nou Joacă SteamVR.</string>
     <string name="session_ended_named">%1$s s-a oprit neașteptat. Partajează jurnalele cu un raport de eroare, sau încearcă din nou.</string>
     <string name="session_ended_program">Programul s-a oprit neașteptat. Partajează jurnalele cu un raport de eroare, sau încearcă din nou.</string>
     <string name="session_ended_desktop">Desktopul s-a oprit neașteptat. Partajează jurnalele cu un raport de eroare, sau încearcă din nou.</string>
@@ -2522,6 +2526,16 @@
     <string name="hand_camera_placement">Poziționarea camerei</string>
     <string name="hand_camera_placement_hint">Verifică dacă te vede camera înainte de a juca.</string>
     <string name="hand_camera_check">Verifică</string>
+    <string name="vr_module_title">Modul VR</string>
+    <string name="vr_module_hint">SteamVR pe ochelari, Quest și Cardboard, plus urmărirea mâinilor cu camera · descărcare de %1$s</string>
+    <string name="vr_module_installed">Instalat · %1$s</string>
+    <string name="vr_module_downloading">Se descarcă modulul VR</string>
+    <string name="vr_module_failed">Modulul VR nu a putut fi descărcat. Verifică conexiunea și încearcă din nou.</string>
+    <string name="vr_module_removing">Se elimină modulul VR</string>
+    <string name="vr_module_busy">Oprește sesiunea înainte de a elimina modulul VR.</string>
+    <string name="vr_module_remove_failed">Modulul VR nu a putut fi eliminat</string>
+    <string name="vr_module_uninstall_title">Dezinstalezi modulul VR?</string>
+    <string name="vr_module_uninstall_text">SteamVR și urmărirea mâinilor cu camera nu mai funcționează până când îl descarci din nou. SteamVR, jocurile și setările se păstrează.</string>
     <string name="hand_camera_check_title">Poziționarea camerei</string>
     <string name="hand_camera_how_rear">Așază dispozitivul vertical, la 1,5–2 metri distanță, cam la înălțimea pieptului, cu camera din spate îndreptată spre tine. Apoi intră în cadru cu mâinile întinse.</string>
     <string name="hand_camera_how_front">Așază dispozitivul vertical, la 1,5–2 metri distanță, cam la înălțimea pieptului, cu ecranul îndreptat spre tine. Apoi intră în cadru cu mâinile întinse.</string>

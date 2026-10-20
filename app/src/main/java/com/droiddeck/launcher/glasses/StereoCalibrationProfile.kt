@@ -10,7 +10,6 @@ internal data class StereoCalibrationProfile(
     val verified: Boolean, val bundledBase: Boolean = false,
 ) {
     companion object {
-        const val BASE_ASSET = "calibration/luma-ultra-640x480.json"
         const val BASE_IDENTITY = "luma-ultra-base-v1"
 
         fun select(saved: String?, base: () -> String?, identity: String?, width: Int, height: Int): StereoCalibrationProfile? {

@@ -3,7 +3,7 @@ package com.droiddeck.launcher.glasses
 import com.droiddeck.launcher.core.AddonPack
 import android.content.Context
 import com.droiddeck.launcher.R
-import com.droiddeck.launcher.handtracking.TrackingPack
+import com.droiddeck.launcher.runtime.VrPack
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -171,7 +171,7 @@ internal class StereoHandEngine(private val context: Context, private val token:
         } finally { calibrationProgress = calibrationProgress.copy(solving = false) }
     } }
     private fun detector(selected: HandModel=model, useGpu: Boolean=gpu, maxHands: Int=2): HandLandmarker {
-        val bytes=TrackingPack.file(context,selected.file).readBytes()
+        val bytes=VrPack.file(context,selected.file).readBytes()
         val hash=MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         check(hash==selected.sha256) { context.getString(R.string.spatial_model_checksum_error) }
         return HandLandmarker.createFromOptions(context,HandLandmarker.HandLandmarkerOptions.builder()
@@ -326,11 +326,11 @@ internal class StereoHandEngine(private val context: Context, private val token:
         SpatialTracking.session.setHands(generation,SpatialHand(),SpatialHand())
     }
     private fun loop() {
-        val loaded=TrackingPack.awaitNative(context,{ running }) { state ->
+        val loaded=VrPack.awaitNative(context,{ running }) { state ->
             if(state is AddonPack.State.Downloading)
-                message=context.getString(R.string.tracking_pack_downloading,(state.progress*100).toInt())
+                message=context.getString(R.string.setup_runtime_progress,context.getString(R.string.vr_module_downloading),(state.progress*100).toInt())
         }
-        if(!loaded) { if(running) message=context.getString(R.string.tracking_pack_failed);return }
+        if(!loaded) { if(running) message=context.getString(R.string.vr_module_failed);return }
         var grayL=Mat();var grayR=Mat();val rgba=Mat()
         var bmpL: Bitmap?=null;var bmpR: Bitmap?=null
         var leftGray=ByteArray(0);var rightGray=ByteArray(0)
@@ -341,7 +341,7 @@ internal class StereoHandEngine(private val context: Context, private val token:
         var lastSource=0L;var lastStamp=0L;var captureOn=false;var captureRate=1000;var lastInputSeq=0L
         var rate=0f
         try {
-            check(TrackingPack.loadNative(context)) { context.getString(R.string.spatial_opencv_load_error) }
+            check(VrPack.loadNative(context)) { context.getString(R.string.spatial_opencv_load_error) }
             joyConFlow=StereoJoyConFlow()
             while(running) {
                 while(true) {
@@ -395,7 +395,7 @@ internal class StereoHandEngine(private val context: Context, private val token:
                     calibration?.close()
                     val selected=StereoCalibrationProfile.select(
                         if(identity!=null) runCatching { profile.readText() }.getOrNull() else null,
-                        { runCatching { context.assets.open(StereoCalibrationProfile.BASE_ASSET).bufferedReader().use { it.readText() } }.getOrNull() },
+                        { runCatching { VrPack.file(context,VrPack.LUMA_CALIBRATION).readText() }.getOrNull() },
                         identity,w,h)
                     calibration=selected?.let(StereoCalibration::fromProfile)
                     calibrator?.close();calibrator=null

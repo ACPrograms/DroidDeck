@@ -1,5 +1,6 @@
 package com.droiddeck.launcher.handtracking
 
+import com.droiddeck.launcher.runtime.VrPack
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -150,9 +151,9 @@ internal class HandModel private constructor(private val landmarkers: List<HandL
         private const val MIN_CONFIDENCE = 0.4f
 
         fun open(context: Context): HandModel {
-            check(TrackingPack.loadNative(context)) { "hand tracking download is not installed" }
+            check(VrPack.loadNative(context)) { "the VR pack is not installed" }
             fun landmarker(mode: RunningMode, hands: Int): HandLandmarker {
-                val model = TrackingPack.model(context, TrackingPack.HAND)
+                val model = VrPack.model(context, VrPack.HAND)
                 return HandLandmarker.createFromOptions(context, HandLandmarker.HandLandmarkerOptions.builder()
                     .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(model).setDelegate(Delegate.CPU).build())
                     .setRunningMode(mode)

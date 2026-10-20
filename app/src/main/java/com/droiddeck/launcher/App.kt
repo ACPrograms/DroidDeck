@@ -58,6 +58,7 @@ class App : Application() {
                 if (com.droiddeck.launcher.stores.gog.GogComet.enabled(app)) com.droiddeck.launcher.core.AddonPack.COMET.ensure(app)
                 if (com.droiddeck.launcher.stores.StoreAccounts.signedInAs(app, com.droiddeck.launcher.stores.Store.XBOX) != null)
                     com.droiddeck.launcher.core.AddonPack.XBOX.ensure(app)
+                com.droiddeck.launcher.runtime.VrPack.init(app)
                 com.droiddeck.launcher.handtracking.HandTracking.load(app)
             }.onFailure { android.util.Log.w("App", "add-on pack prefetch failed", it) }
         }, "addon-packs").start()

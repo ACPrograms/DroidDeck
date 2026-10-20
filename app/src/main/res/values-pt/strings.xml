@@ -1021,6 +1021,7 @@
     <string name="games_empty">Os jogos que você instala na Steam aparecem aqui após a sessão.</string>
     <string name="games_play_steam">Jogar na Steam</string>
     <string name="games_play_steamvr">Jogar no SteamVR</string>
+    <string name="games_install_play_steamvr">Baixar e jogar no SteamVR</string>
     <string name="games_launch_settings">Configurações de inicialização</string>
     <string name="games_launch">Iniciar</string>
     <string name="games_files">Arquivos do jogo</string>
@@ -1361,9 +1362,12 @@
     <string name="session_proton_downloading_mb">baixando o Proton Experimental (ARM64) · %1$d de %2$d MB</string>
     <string name="session_proton_checking">verificando o Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">descompactando o Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">baixando o módulo de RV</string>
+    <string name="session_vr_downloading_mb">baixando o módulo de RV · %1$d de %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Não foi possível acessar o catálogo de runtimes. Verifique a conexão e toque em Jogar novamente.</string>
     <string name="session_runtime_install_failed">O runtime Linux não foi instalado. Verifique o runtime em Configuração e toque em Jogar novamente.</string>
     <string name="session_desktop_install_failed">A área de trabalho não foi instalada (%1$s). Verifique a conexão e toque em Área de trabalho novamente.</string>
+    <string name="session_vr_install_failed">O módulo de RV não foi instalado. Verifique a conexão e toque em Jogar no SteamVR novamente.</string>
     <string name="session_ended_named">%1$s parou inesperadamente. Compartilhe os logs em um relatório de bug ou tente de novo.</string>
     <string name="session_ended_program">O programa parou inesperadamente. Compartilhe os logs em um relatório de bug ou tente de novo.</string>
     <string name="session_ended_desktop">A área de trabalho parou inesperadamente. Compartilhe os logs em um relatório de bug ou tente de novo.</string>
@@ -2511,6 +2515,16 @@
     <string name="hand_camera_placement">Posição da câmera</string>
     <string name="hand_camera_placement_hint">Verifique se a câmera consegue ver você antes de jogar.</string>
     <string name="hand_camera_check">Verificar</string>
+    <string name="vr_module_title">Módulo de RV</string>
+    <string name="vr_module_hint">SteamVR em óculos, Quest e Cardboard, além de rastreamento das mãos pela câmera · download de %1$s</string>
+    <string name="vr_module_installed">Instalado · %1$s</string>
+    <string name="vr_module_downloading">Baixando o módulo de RV</string>
+    <string name="vr_module_failed">Não foi possível baixar o módulo de RV. Verifique a conexão e tente novamente.</string>
+    <string name="vr_module_removing">Removendo o módulo de RV</string>
+    <string name="vr_module_busy">Pare a sessão antes de remover o módulo de RV.</string>
+    <string name="vr_module_remove_failed">Não foi possível remover o módulo de RV</string>
+    <string name="vr_module_uninstall_title">Desinstalar o módulo de RV?</string>
+    <string name="vr_module_uninstall_text">O SteamVR e o rastreamento das mãos pela câmera param de funcionar até você baixá-lo de novo. O próprio SteamVR, os jogos e as configurações são mantidos.</string>
     <string name="hand_camera_check_title">Posição da câmera</string>
     <string name="hand_camera_how_rear">Deixe o dispositivo em pé a 1,5-2 metros de distância, na altura do peito, com a câmera traseira voltada para você. Depois entre no campo de visão com as mãos estendidas.</string>
     <string name="hand_camera_how_front">Deixe o dispositivo em pé a 1,5-2 metros de distância, na altura do peito, com a tela voltada para você. Depois entre no campo de visão com as mãos estendidas.</string>

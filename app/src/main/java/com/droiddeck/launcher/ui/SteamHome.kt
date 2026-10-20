@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -50,6 +51,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.droiddeck.launcher.frontend.Library
 import com.droiddeck.launcher.glasses.GlassesMenuMirror
+import com.droiddeck.launcher.core.AddonPack
+import com.droiddeck.launcher.runtime.VrPack
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -107,6 +110,7 @@ internal fun SteamHome(s: FrontEndState, a: FrontEndActions, modifier: Modifier)
         },
     )
     val (glasses, glassesSettings) = rememberGlasses()
+    val vrPack by VrPack.state.collectAsState()
     val headset = glasses.present && glasses.canControl
     val drop = rememberDropSheetState()
     LaunchedEffect(headset) { if (!headset && (drop.open || drop.shown)) drop.reset() }
@@ -117,7 +121,8 @@ internal fun SteamHome(s: FrontEndState, a: FrontEndActions, modifier: Modifier)
             if (headset) DropSheet(
                 drop, glassesTabs(glasses) + (GlassesTab.CONTROLLERS to stringResource(R.string.vr_controllers_tab)), covered = lifted,
                 button = { enabled ->
-                    PrimaryButton(stringResource(R.string.games_play_steamvr), enabled = !s.busy && glasses.usable, large = true, icon = Icons.Filled.PlayArrow, fill = true,
+                    PrimaryButton(stringResource(if (vrPack == AddonPack.State.Ready) R.string.games_play_steamvr else R.string.games_install_play_steamvr),
+                        enabled = !s.busy && glasses.usable, large = true, icon = Icons.Filled.PlayArrow, fill = true,
                         modifier = Modifier.fillMaxWidth().testTag("play-steamvr")) { if (enabled) { drop.open = false; a.onPlaySteamVr() } }
                 },
             ) { tab ->

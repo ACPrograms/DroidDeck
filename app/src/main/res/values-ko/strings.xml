@@ -1019,6 +1019,7 @@
     <string name="games_empty">Steam에서 설치한 게임은 세션 종료 후 여기에 표시됩니다.</string>
     <string name="games_play_steam">Steam 실행</string>
     <string name="games_play_steamvr">SteamVR 실행</string>
+    <string name="games_install_play_steamvr">다운로드 후 SteamVR 실행</string>
     <string name="games_launch_settings">실행 설정</string>
     <string name="games_launch">실행</string>
     <string name="games_files">게임 파일</string>
@@ -1345,9 +1346,12 @@
     <string name="session_proton_downloading_mb">Proton Experimental(ARM64) 다운로드 중 · %1$d/%2$d MB</string>
     <string name="session_proton_checking">Proton Experimental(ARM64) 확인 중</string>
     <string name="session_proton_unpacking">Proton Experimental(ARM64) 압축 해제 중</string>
+    <string name="session_vr_downloading">VR 모듈 다운로드 중</string>
+    <string name="session_vr_downloading_mb">VR 모듈 다운로드 중 · %1$d/%2$d MB</string>
     <string name="session_runtime_catalog_unreachable">런타임 카탈로그에 연결할 수 없습니다. 연결을 확인한 후 \"Steam 실행\"을 다시 누르세요.</string>
     <string name="session_runtime_install_failed">Linux 런타임이 설치되지 않았습니다. \"설정\"에서 런타임을 확인한 후 \"Steam 실행\"을 다시 누르세요.</string>
     <string name="session_desktop_install_failed">데스크톱이 설치되지 않았습니다(%1$s). 연결을 확인한 후 \"데스크톱\"을 다시 누르세요.</string>
+    <string name="session_vr_install_failed">VR 모듈이 설치되지 않았습니다. 연결을 확인한 후 \"SteamVR 실행\"을 다시 누르세요.</string>
     <string name="session_ended_named">%1$s이(가) 예기치 않게 중지되었습니다. 버그 리포트와 함께 로그를 공유하거나 다시 시도하세요.</string>
     <string name="session_ended_program">프로그램이 예기치 않게 중지되었습니다. 버그 리포트와 함께 로그를 공유하거나 다시 시도하세요.</string>
     <string name="session_ended_desktop">데스크톱이 예기치 않게 중지되었습니다. 버그 리포트와 함께 로그를 공유하거나 다시 시도하세요.</string>
@@ -2474,6 +2478,16 @@
     <string name="hand_camera_placement">카메라 위치</string>
     <string name="hand_camera_placement_hint">플레이하기 전에 카메라에 당신이 보이는지 확인하세요.</string>
     <string name="hand_camera_check">확인</string>
+    <string name="vr_module_title">VR 모듈</string>
+    <string name="vr_module_hint">글래스, Quest, Cardboard에서 SteamVR 실행 및 카메라 손 추적 · %1$s 다운로드</string>
+    <string name="vr_module_installed">설치됨 · %1$s</string>
+    <string name="vr_module_downloading">VR 모듈 다운로드 중</string>
+    <string name="vr_module_failed">VR 모듈을 다운로드할 수 없습니다. 연결을 확인한 후 다시 시도하세요.</string>
+    <string name="vr_module_removing">VR 모듈 제거 중</string>
+    <string name="vr_module_busy">VR 모듈을 제거하기 전에 세션을 중지하세요.</string>
+    <string name="vr_module_remove_failed">VR 모듈을 제거할 수 없습니다</string>
+    <string name="vr_module_uninstall_title">VR 모듈을 제거하시겠습니까?</string>
+    <string name="vr_module_uninstall_text">다시 다운로드할 때까지 SteamVR과 카메라 손 추적이 작동하지 않습니다. SteamVR 자체와 게임, 설정은 유지됩니다.</string>
     <string name="hand_camera_check_title">카메라 위치</string>
     <string name="hand_camera_how_rear">기기를 가슴 높이쯤에서 1.5~2m 떨어진 곳에 세우고, 후면 카메라가 당신을 향하게 하세요. 그런 다음 손을 벌리고 화면 안으로 들어오세요.</string>
     <string name="hand_camera_how_front">기기를 가슴 높이쯤에서 1.5~2m 떨어진 곳에 세우고, 화면이 당신을 향하게 하세요. 그런 다음 손을 벌리고 화면 안으로 들어오세요.</string>

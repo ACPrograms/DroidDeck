@@ -1047,6 +1047,7 @@
     <string name="games_empty">الألعاب التي تثبّتها في Steam تظهر هنا بعد الجلسة.</string>
     <string name="games_play_steam">تشغيل Steam</string>
     <string name="games_play_steamvr">تشغيل SteamVR</string>
+    <string name="games_install_play_steamvr">تنزيل وتشغيل SteamVR</string>
     <string name="games_launch_settings">إعدادات التشغيل</string>
     <string name="games_launch">تشغيل</string>
     <string name="games_files">ملفات اللعبة</string>
@@ -1408,9 +1409,12 @@
     <string name="session_proton_downloading_mb">جارٍ تنزيل Proton Experimental (ARM64) · %1$d من %2$d MB</string>
     <string name="session_proton_checking">جارٍ فحص Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">جارٍ فك ضغط Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">جارٍ تنزيل وحدة الواقع الافتراضي</string>
+    <string name="session_vr_downloading_mb">جارٍ تنزيل وحدة الواقع الافتراضي · %1$d من %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">تعذّر الوصول إلى كتالوج بيئة التشغيل. تحقَّق من الاتصال واضغط على «تشغيل» مرة أخرى.</string>
     <string name="session_runtime_install_failed">لم يتم تثبيت بيئة تشغيل Linux. تحقَّق من بيئة التشغيل في «الإعداد» واضغط على «تشغيل» مرة أخرى.</string>
     <string name="session_desktop_install_failed">لم يتم تثبيت سطح المكتب (%1$s). تحقَّق من الاتصال واضغط على «سطح المكتب» مرة أخرى.</string>
+    <string name="session_vr_install_failed">لم يتم تثبيت وحدة الواقع الافتراضي. تحقَّق من الاتصال واضغط على «تشغيل SteamVR» مرة أخرى.</string>
     <string name="session_ended_named">توقّف %1$s بشكل غير متوقَّع. شارِك السجلات مع بلاغ عن الخطأ، أو حاوِل مرة أخرى.</string>
     <string name="session_ended_program">توقّف البرنامج بشكل غير متوقَّع. شارِك السجلات مع بلاغ عن الخطأ، أو حاوِل مرة أخرى.</string>
     <string name="session_ended_desktop">توقّف سطح المكتب بشكل غير متوقَّع. شارِك السجلات مع بلاغ عن الخطأ، أو حاوِل مرة أخرى.</string>
@@ -2597,6 +2601,16 @@
     <string name="hand_camera_placement">وضع الكاميرا</string>
     <string name="hand_camera_placement_hint">تحقّق من أن الكاميرا تراك قبل اللعب.</string>
     <string name="hand_camera_check">تحقّق</string>
+    <string name="vr_module_title">وحدة الواقع الافتراضي</string>
+    <string name="vr_module_hint">SteamVR على النظارات وQuest وCardboard، مع تتبع اليدين بالكاميرا · تنزيل %1$s</string>
+    <string name="vr_module_installed">مثبّتة · %1$s</string>
+    <string name="vr_module_downloading">جارٍ تنزيل وحدة الواقع الافتراضي</string>
+    <string name="vr_module_failed">تعذّر تنزيل وحدة الواقع الافتراضي. تحقَّق من الاتصال وحاول مرة أخرى.</string>
+    <string name="vr_module_removing">جارٍ إزالة وحدة الواقع الافتراضي</string>
+    <string name="vr_module_busy">أوقف الجلسة قبل إزالة وحدة الواقع الافتراضي.</string>
+    <string name="vr_module_remove_failed">تعذّرت إزالة وحدة الواقع الافتراضي</string>
+    <string name="vr_module_uninstall_title">إلغاء تثبيت وحدة الواقع الافتراضي؟</string>
+    <string name="vr_module_uninstall_text">سيتوقف SteamVR وتتبع اليدين بالكاميرا عن العمل حتى تنزّلها مجددًا. يبقى SteamVR نفسه والألعاب والإعدادات كما هي.</string>
     <string name="hand_camera_check_title">وضع الكاميرا</string>
     <string name="hand_camera_how_rear">ضع الجهاز واقفًا على بُعد 1.5 إلى 2 متر تقريبًا بارتفاع الصدر، مع توجيه الكاميرا الخلفية نحوك. ثم ادخل إلى مجال الرؤية ويداك ممدودتان.</string>
     <string name="hand_camera_how_front">ضع الجهاز واقفًا على بُعد 1.5 إلى 2 متر تقريبًا بارتفاع الصدر، مع توجيه الشاشة نحوك. ثم ادخل إلى مجال الرؤية ويداك ممدودتان.</string>

@@ -1,5 +1,6 @@
 package com.droiddeck.launcher.handtracking
 
+import com.droiddeck.launcher.runtime.VrPack
 import com.droiddeck.launcher.core.AddonPack
 import android.Manifest
 import android.content.Context
@@ -40,11 +41,11 @@ internal object HandTracking {
             side = prefs.getString(SIDE, null),
             permitted = permitted(context),
             sides = if (supported) TrackingCameras.sides(found) else emptySet(),
-            downloaded = TrackingPack.installed(context),
+            downloaded = VrPack.installed(context),
         )
         state.value = next
-        if (next.enabled && next.usable && !next.downloaded && TrackingPack.refresh(context) == AddonPack.State.Missing)
-            TrackingPack.ensure(context)
+        if (next.enabled && next.usable && !next.downloaded && VrPack.refresh(context) == AddonPack.State.Missing)
+            VrPack.ensure(context)
         return next
     }
 

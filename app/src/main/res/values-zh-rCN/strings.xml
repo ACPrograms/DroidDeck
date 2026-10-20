@@ -1101,6 +1101,7 @@
     <string name="games_empty">你在 Steam 安装的游戏会在会话结束后显示在这里。</string>
     <string name="games_play_steam">游玩 Steam</string>
     <string name="games_play_steamvr">游玩 SteamVR</string>
+    <string name="games_install_play_steamvr">下载并游玩 SteamVR</string>
     <string name="games_launch_settings">启动设置</string>
     <string name="games_launch">启动</string>
     <string name="games_files">游戏文件</string>
@@ -1421,9 +1422,12 @@
     <string name="session_proton_downloading_mb">正在下载 Proton Experimental（ARM64）· %1$d / %2$d MB</string>
     <string name="session_proton_checking">正在检查 Proton Experimental（ARM64）</string>
     <string name="session_proton_unpacking">正在解包 Proton Experimental（ARM64）</string>
+    <string name="session_vr_downloading">正在下载 VR 模块</string>
+    <string name="session_vr_downloading_mb">正在下载 VR 模块 · %1$d / %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">无法连接运行时目录。请检查网络连接，然后再次点“游玩”。</string>
     <string name="session_runtime_install_failed">Linux 运行时未能安装。请在“配置”中检查运行时，然后再次点“游玩”。</string>
     <string name="session_desktop_install_failed">桌面未能安装（%1$s）。请检查网络连接，然后再次点“桌面”。</string>
+    <string name="session_vr_install_failed">VR 模块未能安装。请检查网络连接，然后再次点“游玩 SteamVR”。</string>
     <string name="session_ended_named">%1$s 意外停止。请将日志随错误报告一起分享，或重试。</string>
     <string name="session_ended_program">程序意外停止。请将日志随错误报告一起分享，或重试。</string>
     <string name="session_ended_desktop">桌面意外停止。请将日志随错误报告一起分享，或重试。</string>
@@ -2475,6 +2479,16 @@
     <string name="hand_camera_placement">相机位置</string>
     <string name="hand_camera_placement_hint">开始游戏前，请确认相机能看到你。</string>
     <string name="hand_camera_check">检查</string>
+    <string name="vr_module_title">VR 模块</string>
+    <string name="vr_module_hint">在眼镜、Quest 和 Cardboard 上使用 SteamVR，以及摄像头手部追踪 · 需下载 %1$s</string>
+    <string name="vr_module_installed">已安装 · %1$s</string>
+    <string name="vr_module_downloading">正在下载 VR 模块</string>
+    <string name="vr_module_failed">无法下载 VR 模块。请检查网络连接，然后重试。</string>
+    <string name="vr_module_removing">正在移除 VR 模块</string>
+    <string name="vr_module_busy">请先停止会话，再移除 VR 模块。</string>
+    <string name="vr_module_remove_failed">无法移除 VR 模块</string>
+    <string name="vr_module_uninstall_title">卸载 VR 模块？</string>
+    <string name="vr_module_uninstall_text">在重新下载之前，SteamVR 和摄像头手部追踪将无法使用。SteamVR 本身、游戏和设置都会保留。</string>
     <string name="hand_camera_check_title">相机位置</string>
     <string name="hand_camera_how_rear">将设备立在距离 1.5 到 2 米、约胸口高度的地方，让后置相机对着你。然后张开双手走进画面。</string>
     <string name="hand_camera_how_front">将设备立在距离 1.5 到 2 米、约胸口高度的地方，让屏幕对着你。然后张开双手走进画面。</string>

@@ -1017,6 +1017,7 @@
     <string name="games_empty">เกมที่คุณติดตั้งใน Steam จะปรากฏที่นี่หลังจากจบเซสชัน</string>
     <string name="games_play_steam">เล่น Steam</string>
     <string name="games_play_steamvr">เล่น SteamVR</string>
+    <string name="games_install_play_steamvr">ดาวน์โหลดและเล่น SteamVR</string>
     <string name="games_launch_settings">การตั้งค่าการเปิดเกม</string>
     <string name="games_launch">เปิดเกม</string>
     <string name="games_files">ไฟล์เกม</string>
@@ -1343,9 +1344,12 @@
     <string name="session_proton_downloading_mb">กำลังดาวน์โหลด Proton Experimental (ARM64) · %1$d จาก %2$d MB</string>
     <string name="session_proton_checking">กำลังตรวจสอบ Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">กำลังแตกไฟล์ Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">กำลังดาวน์โหลดโมดูล VR</string>
+    <string name="session_vr_downloading_mb">กำลังดาวน์โหลดโมดูล VR · %1$d จาก %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">ไม่สามารถเข้าถึงแคตตาล็อกรันไทม์ได้ ตรวจสอบการเชื่อมต่อแล้วกด Play อีกครั้ง</string>
     <string name="session_runtime_install_failed">รันไทม์ Linux ติดตั้งไม่สำเร็จ ตรวจสอบรันไทม์ในการตั้งค่าแล้วกด Play อีกครั้ง</string>
     <string name="session_desktop_install_failed">เดสก์ท็อปติดตั้งไม่สำเร็จ (%1$s) ตรวจสอบการเชื่อมต่อแล้วกดเดสก์ท็อปอีกครั้ง</string>
+    <string name="session_vr_install_failed">ติดตั้งโมดูล VR ไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วกดเล่น SteamVR อีกครั้ง</string>
     <string name="session_ended_named">%1$s หยุดทำงานกะทันหัน แชร์ล็อกพร้อมรายงานข้อบกพร่อง หรือลองใหม่</string>
     <string name="session_ended_program">โปรแกรมหยุดทำงานกะทันหัน แชร์ล็อกพร้อมรายงานข้อบกพร่อง หรือลองใหม่</string>
     <string name="session_ended_desktop">เดสก์ท็อปหยุดทำงานกะทันหัน แชร์ล็อกพร้อมรายงานข้อบกพร่อง หรือลองใหม่</string>
@@ -2472,6 +2476,16 @@
     <string name="hand_camera_placement">ตำแหน่งกล้อง</string>
     <string name="hand_camera_placement_hint">ตรวจสอบว่ากล้องมองเห็นคุณก่อนเริ่มเล่น</string>
     <string name="hand_camera_check">ตรวจสอบ</string>
+    <string name="vr_module_title">โมดูล VR</string>
+    <string name="vr_module_hint">SteamVR บนแว่น Quest และ Cardboard พร้อมการติดตามมือด้วยกล้อง · ดาวน์โหลด %1$s</string>
+    <string name="vr_module_installed">ติดตั้งแล้ว · %1$s</string>
+    <string name="vr_module_downloading">กำลังดาวน์โหลดโมดูล VR</string>
+    <string name="vr_module_failed">ดาวน์โหลดโมดูล VR ไม่ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง</string>
+    <string name="vr_module_removing">กำลังลบโมดูล VR</string>
+    <string name="vr_module_busy">หยุดเซสชันก่อนลบโมดูล VR</string>
+    <string name="vr_module_remove_failed">ลบโมดูล VR ไม่ได้</string>
+    <string name="vr_module_uninstall_title">ถอนการติดตั้งโมดูล VR?</string>
+    <string name="vr_module_uninstall_text">SteamVR และการติดตามมือด้วยกล้องจะใช้งานไม่ได้จนกว่าคุณจะดาวน์โหลดอีกครั้ง ตัว SteamVR เกม และการตั้งค่ายังคงอยู่</string>
     <string name="hand_camera_check_title">ตำแหน่งกล้อง</string>
     <string name="hand_camera_how_rear">ตั้งอุปกรณ์ให้ห่างออกไป 1.5 ถึง 2 เมตร ที่ระดับความสูงประมาณหน้าอก โดยให้กล้องหลังหันมาทางคุณ จากนั้นเดินเข้ามาในมุมมองพร้อมยื่นมือทั้งสองข้างออกมา</string>
     <string name="hand_camera_how_front">ตั้งอุปกรณ์ให้ห่างออกไป 1.5 ถึง 2 เมตร ที่ระดับความสูงประมาณหน้าอก โดยให้หน้าจอหันมาทางคุณ จากนั้นเดินเข้ามาในมุมมองพร้อมยื่นมือทั้งสองข้างออกมา</string>

@@ -15,11 +15,11 @@ MANIFEST = Path('app/build/runtime-inputs.json')
 PACKS = Path('app/build/packs')
 # Runtime trees shipped as add-on packs (tools/packs/build.sh) rather than inside the APK.
 PACKED = {'assets/linuxfs/usr/local/lib/droiddeck-xbox/': 'xbox', 'assets/linuxfs/usr/local/lib/droiddeck-comet/': 'comet',
-          'assets/directaudio/': 'directaudio'}
+          'assets/linuxfs/usr/local/lib/droiddeck-vr/': 'vr', 'assets/directaudio/': 'directaudio'}
 PACKED_FILES = {'lib/arm64-v8a/libproot.so': ('proot', 'libproot.so'),
                 'lib/arm64-v8a/libproot-loader.so': ('proot', 'libproot-loader.so')}
 PACKED_LIBRARIES = ['lib/arm64-v8a/libopencv_java4.so', 'lib/arm64-v8a/libmediapipe_tasks_jni.so']
-PACK_NAMES = ['proot', 'directaudio', 'tracking', 'xbox', 'comet']
+PACK_NAMES = ['proot', 'directaudio', 'vr', 'xbox', 'comet']
 SOURCE_PATHS = ['app/build.gradle', 'app/src/main/cpp/fakeinput_steam.cpp', 'app/src/main/assets/pulseaudio.tzst',
                 'tools/linuxfs', 'tools/proot', 'tools/aaudio-sink', 'tools/directaudio', 'tools/packs',
                 'tools/gamescope/release.env', 'tools/droiddeck-esync/release.env',
@@ -192,9 +192,9 @@ def check_apk(apk, root=ROOT):
         names = set(package.namelist())
         for library in PACKED_LIBRARIES:
             if library in names:
-                raise ValueError('APK still carries ' + library + ', which the tracking pack provides')
-            if library.rsplit('/', 1)[1] not in packs['tracking']:
-                raise ValueError('Tracking pack missing ' + library)
+                raise ValueError('APK still carries ' + library + ', which the VR pack provides')
+            if library.rsplit('/', 1)[1] not in packs['vr']:
+                raise ValueError('VR pack missing ' + library)
         for name, output in data['outputs'].items():
             if name in PACKED_FILES:
                 pack, rel = PACKED_FILES[name]

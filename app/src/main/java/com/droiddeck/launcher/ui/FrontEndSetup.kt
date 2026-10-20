@@ -335,6 +335,9 @@ internal fun SetupPanel(
                             }
                         }
                         SettingsGroup(stringResource(R.string.setup_runtime)) { runtimeCheck(false) }
+                        SettingsGroup(stringResource(R.string.vr_module_title)) {
+                            VrModuleRows(uninstall = !s.sessionRunning && !s.runtimeActionsBlocked)
+                        }
                     }
                     1 -> {
                         val controller = s.controller

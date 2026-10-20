@@ -58,6 +58,18 @@ internal class AddonPack(
         }
         .maxByOrNull { it.lastModified() }?.name
 
+    fun outdated(context: Context): Boolean = available && !installed(context) &&
+        root(context).listFiles().orEmpty().any { it.name != sha256 && File(it, COMPLETE).isFile }
+
+    fun remove(context: Context): Boolean {
+        synchronized(lock) {
+            if (mutableState.value is State.Downloading) return false
+            root(context).deleteRecursively()
+            mutableState.value = State.Missing
+        }
+        return !root(context).exists()
+    }
+
     fun refresh(context: Context): State {
         val now = mutableState.value
         if (now is State.Downloading) return now
@@ -139,9 +151,11 @@ internal class AddonPack(
         @JvmField
         val DIRECTAUDIO = AddonPack("directaudio", BuildConfig.PACK_DIRECTAUDIO_SHA256, BuildConfig.PACK_DIRECTAUDIO_SIZE,
             listOf("linux-wine11/version.txt", "linux-wine11-systhread/version.txt"))
-        val TRACKING = AddonPack("tracking", BuildConfig.PACK_TRACKING_SHA256, BuildConfig.PACK_TRACKING_SIZE, listOf(
+        val VR = AddonPack("vr", BuildConfig.PACK_VR_SHA256, BuildConfig.PACK_VR_SIZE, listOf(
             "hand_landmarker.task", "hand_landmarker_lite.task", "pose_landmarker_lite.task",
-            "libopencv_java4.so", "libmediapipe_tasks_jni.so"))
+            "libopencv_java4.so", "libmediapipe_tasks_jni.so", "luma-ultra-640x480.json",
+            "droiddeck/bin/linuxarm64/driver_droiddeck.so", "layer/libVkLayer_droiddeck_vr.so",
+            "layer/VK_LAYER_DROIDDECK_vr_implicit.json"))
         val XBOX = AddonPack("xbox", BuildConfig.PACK_XBOX_SHA256, BuildConfig.PACK_XBOX_SIZE,
             listOf("version", "xodus-cli", "xodus-service"))
         val COMET = AddonPack("comet", BuildConfig.PACK_COMET_SHA256, BuildConfig.PACK_COMET_SIZE,

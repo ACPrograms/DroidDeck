@@ -1035,6 +1035,7 @@
     <string name="games_empty">Gry, które instalujesz w Steam, pojawią się tutaj po sesji.</string>
     <string name="games_play_steam">Zagraj w Steam</string>
     <string name="games_play_steamvr">Zagraj w SteamVR</string>
+    <string name="games_install_play_steamvr">Pobierz i zagraj w SteamVR</string>
     <string name="games_launch_settings">Ustawienia uruchamiania</string>
     <string name="games_launch">Uruchom</string>
     <string name="games_files">Pliki gry</string>
@@ -1382,9 +1383,12 @@
     <string name="session_proton_downloading_mb">pobieranie Proton Experimental (ARM64) · %1$d z %2$d MB</string>
     <string name="session_proton_checking">sprawdzanie Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">rozpakowywanie Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">pobieranie modułu VR</string>
+    <string name="session_vr_downloading_mb">pobieranie modułu VR · %1$d z %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Nie udało się połączyć z katalogiem środowisk. Sprawdź połączenie i ponownie naciśnij Graj.</string>
     <string name="session_runtime_install_failed">Środowisko Linux nie zostało zainstalowane. Sprawdź środowisko w sekcji Konfiguracja i ponownie naciśnij Graj.</string>
     <string name="session_desktop_install_failed">Pulpit nie został zainstalowany (%1$s). Sprawdź połączenie i ponownie naciśnij Pulpit.</string>
+    <string name="session_vr_install_failed">Moduł VR nie został zainstalowany. Sprawdź połączenie i ponownie naciśnij Zagraj w SteamVR.</string>
     <string name="session_ended_named">%1$s – nieoczekiwane zatrzymanie. Udostępnij logi w zgłoszeniu błędu lub spróbuj ponownie.</string>
     <string name="session_ended_program">Program nieoczekiwanie się zatrzymał. Udostępnij logi w zgłoszeniu błędu lub spróbuj ponownie.</string>
     <string name="session_ended_desktop">Pulpit nieoczekiwanie się zatrzymał. Udostępnij logi w zgłoszeniu błędu lub spróbuj ponownie.</string>
@@ -2550,6 +2554,16 @@
     <string name="hand_camera_placement">Położenie kamery</string>
     <string name="hand_camera_placement_hint">Sprawdź, czy kamera Cię widzi, zanim zaczniesz grać.</string>
     <string name="hand_camera_check">Sprawdź</string>
+    <string name="vr_module_title">Moduł VR</string>
+    <string name="vr_module_hint">SteamVR w okularach, Quest i Cardboard oraz śledzenie dłoni kamerą · pobranie %1$s</string>
+    <string name="vr_module_installed">Zainstalowano · %1$s</string>
+    <string name="vr_module_downloading">Pobieranie modułu VR</string>
+    <string name="vr_module_failed">Nie udało się pobrać modułu VR. Sprawdź połączenie i spróbuj ponownie.</string>
+    <string name="vr_module_removing">Usuwanie modułu VR</string>
+    <string name="vr_module_busy">Zatrzymaj sesję przed usunięciem modułu VR.</string>
+    <string name="vr_module_remove_failed">Nie udało się usunąć modułu VR</string>
+    <string name="vr_module_uninstall_title">Odinstalować moduł VR?</string>
+    <string name="vr_module_uninstall_text">SteamVR i śledzenie dłoni kamerą przestaną działać, dopóki nie pobierzesz go ponownie. Sam SteamVR, gry i ustawienia zostaną zachowane.</string>
     <string name="hand_camera_check_title">Położenie kamery</string>
     <string name="hand_camera_how_rear">Ustaw urządzenie pionowo w odległości od 1,5 do 2 metrów, mniej więcej na wysokości klatki piersiowej, tylną kamerą skierowaną w Twoją stronę. Następnie wejdź w kadr z wyciągniętymi rękami.</string>
     <string name="hand_camera_how_front">Ustaw urządzenie pionowo w odległości od 1,5 do 2 metrów, mniej więcej na wysokości klatki piersiowej, ekranem skierowanym w Twoją stronę. Następnie wejdź w kadr z wyciągniętymi rękami.</string>

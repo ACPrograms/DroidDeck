@@ -79,6 +79,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -144,6 +145,8 @@ import com.droiddeck.launcher.gpu.SteamVr
 import com.droiddeck.launcher.gpu.ScreenEffects
 import com.droiddeck.launcher.session.SessionPrefs
 import com.droiddeck.launcher.session.ComponentsManager
+import com.droiddeck.launcher.core.AddonPack
+import com.droiddeck.launcher.runtime.VrPack
 import com.droiddeck.launcher.input.SecondScreenDisplay
 import com.droiddeck.launcher.input.SecondScreenMode
 import kotlinx.coroutines.flow.collect
@@ -322,6 +325,7 @@ internal fun SessionDrawer(open: Boolean, requestedPage: SessionDrawerPage, cont
     val pal = LocalPalette.current
     val host = rememberMenuHost()
     val (glasses, glassesSettings) = rememberGlasses()
+    val vrPack by VrPack.state.collectAsState()
     val glassesPages = glassesTabs(glasses) + (GlassesTab.CONTROLLERS to stringResource(R.string.vr_controllers_tab))
     var selectedGlassesTab by rememberSaveable { mutableStateOf(GlassesTab.DISPLAY) }
     val glassesTab = selectedGlassesTab.takeIf { key -> glassesPages.any { it.first == key } } ?: GlassesTab.DISPLAY
@@ -529,7 +533,10 @@ internal fun SessionDrawer(open: Boolean, requestedPage: SessionDrawerPage, cont
                                 onAdvancedToggle = { advancedEffectsExpanded = !advancedEffectsExpanded }) { key -> focus.track(page, key) }
                         }
                         SessionDrawerPage.VR -> {
-                            SteamVrGroup(a) { key -> focus.track(page, key) }
+                            if (vrPack == AddonPack.State.Ready) SteamVrGroup(a) { key -> focus.track(page, key) }
+                            else SettingsGroup(stringResource(R.string.vr_module_title)) {
+                                VrModuleRows(uninstall = null) { key -> focus.track(page, key) }
+                            }
                             if (!a.glassesOutput) CardboardGroup(host, a) { key -> focus.track(page, key) }
                         }
                         SessionDrawerPage.CONTROLLER -> {
@@ -1037,6 +1044,8 @@ private fun SteamVrGroup(a: DrawerActions, track: (String) -> Modifier) {
 @Composable
 private fun SteamVrRow(a: DrawerActions) {
     val vrLabel = stringResource(R.string.cardboard_steamvr)
+    val vrPack by VrPack.state.collectAsState()
+    if (vrPack != AddonPack.State.Ready) return VrModuleRows(uninstall = null)
     when (a.steamVr) {
         SteamVr.Status.NOT_INSTALLED -> ActionRow(vrLabel, null, stringResource(R.string.cardboard_steamvr_install), { a.onSteamVr("install") })
         SteamVr.Status.INSTALLING -> SettingsRow(vrLabel, stringResource(R.string.cardboard_steamvr_installing)) {}

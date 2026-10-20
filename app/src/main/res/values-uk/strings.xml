@@ -1035,6 +1035,7 @@
     <string name="games_empty">Ігри, які ви встановите в Steam, з’являться тут після сеансу.</string>
     <string name="games_play_steam">Грати в Steam</string>
     <string name="games_play_steamvr">Грати в SteamVR</string>
+    <string name="games_install_play_steamvr">Завантажити й грати в SteamVR</string>
     <string name="games_launch_settings">Налаштування запуску</string>
     <string name="games_launch">Запустити</string>
     <string name="games_files">Файли гри</string>
@@ -1382,9 +1383,12 @@
     <string name="session_proton_downloading_mb">завантаження Proton Experimental (ARM64) · %1$d з %2$d MB</string>
     <string name="session_proton_checking">перевірка Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">розпакування Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">завантаження VR-модуля</string>
+    <string name="session_vr_downloading_mb">завантаження VR-модуля · %1$d з %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Не вдалося отримати каталог середовищ. Перевірте з’єднання й натисніть «Грати» ще раз.</string>
     <string name="session_runtime_install_failed">Середовище Linux не встановилося. Перевірте його в розділі «Налаштування» й натисніть «Грати» ще раз.</string>
     <string name="session_desktop_install_failed">Робочий стіл не встановився (%1$s). Перевірте з’єднання й натисніть «Робочий стіл» ще раз.</string>
+    <string name="session_vr_install_failed">VR-модуль не встановився. Перевірте з’єднання й натисніть «Грати в SteamVR» ще раз.</string>
     <string name="session_ended_named">Роботу %1$s несподівано завершено. Додайте журнали до звіту про помилку або спробуйте ще раз.</string>
     <string name="session_ended_program">Програма несподівано зупинилася. Додайте журнали до звіту про помилку або спробуйте ще раз.</string>
     <string name="session_ended_desktop">Робочий стіл несподівано зупинився. Додайте журнали до звіту про помилку або спробуйте ще раз.</string>
@@ -2547,6 +2551,16 @@
     <string name="hand_camera_placement">Розташування камери</string>
     <string name="hand_camera_placement_hint">Перевірте, що камера бачить вас, перш ніж почати гру.</string>
     <string name="hand_camera_check">Перевірити</string>
+    <string name="vr_module_title">VR-модуль</string>
+    <string name="vr_module_hint">SteamVR на окулярах, Quest і Cardboard, а також відстеження рук камерою · завантаження %1$s</string>
+    <string name="vr_module_installed">Встановлено · %1$s</string>
+    <string name="vr_module_downloading">Завантаження VR-модуля</string>
+    <string name="vr_module_failed">Не вдалося завантажити VR-модуль. Перевірте з’єднання й спробуйте ще раз.</string>
+    <string name="vr_module_removing">Видалення VR-модуля</string>
+    <string name="vr_module_busy">Зупиніть сеанс, перш ніж видаляти VR-модуль.</string>
+    <string name="vr_module_remove_failed">Не вдалося видалити VR-модуль</string>
+    <string name="vr_module_uninstall_title">Видалити VR-модуль?</string>
+    <string name="vr_module_uninstall_text">SteamVR і відстеження рук камерою не працюватимуть, доки ви не завантажите його знову. Сам SteamVR, ігри та налаштування збережуться.</string>
     <string name="hand_camera_check_title">Розташування камери</string>
     <string name="hand_camera_how_rear">Поставте пристрій вертикально на відстані від 1,5 до 2 метрів, приблизно на рівні грудей, спрямувавши задню камеру на себе. Потім станьте в кадр, витягнувши руки.</string>
     <string name="hand_camera_how_front">Поставте пристрій вертикально на відстані від 1,5 до 2 метрів, приблизно на рівні грудей, спрямувавши екран на себе. Потім станьте в кадр, витягнувши руки.</string>

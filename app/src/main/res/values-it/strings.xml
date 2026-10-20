@@ -1021,6 +1021,7 @@
     <string name="games_empty">I giochi che installi in Steam compaiono qui dopo la sessione.</string>
     <string name="games_play_steam">Gioca su Steam</string>
     <string name="games_play_steamvr">Gioca su SteamVR</string>
+    <string name="games_install_play_steamvr">Scarica e gioca su SteamVR</string>
     <string name="games_launch_settings">Impostazioni di avvio</string>
     <string name="games_launch">Avvia</string>
     <string name="games_files">File di gioco</string>
@@ -1361,9 +1362,12 @@
     <string name="session_proton_downloading_mb">download di Proton Experimental (ARM64) · %1$d di %2$d MB</string>
     <string name="session_proton_checking">verifica di Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">estrazione di Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">download del modulo VR</string>
+    <string name="session_vr_downloading_mb">download del modulo VR · %1$d di %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Impossibile raggiungere il catalogo dei runtime. Controlla la connessione e premi di nuovo Gioca.</string>
     <string name="session_runtime_install_failed">Il runtime Linux non è stato installato. Controlla il runtime in Configurazione e premi di nuovo Gioca.</string>
     <string name="session_desktop_install_failed">Il desktop non è stato installato (%1$s). Controlla la connessione e premi di nuovo Desktop.</string>
+    <string name="session_vr_install_failed">Il modulo VR non è stato installato. Controlla la connessione e premi di nuovo Gioca su SteamVR.</string>
     <string name="session_ended_named">%1$s si è interrotto in modo imprevisto. Condividi i log in una segnalazione di bug o riprova.</string>
     <string name="session_ended_program">Il programma si è interrotto in modo imprevisto. Condividi i log in una segnalazione di bug o riprova.</string>
     <string name="session_ended_desktop">Il desktop si è interrotto in modo imprevisto. Condividi i log in una segnalazione di bug o riprova.</string>
@@ -2511,6 +2515,16 @@
     <string name="hand_camera_placement">Posizione della fotocamera</string>
     <string name="hand_camera_placement_hint">Controlla che la fotocamera possa vederti prima di giocare.</string>
     <string name="hand_camera_check">Controlla</string>
+    <string name="vr_module_title">Modulo VR</string>
+    <string name="vr_module_hint">SteamVR su occhiali, Quest e Cardboard, più il tracciamento delle mani con la fotocamera · download di %1$s</string>
+    <string name="vr_module_installed">Installato · %1$s</string>
+    <string name="vr_module_downloading">Download del modulo VR</string>
+    <string name="vr_module_failed">Impossibile scaricare il modulo VR. Controlla la connessione e riprova.</string>
+    <string name="vr_module_removing">Rimozione del modulo VR</string>
+    <string name="vr_module_busy">Interrompi la sessione prima di rimuovere il modulo VR.</string>
+    <string name="vr_module_remove_failed">Impossibile rimuovere il modulo VR</string>
+    <string name="vr_module_uninstall_title">Disinstallare il modulo VR?</string>
+    <string name="vr_module_uninstall_text">SteamVR e il tracciamento delle mani con la fotocamera smettono di funzionare finché non lo scarichi di nuovo. SteamVR stesso, i giochi e le impostazioni vengono mantenuti.</string>
     <string name="hand_camera_check_title">Posizione della fotocamera</string>
     <string name="hand_camera_how_rear">Metti il dispositivo in piedi a una distanza di 1,5-2 metri, all\'altezza del petto, con la fotocamera posteriore rivolta verso di te. Poi entra nell\'inquadratura con le mani tese.</string>
     <string name="hand_camera_how_front">Metti il dispositivo in piedi a una distanza di 1,5-2 metri, all\'altezza del petto, con lo schermo rivolto verso di te. Poi entra nell\'inquadratura con le mani tese.</string>

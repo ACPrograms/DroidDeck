@@ -2,7 +2,8 @@
 # Builds the add-on packs the app downloads on first use instead of shipping in the APK:
 #   proot.tar.zst     the patched proot and its loader (built by tools/proot)
 #   directaudio.tar.zst  the Wine DirectAudio drivers (fetched by tools/directaudio/fetch.sh)
-#   tracking.tar.zst  hand-tracking models and the OpenCV/MediaPipe native libraries
+#   vr.tar.zst        the SteamVR driver and Vulkan layer (built by tools/vr), hand-tracking models,
+#                     the OpenCV/MediaPipe native libraries, the Luma Ultra base calibration and their licenses
 #   xbox.tar.zst      the Xbox backend (built by tools/xbox) for /usr/local/lib/droiddeck-xbox
 #   comet.tar.zst     the GOG Galaxy companion (built by tools/comet) for /usr/local/lib/droiddeck-comet
 # Only CI publishes these (.github/workflows/publish-packs.yml); the APK built from the same
@@ -16,8 +17,8 @@ out=${1:?usage: build.sh <out-dir>}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 linuxfs="$repo/app/src/main/assets/linuxfs/usr/local/lib"
-# shellcheck source=tracking/release.env
-source "$here/tracking/release.env"
+# shellcheck source=vr/release.env
+source "$here/vr/release.env"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -58,28 +59,46 @@ EOF
     echo "$name $(sha256 "$out/$name.tar.zst") $(wc -c < "$out/$name.tar.zst" | tr -d ' ')"
 }
 
-mkdir "$work/tracking"
+mkdir "$work/vr"
 fetch "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" \
-    fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1 "$work/tracking/hand_landmarker.task"
+    fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1 "$work/vr/hand_landmarker.task"
 fetch "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task" \
-    59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a "$work/tracking/pose_landmarker_lite.task"
-cp "$here/tracking/hand_landmarker_lite.task" "$work/tracking/"
-[ "$(sha256 "$work/tracking/hand_landmarker_lite.task")" = 173c0f47ecee7e935bd4a1e93aa580756b4180c1307c07d709313e82c28672c8 ] || {
+    59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a "$work/vr/pose_landmarker_lite.task"
+cp "$here/vr/hand_landmarker_lite.task" "$here/vr/luma-ultra-640x480.json" "$work/vr/"
+[ "$(sha256 "$work/vr/hand_landmarker_lite.task")" = 173c0f47ecee7e935bd4a1e93aa580756b4180c1307c07d709313e82c28672c8 ] || {
     echo "checksum mismatch for hand_landmarker_lite.task" >&2; exit 1; }
 fetch "https://repo1.maven.org/maven2/org/opencv/opencv/${OPENCV_VERSION}/opencv-${OPENCV_VERSION}.aar" \
     "$OPENCV_AAR_SHA256" "$work/opencv.aar"
 fetch "https://dl.google.com/dl/android/maven2/com/google/mediapipe/tasks-core/${MEDIAPIPE_VERSION}/tasks-core-${MEDIAPIPE_VERSION}.aar" \
     "$MEDIAPIPE_AAR_SHA256" "$work/tasks-core.aar"
-unzip -q -j "$work/opencv.aar" jni/arm64-v8a/libopencv_java4.so -d "$work/tracking"
-unzip -q -j "$work/tasks-core.aar" jni/arm64-v8a/libmediapipe_tasks_jni.so -d "$work/tracking"
-chmod 0644 "$work/tracking"/*
+unzip -q -j "$work/opencv.aar" jni/arm64-v8a/libopencv_java4.so -d "$work/vr"
+unzip -q -j "$work/tasks-core.aar" jni/arm64-v8a/libmediapipe_tasks_jni.so -d "$work/vr"
+chmod 0644 "$work/vr"/*
+cp -R "$linuxfs/droiddeck-vr/droiddeck" "$linuxfs/droiddeck-vr/layer" "$work/vr/"
+mkdir -p "$work/vr/licenses/droiddeck" "$work/vr/licenses/mediapipe" "$work/vr/licenses/opencv" "$work/vr/licenses/openvr" \
+    "$work/vr/licenses/gvr" "$work/vr/licenses/monado" "$work/vr/licenses/sdpolygon" "$work/vr/licenses/wayland"
+cp "$repo/LICENSE" "$work/vr/licenses/droiddeck/LICENSE"
+cp "$repo/docs/third-party/handtracking/LICENSE_MEDIAPIPE" "$work/vr/licenses/mediapipe/LICENSE"
+unzip -q -p "$work/tasks-core.aar" META-INF/NOTICE > "$work/vr/licenses/mediapipe/NOTICE"
+cp "$repo/docs/third-party/handtracking/LICENSE_OPENCV" "$work/vr/licenses/opencv/LICENSE"
+cp "$repo/tools/vr/src/OPENVR_LICENSE" "$work/vr/licenses/openvr/LICENSE"
+cp "$repo/docs/third-party/joycon/LICENSE_GVR" "$work/vr/licenses/gvr/LICENSE"
+cp "$repo/docs/third-party/joycon/LICENSE_MONADO" "$work/vr/licenses/monado/LICENSE"
+cp "$repo/docs/third-party/handtracking/LICENSE_SDPOLYGON" "$work/vr/licenses/sdpolygon/LICENSE"
+{
+    sed -n '/@section page_copyright_wayland/,/\*\//p' "$repo/tools/vr/third_party/wayland/wayland-client-protocol.h" | sed -e '1,2d' -e '$d'
+    echo ' *'
+    sed -n '2,/\*\//p' "$repo/app/src/main/cpp/waylandcomp/generated/xdg-shell-protocol.c" | sed '$d'
+} | sed -e 's/^ \* \{0,1\}//' > "$work/vr/licenses/wayland/COPYING"
 
 mkdir "$work/proot"
 install -m755 "$repo/app/src/main/jniLibs/arm64-v8a/libproot.so" "$repo/app/src/main/jniLibs/arm64-v8a/libproot-loader.so" "$work/proot/"
 pack proot "$work/proot" libproot.so libproot-loader.so
 pack directaudio "$repo/app/src/main/assets/directaudio" \
     linux-wine11/version.txt linux-wine11-systhread/version.txt
-pack tracking "$work/tracking" hand_landmarker.task hand_landmarker_lite.task pose_landmarker_lite.task \
-    libopencv_java4.so libmediapipe_tasks_jni.so
+pack vr "$work/vr" hand_landmarker.task hand_landmarker_lite.task pose_landmarker_lite.task \
+    libopencv_java4.so libmediapipe_tasks_jni.so luma-ultra-640x480.json \
+    droiddeck/bin/linuxarm64/driver_droiddeck.so layer/libVkLayer_droiddeck_vr.so layer/VK_LAYER_DROIDDECK_vr_implicit.json \
+    licenses/droiddeck/LICENSE licenses/mediapipe/NOTICE licenses/wayland/COPYING
 pack xbox "$linuxfs/droiddeck-xbox" version xodus-cli xodus-service
 pack comet "$linuxfs/droiddeck-comet" version comet

@@ -43,14 +43,15 @@ class RuntimeInputsTest(unittest.TestCase):
         path.write_bytes(subprocess.run(['zstd', '-q', '-c'], input=stream.getvalue(), capture_output=True, check=True).stdout)
 
     def packs(self):
-        self.pack('tracking', {library.rsplit('/', 1)[1]: b'library' for library in runtime.PACKED_LIBRARIES})
-        proot = {}
+        contents = {name: {} for name in runtime.PACK_NAMES}
+        contents['vr'].update({library.rsplit('/', 1)[1]: b'library' for library in runtime.PACKED_LIBRARIES})
         for name, (pack, rel) in runtime.PACKED_FILES.items():
-            proot[rel] = (self.root / runtime.outputs(self.root)[name]).read_bytes()
-        self.pack('proot', proot)
+            contents[pack][rel] = (self.root / runtime.outputs(self.root)[name]).read_bytes()
         for prefix, name in runtime.PACKED.items():
             base = self.root / 'app/src/main' / prefix
-            self.pack(name, {path.relative_to(base).as_posix(): path.read_bytes() for path in base.rglob('*') if path.is_file()})
+            contents[name].update({path.relative_to(base).as_posix(): path.read_bytes() for path in base.rglob('*') if path.is_file()})
+        for name, files in contents.items():
+            self.pack(name, files)
 
     @staticmethod
     def in_apk(name):
@@ -146,9 +147,15 @@ class RuntimeInputsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'xbox pack provides'):
             runtime.check_apk(apk, self.root)
 
-    def test_an_apk_still_carrying_tracking_libraries_is_rejected(self):
+    def test_an_apk_still_carrying_vr_libraries_is_rejected(self):
         apk = self.current_apk(self.root / 'bundled.apk', {runtime.PACKED_LIBRARIES[0]: b'library'})
-        with self.assertRaisesRegex(ValueError, 'tracking pack provides'):
+        with self.assertRaisesRegex(ValueError, 'VR pack provides'):
+            runtime.check_apk(apk, self.root)
+
+    def test_an_apk_still_carrying_the_steamvr_driver_is_rejected(self):
+        driver = 'assets/linuxfs/usr/local/lib/droiddeck-vr/droiddeck/bin/linuxarm64/driver_droiddeck.so'
+        apk = self.current_apk(self.root / 'bundled.apk', {driver: b'driver'})
+        with self.assertRaisesRegex(ValueError, 'vr pack provides'):
             runtime.check_apk(apk, self.root)
 
     def test_a_stale_pack_is_rejected(self):

@@ -489,7 +489,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/droiddeck-pack-inputs
-          key: pack-inputs-v1-${{ hashFiles('tools/packs/build.sh', 'tools/packs/fetch-verified.sh', 'tools/packs/tracking/release.env') }}
+          key: pack-inputs-v1-${{ hashFiles('tools/packs/build.sh', 'tools/packs/fetch-verified.sh', 'tools/packs/vr/release.env') }}
           restore-keys: pack-inputs-v1-
       - name: Build the add-on packs
         run: bash tools/packs/build.sh app/build/packs

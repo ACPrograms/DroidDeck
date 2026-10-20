@@ -1035,6 +1035,7 @@
     <string name="games_empty">Hry, které nainstalujete ve Steamu, se zde zobrazí po relaci.</string>
     <string name="games_play_steam">Hrát ve Steamu</string>
     <string name="games_play_steamvr">Hrát ve SteamVR</string>
+    <string name="games_install_play_steamvr">Stáhnout a hrát ve SteamVR</string>
     <string name="games_launch_settings">Nastavení spuštění</string>
     <string name="games_launch">Spustit</string>
     <string name="games_files">Soubory hry</string>
@@ -1382,9 +1383,12 @@
     <string name="session_proton_downloading_mb">stahování Proton Experimental (ARM64) · %1$d z %2$d MB</string>
     <string name="session_proton_checking">kontrola Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">rozbalování Proton Experimental (ARM64)</string>
+    <string name="session_vr_downloading">stahování modulu VR</string>
+    <string name="session_vr_downloading_mb">stahování modulu VR · %1$d z %2$d MB</string>
     <string name="session_runtime_catalog_unreachable">Nepodařilo se spojit s katalogem runtime. Zkontrolujte připojení a znovu stiskněte Hrát.</string>
     <string name="session_runtime_install_failed">Runtime Linuxu se nenainstaloval. Zkontrolujte runtime v Přípravě a znovu stiskněte Hrát.</string>
     <string name="session_desktop_install_failed">Plocha se nenainstalovala (%1$s). Zkontrolujte připojení a znovu stiskněte Plocha.</string>
+    <string name="session_vr_install_failed">Modul VR se nenainstaloval. Zkontrolujte připojení a znovu stiskněte Hrát ve SteamVR.</string>
     <string name="session_ended_named">Došlo k neočekávanému zastavení %1$s. Přiložte logy k hlášení chyby, nebo zkuste znovu.</string>
     <string name="session_ended_program">Program neočekávaně skončil. Přiložte logy k hlášení chyby, nebo zkuste znovu.</string>
     <string name="session_ended_desktop">Plocha neočekávaně skončila. Přiložte logy k hlášení chyby, nebo zkuste znovu.</string>
@@ -2547,6 +2551,16 @@
     <string name="hand_camera_placement">Umístění kamery</string>
     <string name="hand_camera_placement_hint">Než začnete hrát, zkontrolujte, že vás kamera vidí.</string>
     <string name="hand_camera_check">Zkontrolovat</string>
+    <string name="vr_module_title">Modul VR</string>
+    <string name="vr_module_hint">SteamVR na brýlích, Quest a Cardboard a sledování rukou kamerou · stažení %1$s</string>
+    <string name="vr_module_installed">Nainstalováno · %1$s</string>
+    <string name="vr_module_downloading">Stahování modulu VR</string>
+    <string name="vr_module_failed">Modul VR se nepodařilo stáhnout. Zkontrolujte připojení a zkuste to znovu.</string>
+    <string name="vr_module_removing">Odebírání modulu VR</string>
+    <string name="vr_module_busy">Před odebráním modulu VR ukončete relaci.</string>
+    <string name="vr_module_remove_failed">Modul VR se nepodařilo odebrat</string>
+    <string name="vr_module_uninstall_title">Odinstalovat modul VR?</string>
+    <string name="vr_module_uninstall_text">SteamVR a sledování rukou kamerou přestanou fungovat, dokud modul znovu nestáhnete. SteamVR samotný, hry a nastavení zůstanou zachovány.</string>
     <string name="hand_camera_check_title">Umístění kamery</string>
     <string name="hand_camera_how_rear">Postavte zařízení svisle do vzdálenosti 1,5 až 2 metry přibližně ve výšce hrudníku tak, aby zadní kamera směřovala k vám. Pak se postavte do záběru s nataženýma rukama.</string>
     <string name="hand_camera_how_front">Postavte zařízení svisle do vzdálenosti 1,5 až 2 metry přibližně ve výšce hrudníku tak, aby obrazovka směřovala k vám. Pak se postavte do záběru s nataženýma rukama.</string>
