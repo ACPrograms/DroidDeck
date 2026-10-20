@@ -1561,7 +1561,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun followChoice(): Boolean {
-        val mode = SessionPrefs.prefMode(intent.getStringExtra(SessionService.EXTRA_MODE) ?: SessionService.MODE_STEAM)
+        val mode = displayMode()
         return SessionPrefs.resolutionChoice(this, mode, com.droiddeck.launcher.session.SessionDisplay.panelSize(this)) ==
             com.droiddeck.launcher.session.SessionDisplay.FOLLOW_SCREEN
     }
@@ -1600,8 +1600,11 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         android.graphics.Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
     }
 
+    private fun displayMode(): String = SessionPrefs.displayMode(this,
+        intent.getStringExtra(SessionService.EXTRA_MODE) ?: SessionService.MODE_STEAM, intent.getStringExtra(SessionService.EXTRA_PROGRAM))
+
     private fun outputSize(): Pair<Int, Int> {
-        val mode = SessionPrefs.prefMode(intent.getStringExtra(SessionService.EXTRA_MODE) ?: SessionService.MODE_STEAM)
+        val mode = displayMode()
         val panel = com.droiddeck.launcher.session.SessionDisplay.panelSize(this)
         val program = intent.getStringExtra(SessionService.EXTRA_PROGRAM)
         val choice = if (intent.getStringExtra(SessionService.EXTRA_MODE) == SessionService.MODE_RUN &&
@@ -2963,7 +2966,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private fun glassesOutputSize(): Pair<Int, Int>? {
         if (glassesScreen == null || glasses.width <= 0 || glasses.height <= 0) return null
         val panel = (if (glasses.sbs) glasses.width / 2 else glasses.width) to glasses.height
-        val mode = SessionPrefs.prefMode(intent.getStringExtra(SessionService.EXTRA_MODE) ?: SessionService.MODE_STEAM)
+        val mode = displayMode()
         val display = com.droiddeck.launcher.session.SessionDisplay
         val choice = SessionPrefs.resolutionChoice(this, mode, panel)
         val size = display.resolveChoice(panel, choice)
