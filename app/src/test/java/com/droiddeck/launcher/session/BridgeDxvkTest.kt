@@ -163,9 +163,62 @@ class BridgeDxvkTest {
         assertEquals("bundled DXVK experimental-12", File(protonDir("proton-exp"), "files/lib/wine/dxvk/aarch64-windows/d3d11.dll").readText())
     }
 
+    @Test fun thePlayerCanKeepProtonsOwnDxvk() {
+        proton("proton-exp")
+        assertNull("nothing chosen when declined", run(g710, keep = true))
+        writeState("proton-exp", JSONObject().put("file", old).put("protonVersion", "experimental-11").put("auto", true))
+        val undone = mutableListOf<String>()
+        run(g710, keep = true, undoAuto = { id, comp -> undone += "$id $comp"; "undone" })
+        assertEquals("an earlier automatic choice goes back", listOf("proton-exp dxvk"), undone)
+    }
+
+    @Test fun turningTheBridgeOffRestoresProtonsOwn() {
+        proton("proton-exp")
+        val d3d11 = File(protonDir("proton-exp"), "files/lib/wine/dxvk/aarch64-windows/d3d11.dll")
+        writePackage(old, "DXVK 1.10.3")
+        val auto: (String, String) -> String = { id, file -> ComponentsManager.swap(context, id, file, auto = true) }
+        val undo: (String, String) -> String = { id, comp -> ComponentsManager.undoAutoChoice(context, id, comp) }
+        run(g710, applyAuto = auto, undoAuto = undo)
+        assertEquals("DXVK 1.10.3", d3d11.readText())
+        run(null, bridge = false, applyAuto = auto, undoAuto = undo)
+        assertEquals("bundled DXVK experimental-11", d3d11.readText())
+        assertNull(state().getJSONObject("active").optJSONObject("proton-exp")?.optJSONObject("dxvk"))
+    }
+
+    @Test fun turningTheBridgeOffKeepsThePlayersOwnChoice() {
+        proton("proton-exp")
+        writeState("proton-exp", JSONObject().put("file", "dxvk-3.1-linux.wcp").put("protonVersion", "experimental-11"))
+        assertNull(run(g710, bridge = false))
+        assertNull(run(g710, keep = true))
+    }
+
+    @Test fun aQueuedAutomaticSwapIsDroppedWhenTheBridgeIsOff() {
+        proton("proton-exp")
+        val f = File(context.filesDir, "components/state.json")
+        f.parentFile!!.mkdirs()
+        f.writeText(JSONObject().put("active", JSONObject())
+            .put("queued", JSONObject().put("proton-exp", JSONObject()
+                .put("dxvk", JSONObject().put("kind", "package").put("file", old).put("auto", true))
+                .put("vkd3d", JSONObject().put("kind", "package").put("file", "vkd3d-x.wcp")))).toString())
+        assertNull(run(null, bridge = false))
+        val q = state().getJSONObject("queued").getJSONObject("proton-exp")
+        assertFalse(q.has("dxvk"))
+        assertTrue("the player's own queued swap stays", q.has("vkd3d"))
+    }
+
+    @Test fun whenAutomaticChoicesAreUndone() {
+        val rule = ComponentsManager.bridgeDxvk(g710)
+        assertTrue(ComponentsManager.autoDxvkUndoWanted(false, false, null, null))
+        assertTrue(ComponentsManager.autoDxvkUndoWanted(true, true, g710, null))
+        assertTrue(ComponentsManager.autoDxvkUndoWanted(true, false, full, null))
+        assertFalse("failed detection keeps it", ComponentsManager.autoDxvkUndoWanted(true, false, null, null))
+        assertFalse(ComponentsManager.autoDxvkUndoWanted(true, false, g710, rule))
+    }
+
     private fun run(
         vk: AppVulkan?,
         bridge: Boolean = true,
+        keep: Boolean = false,
         applyAuto: (String, String) -> String = { id, file -> error("apply $id $file") },
         undoAuto: (String, String) -> String = { id, comp -> error("undo $id $comp") },
     ) = ComponentsManager.ensureForcedPackages(
@@ -173,7 +226,7 @@ class BridgeDxvkTest {
         lookup = { file, release -> ComponentsManager.CatalogItem(file, "dxvk", release, "https://example.invalid/$file", 4, "sha256:" + "ab".repeat(32)) },
         fetch = {},
         apply = { id, file -> error("non-automatic apply $id $file") },
-        vulkan = vk, bridgeSession = bridge, applyAuto = applyAuto, undoAuto = undoAuto,
+        vulkan = vk, bridgeSession = bridge, applyAuto = applyAuto, undoAuto = undoAuto, keepProtonDxvk = keep,
     )
 
     private fun protonDir(name: String) = File(LinuxRuntime.rootDir(context), "root/.local/share/Steam/steamapps/common/$name")

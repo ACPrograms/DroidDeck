@@ -258,6 +258,18 @@ internal fun SetupPanel(
                                     )
                                 },
                             )
+                            if (!s.adreno && s.vkBridge) CheckRow(
+                                CheckState.OK,
+                                stringResource(R.string.setup_bridge_dxvk),
+                                stringResource(if (s.bridgeProtonDxvk) R.string.setup_bridge_dxvk_proton_detail else R.string.setup_bridge_dxvk_auto_detail),
+                                divider = divider,
+                                action = {
+                                    SecondaryButton(
+                                        stringResource(if (s.bridgeProtonDxvk) R.string.setup_bridge_dxvk_proton else R.string.setup_bridge_dxvk_auto),
+                                        enabled = !s.sessionRunning, compact = true, onClick = { a.onBridgeProtonDxvk(!s.bridgeProtonDxvk) },
+                                    )
+                                },
+                            )
                         }
                         val runtimeCheck: @Composable (Boolean) -> Unit = { divider ->
                             CheckRow(

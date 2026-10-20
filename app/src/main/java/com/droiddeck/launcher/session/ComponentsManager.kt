@@ -1020,13 +1020,28 @@ object ComponentsManager {
     internal const val DXVK_FOR_VULKAN_1_1 = "dxvk-1.10.3-linux.wcp"
     internal const val DXVK_FOR_VULKAN_1_3_NO_INT64 = "dxvk-2.6.2-linux.wcp"
 
+    internal fun autoDxvkUndoWanted(bridgeSession: Boolean, keepProtonDxvk: Boolean, vulkan: AppVulkan?, bridgeRule: ForcedPackage?): Boolean =
+        !bridgeSession || keepProtonDxvk || (vulkan != null && bridgeRule == null)
+
+    private fun dropQueuedAuto(context: Context, installed: List<Proton>) = synchronized(lock) {
+        val state = loadState(context)
+        var changed = false
+        for (p in installed) {
+            val q = state.optJSONObject("queued")?.optJSONObject(p.id) ?: continue
+            if (q.optJSONObject("dxvk")?.optBoolean("auto") == true) { q.remove("dxvk"); changed = true }
+        }
+        if (changed) saveState(context, state)
+    }
+
     internal fun autoChoiceStale(entry: JSONObject?, wantedFile: String?): Boolean =
         entry != null && entry.optBoolean("auto") && entry.optString("file") != wantedFile
 
     internal fun catalogMatch(items: List<CatalogItem>, file: String, release: String): CatalogItem? =
         items.firstOrNull { it.file == file && it.release == release }
 
-    fun ensureForcedPackages(context: Context): String? = ensureForcedPackages(
+    private val forcedLock = Any()
+
+    fun ensureForcedPackages(context: Context): String? = synchronized(forcedLock) { ensureForcedPackages(
         context, GpuInfo.detect(),
         { file, release -> catalogItem(context, file, release) },
         { download(context, it) {} },
@@ -1035,7 +1050,18 @@ object ComponentsManager {
         bridgeSession = com.droiddeck.launcher.core.DeviceSupport.vkBridge(context),
         applyAuto = { id, file -> swap(context, id, file, auto = true) },
         undoAuto = { id, comp -> undoAutoChoice(context, id, comp) },
-    )
+        keepProtonDxvk = SessionPrefs.bridgeProtonDxvk(context),
+        autoPossible = !com.droiddeck.launcher.core.DeviceSupport.adreno(),
+    ) }
+
+    fun settleAutoDxvk(context: Context) {
+        val app = context.applicationContext
+        Thread({
+            runCatching { ensureForcedPackages(app) }
+                .onSuccess { if (it != null) Log.i(TAG, it) }
+                .onFailure { Log.w(TAG, "automatic DXVK", it) }
+        }, "auto-dxvk").start()
+    }
 
     internal fun undoAutoChoice(context: Context, protonId: String, comp: String): String = synchronized(lock) {
         val p = proton(context, protonId)
@@ -1063,19 +1089,23 @@ object ComponentsManager {
         bridgeSession: Boolean = false,
         applyAuto: (protonId: String, file: String) -> String = apply,
         undoAuto: (protonId: String, comp: String) -> String = { _, _ -> "" },
+        keepProtonDxvk: Boolean = false,
+        autoPossible: Boolean = true,
     ): String? {
-        val bridgeRule = if (bridgeSession) bridgeDxvk(vulkan) else null
+        val chooseDxvk = bridgeSession && !keepProtonDxvk
+        val bridgeRule = if (chooseDxvk) bridgeDxvk(vulkan) else null
         val rules = FORCED_PACKAGES.filter { it.matches(gpu) }.map { it to false } + listOfNotNull(bridgeRule?.let { it to true })
-        if (rules.isEmpty() && !bridgeSession) return null
+        if (rules.isEmpty() && !autoPossible) return null
         val installed = protons(context)
         val lines = mutableListOf<String>()
         fun each(p: Proton, what: () -> String): String =
             runCatching(what).getOrElse { e -> Log.w(TAG, "${p.name}: ${e.message}", e); "${p.name}: ${e.message ?: e.javaClass.simpleName}" }
-        if (bridgeSession && vulkan != null) {
+        if (autoPossible && autoDxvkUndoWanted(bridgeSession, keepProtonDxvk, vulkan, bridgeRule)) {
+            dropQueuedAuto(context, installed)
             val state = loadState(context)
             for (p in installed) {
                 val entry = state.optJSONObject("active")?.optJSONObject(p.id)?.optJSONObject("dxvk")
-                if (bridgeRule == null && autoChoiceStale(entry, null)) lines.add(each(p) { undoAuto(p.id, "dxvk") })
+                if (autoChoiceStale(entry, null)) lines.add(each(p) { undoAuto(p.id, "dxvk") })
             }
         }
         for ((rule, auto) in rules) {

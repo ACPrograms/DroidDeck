@@ -604,6 +604,12 @@ object SessionPrefs {
     }
 
     @JvmStatic
+    fun bridgeProtonDxvk(context: Context): Boolean = prefs(context).getBoolean("bridgeProtonDxvk", false)
+
+    fun setBridgeProtonDxvk(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("bridgeProtonDxvk", on).apply()
+    }
+
     fun vkBridgeSafe(context: Context): Boolean = prefs(context).getBoolean("vkBridgeSafe", true)
 
     fun setVkBridgeSafe(context: Context, on: Boolean) {

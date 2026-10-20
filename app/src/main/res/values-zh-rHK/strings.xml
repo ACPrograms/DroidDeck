@@ -3063,4 +3063,9 @@
     <string name="xbox_filter_show">顯示</string>
     <string name="xbox_filter_cloud">雲端</string>
     <string name="stores_xbox_cloud_settings">雲端設定</string>
+    <string name="setup_bridge_dxvk">DXVK</string>
+    <string name="setup_bridge_dxvk_auto">DXVK：自動</string>
+    <string name="setup_bridge_dxvk_proton">DXVK：Proton 內建</string>
+    <string name="setup_bridge_dxvk_auto_detail">此 GPU 的 Vulkan 版本對 Proton 內建的 DXVK 來說太舊時，改用較舊的 DXVK。</string>
+    <string name="setup_bridge_dxvk_proton_detail">每個 Proton 都使用內建的 DXVK，即使此 GPU 的 Vulkan 版本可能太舊。</string>
 </resources>
