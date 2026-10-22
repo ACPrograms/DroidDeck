@@ -52,6 +52,11 @@ class DesktopUninstallTest {
         compose.onNodeWithText("Uninstall").assertIsDisplayed()
     }
 
+    @Test fun anUninstalledDesktopNoLongerOffersUninstall() {
+        show(installed = false, present = false)
+        compose.onNodeWithText("Uninstall").assertDoesNotExist()
+    }
+
     @Test fun startingRuntimeWorkWhileConfirmingDisablesUninstall() {
         show()
         compose.onNodeWithText("Uninstall").performClick()
@@ -64,7 +69,7 @@ class DesktopUninstallTest {
 
     private fun settle() = compose.mainClock.advanceTimeBy(2_000)
 
-    private fun show(installed: Boolean = true, blocked: Boolean = false) {
+    private fun show(installed: Boolean = true, blocked: Boolean = false, present: Boolean = true) {
         runtimeBlocked = blocked
         compose.mainClock.autoAdvance = false
         compose.setContent {
@@ -74,7 +79,7 @@ class DesktopUninstallTest {
                         Box(Modifier.fillMaxSize()) {
                             DesktopPage(FrontEndState(
                                 installed = "r9", ready = true, available = null, busy = false, stage = "", percent = -1,
-                                desktopInstalled = installed, desktopPresent = true, runtimeActionsBlocked = runtimeBlocked,
+                                desktopInstalled = installed, desktopPresent = present, runtimeActionsBlocked = runtimeBlocked,
                                 offlineAccount = null, offline = false, frameGenLabel = "", romsDir = null, logsEnabled = false,
                                 steamGames = emptyList(), emulators = emptyList(), running = null,
                             ), FrontEndActions(
