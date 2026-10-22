@@ -83,17 +83,18 @@
             </intent-filter>
         </activity>
 
-        <activity-alias
+        <!-- Red Magic Game Space only lists apps whose launcher entry is a real activity, not an alias. -->
+        <activity
             android:name=".LauncherDark"
-            android:targetActivity=".MainActivity"
             android:icon="@mipmap/ic_launcher"
-            android:exported="true">
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.CAR_LAUNCHER" />
             </intent-filter>
-        </activity-alias>
+        </activity>
 
         <activity-alias
             android:name=".LauncherLight"
