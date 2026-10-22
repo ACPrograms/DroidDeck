@@ -2931,4 +2931,9 @@
     <string name="spatial_saved_views_hint">Saved views can be recalculated. Start a new calibration to capture in the current tracking frame.</string>
     <string name="spatial_model_checksum_error">Hand model checksum mismatch</string>
     <string name="spatial_opencv_load_error">OpenCV could not load</string>
+    <string name="setup_bridge_safe">Safe mode</string>
+    <string name="setup_bridge_safe_on">Safe mode: on</string>
+    <string name="setup_bridge_safe_off">Safe mode: off</string>
+    <string name="setup_bridge_safe_on_detail">Most compatible. Recommended for a new device.</string>
+    <string name="setup_bridge_safe_off_detail">Faster where this GPU passed its checks.</string>
 </resources>

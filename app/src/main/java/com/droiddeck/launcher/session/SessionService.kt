@@ -709,11 +709,14 @@ class SessionService : Service() {
             ?.let { guest.add("BL_VKBRIDGE_FALLBACK_ICD=$it") }
         guest.add("VKBRIDGE_SOCKET=" + socket.path)
         guest.add("VKBRIDGE_CLIENT_LOG=" + File(sessionDir, "vkbridge-client.log").path)
+        // Setup's "Safe mode": the client's defaults by mode (the server reads <cache dir>/mode,
+        // written by VkBridgeComponent); /root/.vkbridge-env can still override it.
+        guest.add("VKBRIDGE_MODE=" + SessionPrefs.vkBridgeMode(this))
         LinuxRuntime.gpuStandIn(this)?.let { node ->
             guest.add("BL_DRM_STANDIN=$node")
             LinuxRuntime.deviceNumbers(node)?.let { guest.add("VKBRIDGE_DRM_RENDER=$it") }
         }
-        Log.i(TAG, "vkbridge: on (${com.droiddeck.launcher.core.DeviceSupport.gpuName(this)}), socket $socket")
+        Log.i(TAG, "vkbridge: on (${com.droiddeck.launcher.core.DeviceSupport.gpuName(this)}, ${SessionPrefs.vkBridgeMode(this)} mode), socket $socket")
     }
     private fun noSteamGame(): Boolean =
         SessionState.mode == MODE_RUN && SessionState.program in setOf(NoSteamLaunch.PROTON_RUN, NoSteamLaunch.EPIC)

@@ -106,7 +106,7 @@ collect_steam_logs() {
   fi
   echo "== steam logs copied to $BL_DEBUG_DIR/steam"
 }
-trap 'collect_steam_logs 2>/dev/null || true' TERM INT HUP
+trap 'bl_stopping=1; collect_steam_logs 2>/dev/null || true' TERM INT HUP
 if [ -n "${BL_VK_DRIVER:-}" ]; then
   bl_icd_lib=$(sed -n 's/.*"library_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$BL_VK_DRIVER" 2>/dev/null | head -1)
   bl_icd_lib=$(printf '%s' "$bl_icd_lib" | sed 's|\\/|/|g')
@@ -123,11 +123,69 @@ if [ -n "${BL_VK_DRIVER:-}" ]; then
   fi
   unset bl_icd_lib
 fi
+# The bridge server listens only after its startup probe: a fresh one after every APK or driver
+# update (114 ms on the Tab S10+, longer on a cold driver), cached ones in about a millisecond.
+# SessionService waits for the socket before it starts the guest; this wait covers a server still
+# coming up past that, and says how long the socket took. Stops waiting when the session is told to
+# stop (the trap above): a session resumed only to be torn down finds the server already gone.
+bl_now_ms() {
+  if [ -n "${EPOCHREALTIME:-}" ]; then
+    local t=${EPOCHREALTIME/[.,]/}
+    echo $((10#$t / 1000))
+  else
+    date +%s%3N
+  fi
+}
+vkbridge_wait_socket() {
+  local sock=$1 limit=${2:-10000} start now waited
+  [ -n "$sock" ] || return 1
+  if [ -S "$sock" ]; then
+    echo "== vkbridge: server socket ready (waited 0 ms)"
+    return 0
+  fi
+  start=$(bl_now_ms)
+  while :; do
+    now=$(bl_now_ms)
+    waited=$((now - start))
+    if [ -S "$sock" ]; then
+      echo "== vkbridge: server socket ready (waited $waited ms; the server listens after its startup probe)"
+      return 0
+    fi
+    if [ -n "${bl_stopping:-}" ]; then
+      echo "== vkbridge: no server socket after $waited ms; the session is stopping"
+      return 1
+    fi
+    if [ "$waited" -ge "$limit" ]; then
+      echo "== vkbridge: no server socket after $waited ms (gave up at $limit ms)"
+      return 1
+    fi
+    sleep 0.05
+  done
+}
+# The Mali bridge (Setup's experimental switch on a non-Adreno GPU; external/MaliBridge): the app runs a
+# server on the phone's own Vulkan driver and this session draws through its ICD, which replaces
+# every other driver here. Checked from inside like an imported driver, and on the first pass only
+# the bridge's self-test and the driver's summary go into the log, so a black screen comes with the
+# reason in the same file.
 if [ "${BL_VKBRIDGE:-0}" = 1 ]; then
   bl_vkb_icd=/usr/local/share/vkbridge/droidbridge_icd.json
-  if [ -r "$bl_vkb_icd" ] && [ -r /usr/local/lib/vkbridge/libvulkan_droidbridge.so ] && [ -S "${VKBRIDGE_SOCKET:-}" ]; then
+  # Only the first pass waits: the inner one runs after it, against the same server.
+  [ -z "${BL_INSIDE:-}" ] && vkbridge_wait_socket "${VKBRIDGE_SOCKET:-}" "${BL_VKBRIDGE_WAIT_MS:-10000}"
+  bl_vkb_missing=
+  [ -r "$bl_vkb_icd" ] || bl_vkb_missing="$bl_vkb_missing icd"
+  [ -r /usr/local/lib/vkbridge/libvulkan_droidbridge.so ] || bl_vkb_missing="$bl_vkb_missing library"
+  [ -S "${VKBRIDGE_SOCKET:-}" ] || bl_vkb_missing="$bl_vkb_missing socket"
+  if [ -z "$bl_vkb_missing" ]; then
     export VK_DRIVER_FILES=$bl_vkb_icd VK_ICD_FILENAMES=$bl_vkb_icd
     export VKBRIDGE_SOCKET VKBRIDGE_CLIENT_LOG
+    # Bridge switches (VKBRIDGE_MODE, frame dumps, ...) without a new APK: KEY=VALUE lines in
+    # /root/.vkbridge-env, written with adb run-as; ignored when absent.
+    if [ -r /root/.vkbridge-env ]; then
+      while IFS='=' read -r _k _v; do
+        case "$_k" in VKBRIDGE_*|BL_VKBRIDGE_*) export "$_k=$_v" ;; esac
+      done < /root/.vkbridge-env
+      [ -z "${BL_INSIDE:-}" ] && echo "== vkbridge: development settings from /root/.vkbridge-env: $(cut -d= -f1 /root/.vkbridge-env | tr '\n' ' ')"
+    fi
     unset TU_DEBUG
     if [ -z "${BL_INSIDE:-}" ]; then
       step "vkbridge self-test"
@@ -160,9 +218,9 @@ if [ "${BL_VKBRIDGE:-0}" = 1 ]; then
     fi
     [ "${BL_VKBRIDGE:-0}" = 1 ] && echo "== vulkan driver: Mali bridge ($bl_vkb_icd, server at $VKBRIDGE_SOCKET)"
   else
-    echo "== vulkan driver: Mali bridge requested but NOT usable (icd $bl_vkb_icd, socket ${VKBRIDGE_SOCKET:-unset}); this GPU will show a black screen"
+    echo "== vulkan driver: Mali bridge requested but NOT usable (icd $bl_vkb_icd, socket ${VKBRIDGE_SOCKET:-unset}; missing:$bl_vkb_missing); this GPU will show a black screen"
   fi
-  unset bl_vkb_icd
+  unset bl_vkb_icd bl_vkb_missing
 fi
 if [ "${BL_VENUS:-0}" = 1 ] && [ -z "${BL_INSIDE:-}" ] && command -v vulkaninfo >/dev/null 2>&1; then
   if bl_vn_info=$(timeout 30 vulkaninfo 2>/dev/null); then

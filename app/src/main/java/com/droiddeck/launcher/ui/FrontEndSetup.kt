@@ -212,6 +212,8 @@ internal fun SetupPanel(
             Column(modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                 when (tab) {
                     0 -> {
+                        // Setup's "Safe mode" row, under the GPU row while the bridge is on and can be used here.
+                        val bridgeModeRow = !s.adreno && s.vkBridge && com.droiddeck.launcher.core.DeviceSupport.bridgeUsable()
                         val gpuCheck: @Composable (Boolean) -> Unit = { divider ->
                             CheckRow(
                                 if (gpuOk) CheckState.OK else CheckState.WARN,
@@ -233,7 +235,7 @@ internal fun SetupPanel(
                                     else if (s.vkBridge) stringResource(R.string.setup_gpu_bridge_detail, gpuName)
                                     else stringResource(R.string.setup_gpu_unsupported_detail, gpuName)
                                 },
-                                divider = divider,
+                                divider = divider || bridgeModeRow,
                                 // Not an Adreno: the experimental Vulkan bridge is the one way to draw.
                                 action = if (s.adreno) null else { {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -247,6 +249,20 @@ internal fun SetupPanel(
                                         )
                                     }
                                 } },
+                            )
+                            // The bridge's mode (MaliBridge server_mode.c): safe keeps its workarounds
+                            // wherever the startup probe has not verified this GPU; off is faster.
+                            if (bridgeModeRow) CheckRow(
+                                CheckState.OK,
+                                stringResource(R.string.setup_bridge_safe),
+                                stringResource(if (s.vkBridgeSafe) R.string.setup_bridge_safe_on_detail else R.string.setup_bridge_safe_off_detail),
+                                divider = divider,
+                                action = {
+                                    SecondaryButton(
+                                        stringResource(if (s.vkBridgeSafe) R.string.setup_bridge_safe_on else R.string.setup_bridge_safe_off),
+                                        enabled = !s.sessionRunning, compact = true, onClick = { a.onVkBridgeSafe(!s.vkBridgeSafe) },
+                                    )
+                                },
                             )
                         }
                         val runtimeCheck: @Composable (Boolean) -> Unit = { divider ->

@@ -433,7 +433,7 @@ object SessionPrefs {
 
     /**
      * The Mali bridge (experimental): the session's Vulkan goes through the app's bridge server to
-     * the phone's own driver instead of Turnip (tools/vkbridge). Only offered, and only used, on a
+     * the phone's own driver instead of Turnip (external/MaliBridge). Only offered, and only used, on a
      * GPU without Adreno's KGSL; off by default everywhere.
      */
     @JvmStatic
@@ -515,6 +515,23 @@ object SessionPrefs {
     fun setVkBridge(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("vkBridge", on).putBoolean("bridgeFellBack", false).apply()
     }
+
+    /**
+     * The Mali bridge's safe mode, on by default: the bridge keeps its proven workarounds wherever
+     * its startup probe has not verified this GPU and driver. Off is performance mode (native paths
+     * wherever the probe passed). Reaches the server as <cache dir>/mode (VkBridgeComponent) and
+     * the guest as VKBRIDGE_MODE (SessionService).
+     */
+    @JvmStatic
+    fun vkBridgeSafe(context: Context): Boolean = prefs(context).getBoolean("vkBridgeSafe", true)
+
+    fun setVkBridgeSafe(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("vkBridgeSafe", on).apply()
+    }
+
+    /** The bridge's mode as the server and the client read it: "safe" or "performance". */
+    @JvmStatic
+    fun vkBridgeMode(context: Context): String = if (vkBridgeSafe(context)) "safe" else "performance"
 
     fun setZinkLazy(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("zinkLazy", on).apply()

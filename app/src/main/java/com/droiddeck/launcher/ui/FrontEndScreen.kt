@@ -142,6 +142,8 @@ class FrontEndState(
     /** Setup's "Mali (Venus)" (SessionPrefs.venus). */
     val venus: Boolean = false,
     val venusHostVulkan: String? = null,
+    /** Setup's "Safe mode" for the Mali bridge (SessionPrefs.vkBridgeSafe), on by default. */
+    val vkBridgeSafe: Boolean = true,
     val showPhantomGate: Boolean = false,
     val orientation: Int = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
     val launcherFullscreen: Boolean = true,
@@ -196,6 +198,7 @@ class FrontEndActions(
     val onRuntime: () -> Unit,
     val onVkBridge: (Boolean) -> Unit = {},
     val onVenus: (Boolean) -> Unit = {},
+    val onVkBridgeSafe: (Boolean) -> Unit = {},
     val onFrameGenPick: (FrameGen.Mode) -> Unit,
     val onImportLossless: () -> Unit,
     val onProtons: () -> Unit,

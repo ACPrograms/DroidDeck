@@ -41,6 +41,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          submodules: true
 
       - name: Check co-authors
         if: github.event_name == 'pull_request'
@@ -184,7 +185,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: app/src/main/assets/linuxfs
-          key: preloads-${{ env.PRELOAD_CACHE_VERSION }}-${{ hashFiles('app/src/main/cpp/fakeinput_steam.cpp', 'app/src/main/cpp/adrenotools/src/hook/kgsl.h', 'tools/quest/*', 'tools/linuxfs/preload/*.c', 'tools/linuxfs/build-x86-preloads.sh', 'tools/linuxfs/fex/*', 'tools/linuxfs/clipboard/*.c', 'tools/linuxfs/ssbs/*.c', 'tools/linuxfs/xclipse-layer/*', 'tools/proot/fastpath/*.c', 'tools/linuxfs/overlay/usr/local/bin/*', 'tools/linuxfs/overlay/usr/bin/**', 'tools/linuxfs/desktop/*', 'tools/gamescope/release.env', 'tools/wlroots/release.env', 'tools/linuxfs/uruntime.env', 'tools/linuxfs/licenses/*', 'tools/mangoapp/*', 'tools/msitools/**', 'tools/comet/**', 'tools/vkbridge/client/**', 'tools/vkbridge/common/**', 'tools/vkbridge/tests/**', 'tools/vkbridge/build-client-linux.sh', 'tools/linuxfs/debian-image.env', 'tools/vr/**') }}
+          key: preloads-${{ env.PRELOAD_CACHE_VERSION }}-${{ hashFiles('app/src/main/cpp/fakeinput_steam.cpp', 'app/src/main/cpp/adrenotools/src/hook/kgsl.h', 'tools/quest/*', 'tools/linuxfs/preload/*.c', 'tools/linuxfs/build-x86-preloads.sh', 'tools/linuxfs/fex/*', 'tools/linuxfs/clipboard/*.c', 'tools/linuxfs/ssbs/*.c', 'tools/linuxfs/xclipse-layer/*', 'tools/proot/fastpath/*.c', 'tools/linuxfs/overlay/usr/local/bin/*', 'tools/linuxfs/overlay/usr/bin/**', 'tools/linuxfs/desktop/*', 'tools/gamescope/release.env', 'tools/wlroots/release.env', 'tools/linuxfs/uruntime.env', 'tools/linuxfs/licenses/*', 'tools/mangoapp/*', 'tools/msitools/**', 'tools/comet/**', 'external/MaliBridge/client/**', 'external/MaliBridge/common/**', 'external/MaliBridge/tests/**', 'external/MaliBridge/scripts/build-client-linux.sh', 'tools/venus/glprobe.c', 'tools/linuxfs/debian-image.env', 'tools/vr/**') }}
 
       - name: Build libfakeinput.so and libblsession.so (glibc aarch64)
         if: steps.preloads.outputs.cache-hit != 'true'
@@ -219,8 +220,11 @@ jobs:
           aarch64-linux-gnu-strip --strip-unneeded "$D/usr/local/lib/droiddeck-xclipse/libVkLayer_droiddeck_xclipse.so"
           install -m644 tools/linuxfs/xclipse-layer/VkLayer_droiddeck_xclipse.json "$D/usr/local/lib/droiddeck-xclipse/"
           mkdir -p "$D/usr/local/bin"
-          # The Mali bridge's Linux side: ICD, manifest and self-test (tools/vkbridge).
-          tools/vkbridge/build-client-linux.sh "$D" aarch64-linux-gnu-gcc
+          # The Mali bridge's Linux side: ICD, manifest and self-test (external/MaliBridge).
+          external/MaliBridge/scripts/build-client-linux.sh "$D" aarch64-linux-gnu-gcc
+          # GLX start-up probe for the Mali Venus route.
+          aarch64-linux-gnu-gcc -O2 -Wall -o "$D/usr/local/bin/droiddeck-glprobe" tools/venus/glprobe.c -ldl
+          aarch64-linux-gnu-strip --strip-unneeded "$D/usr/local/bin/droiddeck-glprobe"
           aarch64-linux-gnu-gcc -O2 -Wall -Wextra -o "$D/usr/local/bin/droiddeck-clipboard" tools/linuxfs/clipboard/clipboard.c -ldl
           aarch64-linux-gnu-strip --strip-unneeded "$D/usr/local/bin/droiddeck-clipboard"
           VK_INCLUDE=$(ls -d "${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-$ANDROID_NDK_ROOT}}"/toolchains/llvm/prebuilt/*/sysroot/usr/include | head -1) \

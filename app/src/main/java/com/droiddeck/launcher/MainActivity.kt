@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
     private var vkBridge by mutableStateOf(false)
     private var venus by mutableStateOf(false)
     private var venusHostVulkan by mutableStateOf<String?>(null)
+    private var vkBridgeSafe by mutableStateOf(true)
     private val adrenoGpu by lazy { com.droiddeck.launcher.core.DeviceSupport.adreno() }
     private var noXalia by mutableStateOf(true)
     private var fastSync by mutableStateOf(false)
@@ -768,7 +769,7 @@ class MainActivity : ComponentActivity() {
                 FrontEndScreen(
                     FrontEndState(
                         installed = installed, ready = ready, available = available?.version, removalPending = removalPending, runtimeActionsBlocked = runtimeChangesBlocked(),
-                        vkBridge = vkBridge, venus = venus, venusHostVulkan = venusHostVulkan, adreno = adrenoGpu,
+                        vkBridge = vkBridge, venus = venus, venusHostVulkan = venusHostVulkan, vkBridgeSafe = vkBridgeSafe, adreno = adrenoGpu,
                         shortcutPicker = shortcutPicker,
                         shortcutLibraryScanning = shortcutLibraryScanning,
                         gameSyncFolder = gameSyncFolder,
@@ -914,6 +915,7 @@ class MainActivity : ComponentActivity() {
                                 runOnUiThread { venusHostVulkan = com.droiddeck.launcher.session.VenusComponent.hostVulkanTooOld(this) }
                             }, "venus-host-vulkan").start()
                         },
+                        onVkBridgeSafe = { on -> SessionPrefs.setVkBridgeSafe(this, on); vkBridgeSafe = on },
                         onFrameGenPick = { mode ->
                             FrameGen.set(this, mode)
                             frameGenLabel = FrameGen.label(this)
@@ -1900,6 +1902,7 @@ class MainActivity : ComponentActivity() {
         vkBridge = SessionPrefs.vkBridge(this)
         venus = SessionPrefs.venus(this)
         venusHostVulkan = com.droiddeck.launcher.session.VenusComponent.hostVulkanTooOld(this)
+        vkBridgeSafe = SessionPrefs.vkBridgeSafe(this)
         noXalia = SessionPrefs.noXalia(this)
         fastSync = SessionPrefs.fastSync(this)
         syncFallback = SessionPrefs.syncFallback(this)
@@ -1928,6 +1931,10 @@ class MainActivity : ComponentActivity() {
         offline = OfflineMode.enabled(this)
         installed = LinuxRuntimeInstaller.installedVersion(this)
         ready = LinuxRuntime.isInstalled(this)
+        // Setup's Mali bridge row reads these; refreshCores() alone ran only for the Performance
+        // page, so a new process (every APK update) showed "Mali bridge: off" with the switch on.
+        vkBridge = SessionPrefs.vkBridge(this)
+        vkBridgeSafe = SessionPrefs.vkBridgeSafe(this)
         removalPending = LinuxRuntimeInstaller.hasRemovalPending(this)
         frameGenLabel = FrameGen.label(this)
         romsDir = SessionPrefs.romsDir(this).takeIf { it.isNotEmpty() }
