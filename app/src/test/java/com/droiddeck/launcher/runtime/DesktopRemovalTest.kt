@@ -87,6 +87,26 @@ class DesktopRemovalTest {
         assertTrue(Files.isSymbolicLink(desktop.toPath()))
     }
 
+    @Test fun failedDownloadCleanupKeepsTheInstallRecordSoRemovalCanRetry() {
+        val entry = DesktopCatalog.desktopEntry(context)
+        val download = File(context.cacheDir, "pkg-${entry.id}-${entry.sha256.take(12)}.download")
+        for (blocked in listOf(download, File(download.path + ".resume.properties"))) {
+            desktopFiles()
+            journal.writeText(DesktopCatalog.entryJson(entry).toString())
+            blocked.mkdirs()
+            val blocker = File(blocked, "blocker").apply { writeText("fixture") }
+
+            assertNotNull(DesktopCatalog.removeDesktop(context, listener))
+            assertTrue(journal.exists())
+            assertTrue(pending.exists())
+            assertTrue(blocker.delete())
+            assertNull(DesktopCatalog.removeDesktop(context, listener))
+            assertFalse(blocked.exists())
+            assertFalse(journal.exists())
+            assertFalse(pending.exists())
+        }
+    }
+
     private fun file(path: String, text: String) = File(root, path).apply { parentFile!!.mkdirs(); writeText(text) }
 
     private fun desktopFiles(): File {

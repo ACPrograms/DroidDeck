@@ -134,12 +134,13 @@ object DesktopCatalog {
     internal fun discardDesktopInstall(context: Context) {
         val entry = interrupted(context).firstOrNull { it.id == DESKTOP_ID }
         val journal = journal(LinuxRuntime.rootDir(context), DESKTOP_ID)
-        check(!journal.exists() || journal.delete()) { "Could not clear desktop installation" }
         entry?.let {
             val download = downloadFile(context, it)
-            download.delete()
-            File(download.path + ".resume.properties").delete()
+            for (file in listOf(download, File(download.path + ".resume.properties"))) {
+                check(!file.exists() || file.delete()) { "Could not remove desktop download ${file.name}" }
+            }
         }
+        check(!journal.exists() || journal.delete()) { "Could not clear desktop installation" }
     }
 
     fun install(context: Context, entry: Entry, listener: LinuxRuntimeInstaller.ProgressListener?): String? = synchronized(installLock) {
