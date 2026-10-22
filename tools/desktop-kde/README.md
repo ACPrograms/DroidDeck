@@ -49,9 +49,6 @@ pacman files and emulator bundle paths are protected even when they overlap an a
 It never follows parent symlinks or recursively deletes directories. Home, added apps, custom
 files and modified package files stay. A pending marker disables the installed state and allows
 retry after interruption. Installing the desktop again repairs its package files and clears it.
-Uninstall is available beside Open desktop and under Desktop → Files, including for an
-interrupted installation. Successful removal clears that desktop installation's recovery record
-and cached download so the next guest launch cannot reinstall it through package recovery.
 The old LXQt applications are cleaned after KDE installation and before the next guest launch on
 an already-upgraded runtime, protecting both KDE inventories as well as the runtime and emulators.
 Only files owned by `lxqt-applications.txt`'s application packages are candidates; dependencies
