@@ -8,7 +8,8 @@ internal object AmazonEngine {
     fun verify(directory: File): Boolean = runCatching {
         val manifest = File(directory, "engine.json")
         val library = File(directory, "libdroiddeckamazon.so")
-        check(manifest.canonicalFile == manifest.absoluteFile && library.canonicalFile == library.absoluteFile)
+        val root = directory.canonicalFile
+        check(manifest.canonicalFile == File(root, manifest.name) && library.canonicalFile == File(root, library.name))
         check(manifest.length() in 1..131_072 && library.isFile)
         val data = JSONObject(manifest.readText())
         check(data.getInt("schema") == 1 && data.getInt("abi") == 1)
