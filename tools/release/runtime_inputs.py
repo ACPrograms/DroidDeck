@@ -2,6 +2,7 @@
 import hashlib
 import gzip
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -65,8 +66,9 @@ def outputs(root):
                 result['assets/' + tree + '/' + path.relative_to(base).as_posix()] = path.relative_to(root).as_posix()
     for library in ['libproot.so', 'libproot-loader.so', 'libdirectaudiorelay.so']:
         result['lib/arm64-v8a/' + library] = 'app/src/main/jniLibs/arm64-v8a/' + library
-    result['lib/arm64-v8a/libdroiddeckamazon.so'] = 'app/build/amazon-engine/libdroiddeckamazon.so'
-    result['assets/store-engines/amazon/engine.json'] = 'app/build/amazon-engine/engine.json'
+    if amazon_enabled():
+        result['lib/arm64-v8a/libdroiddeckamazon.so'] = 'app/build/amazon-engine/libdroiddeckamazon.so'
+        result['assets/store-engines/amazon/engine.json'] = 'app/build/amazon-engine/engine.json'
     result['assets/pulseaudio.tzst'] = 'app/build/prepared-assets/pulseaudio.tzst'
     result['assets/graphics_driver/adrenotools-turnip25.1.0-quest1.tzst'] = \
         'app/build/prepared-assets/graphics_driver/adrenotools-turnip25.1.0-quest1.tzst'
@@ -76,8 +78,12 @@ def outputs(root):
     return result
 
 
+def amazon_enabled():
+    return os.environ.get('CI') == 'true' or os.environ.get('DROIDDECK_SKIP_RUST') != '1'
+
+
 def required():
-    paths = ['lib/arm64-v8a/libdroiddeckamazon.so', 'assets/store-engines/amazon/engine.json']
+    paths = ['lib/arm64-v8a/libdroiddeckamazon.so', 'assets/store-engines/amazon/engine.json'] if amazon_enabled() else []
     paths += ['assets/graphics_driver/adrenotools-turnip25.1.0-quest1.tzst']
     paths += [f'assets/graphics_driver/adrenotools-{name}.tzst'
               for name in ['turnip26.3.0-a6xx', 'turnip26.3.0-quest2']]
@@ -194,7 +200,7 @@ def pack_digests(root, name):
 
 def check_apk(apk, root=ROOT):
     data = verify(root)
-    packs = {name: pack_digests(root, name) for name in PACK_NAMES}
+    packs = {name: pack_digests(root, name) for name in PACK_NAMES if name != 'amazon' or amazon_enabled()}
     with ZipFile(apk) as package:
         names = set(package.namelist())
         for library in PACKED_LIBRARIES:

@@ -28,6 +28,8 @@ New APKs reuse an existing pack when its digest is unchanged; changed pins downl
 their exact version rather than loading an arbitrary older engine. Loading verifies
 the manifest/library and JNI interface before configuring the engine. Unpinned local
 builds intentionally cannot borrow an arbitrary prior Amazon pack.
+The existing local `DROIDDECK_SKIP_RUST=1` mode omits Amazon too. CI always requires
+the engine and pack even when that local flag is present.
 
 Device validation still needs a fresh Amazon sign-in, existing-account upgrade, failed
 download/retry, offline relaunch, and cancel/resume installation. Robolectric integrity

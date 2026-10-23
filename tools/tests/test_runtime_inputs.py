@@ -1,6 +1,7 @@
 import importlib.util
 import gzip
 import io
+import os
 from pathlib import Path, PureWindowsPath
 import subprocess
 import tarfile
@@ -71,6 +72,14 @@ class RuntimeInputsTest(unittest.TestCase):
         apk = self.current_apk(self.root / 'bundled.apk', {'lib/arm64-v8a/libproot.so': b'prepared runtime'})
         with self.assertRaisesRegex(ValueError, 'proot pack provides'):
             runtime.check_apk(apk, self.root)
+
+    def test_local_rust_skip_cannot_disable_the_amazon_pack_in_ci(self):
+        with mock.patch.dict(os.environ, {'DROIDDECK_SKIP_RUST': '1', 'CI': 'false'}):
+            self.assertFalse(runtime.amazon_enabled())
+            self.assertNotIn('lib/arm64-v8a/libdroiddeckamazon.so', runtime.outputs(self.root))
+        with mock.patch.dict(os.environ, {'DROIDDECK_SKIP_RUST': '1', 'CI': 'true'}):
+            self.assertTrue(runtime.amazon_enabled())
+            self.assertIn('lib/arm64-v8a/libdroiddeckamazon.so', runtime.required())
 
     def test_missing_proot_cannot_be_attested(self):
         (self.root / 'app/src/main/jniLibs/arm64-v8a/libproot.so').unlink()
