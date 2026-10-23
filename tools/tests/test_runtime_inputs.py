@@ -44,10 +44,11 @@ class RuntimeInputsTest(unittest.TestCase):
 
     def packs(self):
         self.pack('tracking', {library.rsplit('/', 1)[1]: b'library' for library in runtime.PACKED_LIBRARIES})
-        proot = {}
+        packed = {}
         for name, (pack, rel) in runtime.PACKED_FILES.items():
-            proot[rel] = (self.root / runtime.outputs(self.root)[name]).read_bytes()
-        self.pack('proot', proot)
+            packed.setdefault(pack, {})[rel] = (self.root / runtime.outputs(self.root)[name]).read_bytes()
+        for name, files in packed.items():
+            self.pack(name, files)
         for prefix, name in runtime.PACKED.items():
             base = self.root / 'app/src/main' / prefix
             self.pack(name, {path.relative_to(base).as_posix(): path.read_bytes() for path in base.rglob('*') if path.is_file()})

@@ -2,6 +2,7 @@ package com.droiddeck.launcher.stores.amazon
 
 import android.content.Context
 import android.content.Intent
+import com.droiddeck.launcher.R
 import com.droiddeck.launcher.stores.CatalogItem
 import com.droiddeck.launcher.stores.InstalledStoreGame
 import com.droiddeck.launcher.stores.LoginFlows
@@ -21,20 +22,26 @@ object AmazonBackend : StoreBackend {
         LoginFlows.amazonFlow = { AmazonLogin.create() }
     }
 
-    private fun engineMissing(): Boolean {
-        if (AmazonNative.ready()) return false
-        StoresState.logLine(AmazonNative.ENGINE_MISSING)
-        StoresState.post { StoresState.problems[store] = AmazonNative.ENGINE_MISSING }
-        return true
-    }
-
     override fun signIn(context: Context) {
-        if (engineMissing()) return
-        context.startActivity(
-            Intent(context, StoreLoginActivity::class.java)
-                .putExtra(StoreLoginActivity.EXTRA_STORE, store.id)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
+        val app = context.applicationContext
+        Thread({
+            val available = AmazonNative.prepare(app) { state ->
+                if (state is com.droiddeck.launcher.core.AddonPack.State.Downloading) {
+                    StoresState.post { StoresState.status[store] = app.getString(R.string.stores_engine_downloading, store.label, (state.progress * 100).toInt()) }
+                }
+            }
+            StoresState.post {
+                StoresState.status.remove(store)
+                if (available) {
+                    StoresState.problems.remove(store)
+                    app.startActivity(Intent(app, StoreLoginActivity::class.java)
+                        .putExtra(StoreLoginActivity.EXTRA_STORE, store.id)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } else {
+                    StoresState.problems[store] = app.getString(R.string.stores_engine_failed, store.label)
+                }
+            }
+        }, "amazon-engine").start()
     }
 
     override fun signOut(context: Context) {
