@@ -25,7 +25,7 @@ PACKED_LIBRARIES = ['lib/arm64-v8a/libopencv_java4.so', 'lib/arm64-v8a/libmediap
 PACK_NAMES = ['proot', 'directaudio', 'tracking', 'xbox', 'comet', 'amazon']
 SOURCE_PATHS = ['app/build.gradle', 'app/src/main/cpp/fakeinput_steam.cpp', 'app/src/main/assets/pulseaudio.tzst',
                 'app/src/main/rust/stores/src', 'app/src/main/rust/stores/Cargo.toml',
-                'app/src/main/rust/amazon/Cargo.toml', 'app/src/main/rust/amazon/Cargo.lock', 'tools/stores',
+                'app/src/main/rust/stores/amazon/Cargo.toml', 'app/src/main/rust/stores/Cargo.lock', 'tools/stores',
                 'tools/linuxfs', 'tools/proot', 'tools/aaudio-sink', 'tools/directaudio', 'tools/packs',
                 'tools/gamescope/release.env', 'tools/droiddeck-esync/release.env',
                 'tools/mangoapp', 'tools/msitools', 'tools/pipewire', 'tools/comet', 'tools/xbox', 'tools/components', 'tools/ci', 'tools/build_local.sh',

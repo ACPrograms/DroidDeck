@@ -3,6 +3,7 @@
 The APK keeps GOG and Epic in `libdroiddeckstores.so`. Amazon is compiled separately
 as `libdroiddeckamazon.so`, using the same reviewed Rust sources and shared download
 implementation. Cargo features determine the exported stores; the source is not copied.
+Both crates share one Cargo workspace and the existing lockfile/target cache.
 The separate library duplicates some linked Rust dependencies. Measure combined
 download size before extending this model to other stores.
 

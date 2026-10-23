@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def inputs(root=ROOT):
-    paths = ['app/src/main/rust/amazon/Cargo.toml', 'app/src/main/rust/amazon/Cargo.lock',
+    paths = ['app/src/main/rust/stores/amazon/Cargo.toml', 'app/src/main/rust/stores/Cargo.lock', 'app/src/main/rust/stores/Cargo.toml',
              'app/src/main/rust/stores/src/lib.rs', 'app/src/main/rust/stores/src/stores_jni.rs',
              'app/src/main/rust/stores/src/amazon', 'app/src/main/rust/stores/src/fetch_core.rs',
              'app/src/main/rust/stores/src/fetch_tuning.rs', 'app/src/main/rust/stores/src/priority.rs',

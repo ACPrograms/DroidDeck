@@ -32,3 +32,8 @@ sha2 = "0.10"
 codegen-units = 1
 lto = "thin"
 strip = "symbols"
+
+[workspace]
+members = ["amazon"]
+default-members = ["."]
+resolver = "2"

@@ -8,7 +8,7 @@ publish = false
 [lib]
 name = "droiddeckamazon"
 crate-type = ["cdylib"]
-path = "../stores/src/lib.rs"
+path = "../src/lib.rs"
 
 [features]
 default = ["amazon-pack"]
@@ -28,8 +28,3 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha1 = "0.10"
 sha2 = "0.10"
-
-[profile.release]
-codegen-units = 1
-lto = "thin"
-strip = "symbols"
