@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lan_title">Local LAN · Experimental</string>
+    <string name="lan_setup_hint">Offline Wi-Fi hotspot and USB/Ethernet LAN setup</string>
+    <string name="lan_experimental">Device testing is still needed. Use a game with LAN or direct-IP multiplayer. LAN setup does not add multiplayer to a game or replace Steam authentication. Set this up before launching the game.</string>
+    <string name="lan_wireless">Wireless LAN</string>
+    <string name="lan_wireless_help">Host creates a password-protected local network without a router or internet. It may disconnect your current Wi-Fi. On the other device, join using Android Wi-Fi settings and choose to stay connected without internet. Then select the LAN interface below on both devices. If cellular takes priority, turn mobile data off while playing.</string>
+    <string name="lan_host">Host offline hotspot</string>
+    <string name="lan_stop">Stop hotspot</string>
+    <string name="lan_starting">Starting hotspot…</string>
+    <string name="lan_notification">Offline hotspot requested. Tap to manage LAN.</string>
+    <string name="lan_credentials">Network: %1$s\nPassword: %2$s</string>
+    <string name="lan_failed">Android could not start a usable hotspot on this device.</string>
+    <string name="lan_incompatible">Turn off any existing hotspot or Wi-Fi Direct connection, then try again.</string>
+    <string name="lan_disallowed">Hotspots are disabled by this device’s policy.</string>
+    <string name="lan_no_channel">No Wi-Fi channel is available. Check Wi-Fi and airplane mode, then retry.</string>
+    <string name="lan_permission_needed">Hosting needs precise location permission for this app’s Android compatibility level. Enable it in App settings, then retry.</string>
+    <string name="lan_location_needed">Turn on Android Location services, then retry hosting.</string>
+    <string name="lan_app_settings">App settings</string>
+    <string name="lan_wifi_settings">Join in Wi-Fi settings</string>
+    <string name="lan_location_settings">Location settings</string>
+    <string name="lan_wired">USB-C / Ethernet LAN</string>
+    <string name="lan_wired_help">Connect a data-capable USB-C cable and enable USB tethering on one device in Android settings. This only works if the other device supports the USB network driver and host role. If no LAN interface appears, try reversing the cable’s host/device roles or use USB Ethernet adapters. Charging or file-transfer mode alone does not create a LAN. DroidDeck cannot enable USB tethering itself.</string>
+    <string name="lan_network_settings">Android network settings</string>
+    <string name="lan_interface">Game LAN interface</string>
+    <string name="lan_interface_help">Select the interface whose IP belongs to your local connection. DroidDeck reports this interface and its real index to the Linux session. This does not change Android routing; use the host’s IP in the game if LAN discovery fails. Selection lasts until the app process exits or you return to the default below.</string>
+    <string name="lan_no_interfaces">No local IPv4 interfaces are visible yet. Connect the devices first.</string>
+    <string name="lan_interface_lost">%1$s is unavailable. Reconnect or choose another interface.</string>
+    <string name="lan_use">Use for games</string>
+    <string name="lan_selected">Selected</string>
+    <string name="lan_default">Android default network</string>
+</resources>
