@@ -1,11 +1,11 @@
-# Local LAN experiment
+# Local multiplayer experiment
 
 Status: implemented prototype; no two-device hardware or game validation. Open
-**Settings → Overview → Local LAN · Experimental** before starting a session.
+**Settings → Overview → Local multiplayer · Experimental** before starting a session.
 
 ## Scope
 
-Two devices each run their own copy of a LAN-capable game. One device can create
+LAN mode: two devices each run their own copy of a LAN-capable game. One device can create
 an Android local-only hotspot; the other joins it through Android Wi-Fi settings.
 No router, SIM, mobile data, internet connection, or root access is required by
 the hotspot API. Android chooses the network name, password, band, and subnet.
@@ -19,10 +19,61 @@ USB Ethernet adapters and an Ethernet cable are another possible transport.
 DroidDeck does not create USB gadget functions, force USB roles, enable tethering,
 or install kernel drivers.
 
-This does not implement remote play, controller forwarding, online matchmaking,
-an internet-sharing hotspot, a virtual LAN tunnel, or generic split-screen co-op.
+Shared-screen mode: one DroidDeck device runs a game through Steam and the other
+uses Valve's Steam Link app for video, audio, and controller input. This reuses
+DroidDeck's existing Steam Remote Play host; it adds a setup guide and a client
+app/store handoff, not a new streaming implementation or an embedded client.
+
+Neither mode adds online matchmaking, an internet-sharing hotspot, a virtual LAN
+tunnel, or multiplayer to games that do not support it.
 Steam authentication, account/licensing requirements, DRM, and a game's own
 network implementation still apply. Prepare and test offline mode before travel.
+
+## Shared-screen co-op through Steam Link
+
+This is the EasyControl-style outcome: the game runs on the host, both devices
+see the host's picture, and the client supplies a separate gamepad. No ADB,
+Shizuku, root permission, or Android-wide input injection is introduced. The
+screen includes distinct host and client instructions, a return-to-host button
+when a Steam session is running, the selected LAN address for manual pairing,
+and a button to open Steam Link on the device being used. When Steam Link is
+absent, that button opens its store listing with a browser fallback; installation
+and pairing remain user actions. App availability refreshes when setup resumes.
+
+1. Put both devices on the same Wi-Fi, or host the local-only hotspot and join it
+   from the second device. Select the host's actual LAN interface before launching
+   Steam. The Steam Link client does **not** need a Linux session or DroidDeck's
+   guest-interface override.
+2. Start Steam through DroidDeck on the host and enable **Settings → Remote Play →
+   Enable Remote Play**. The host must remain running and its own controls must
+   remain enabled. This guide returns to an existing Steam session; it does not
+   bypass DroidDeck's normal setup checks to start a new one.
+3. Open Steam Link on the second device, find/add the host, and approve its pairing
+   PIN in the host's Steam. Attach the second player's controller to the client
+   device or enable Steam Link's touch controller. Start streaming.
+4. Launch a local co-op/split-screen game through the host's Steam. Enter its local
+   multiplayer mode and join using the second gamepad. The desired result is two
+   distinct controllers, not keyboard/mouse events controlling the same player.
+   If necessary adjust Steam's controller order and the game's input settings.
+   Player numbering is controlled by Steam/the game; this guide does not force
+   the host into player one or merge the inputs in DroidDeck.
+
+The host's existing capture path uses PipeWire and its MediaCodec-backed V4L2
+encoder bridge ([release notes](releases/0.6.0.md),
+[VideoEncodeBridge](../app/src/main/java/com/droiddeck/launcher/session/VideoEncodeBridge.kt)).
+Steam Link handles pairing, the streaming protocol, decoding, and remote input;
+Steam's virtual-controller support supplies guest controller devices. Games added
+to Steam can be candidates, but a standalone non-Steam session is not a host for
+this flow. Displaying two copies of the same split-screen picture does not give
+each player an independent camera or turn a single-player game into co-op.
+
+Install the client, authenticate Steam, and pair while online before travel. The
+hotspot itself needs no internet, but fully offline streaming and first-time
+offline pairing have **not** been validated in this DroidDeck setup. Do not equate
+successful hotspot creation with working Steam Link. Sources:
+[Valve Remote Play support](https://help.steampowered.com/en/faqs/view/0689-74B8-92AC-10F2),
+[network requirements](https://help.steampowered.com/en/faqs/view/3E3D-BE6B-787D-A5D2),
+and [Valve's Android client listing](https://play.google.com/store/apps/details?id=com.valvesoftware.steamlink).
 
 ## Linux integration
 
@@ -103,6 +154,17 @@ interfaces/addresses, game versions, and whether mobile data/VPNs were enabled:
    actual interface/address before testing guest traffic. Repeat with airplane
    mode/no SIM, cable unplug/replug, and USB Ethernet adapters. Check charging
    direction, thermal load, and sustained play.
+7. For shared-screen co-op, test Steam Link installed/missing, store/browser
+   fallback, returning after installation, pairing PIN approval, manual host-IP
+   entry, and return-to-host behavior. In a local co-op game, press different
+   buttons/sticks on host and client simultaneously and confirm two independent
+   players. Repeat using the Steam Link touch controller; check controller order,
+   video, audio, reconnect, and behavior when the client exits.
+8. Repeat shared-screen play over the local-only hotspot with no mobile data or
+   external Wi-Fi, first with an already-paired client and then first-time pairing.
+   Record authentication/pairing failures separately from discovery, video, audio,
+   input, and LAN routing failures. Measure stream latency, frame drops, and host
+   thermal load during sustained play before choosing performance defaults.
 
 Keep this experimental until those results exist; successful builds are not
 evidence of working multiplayer.

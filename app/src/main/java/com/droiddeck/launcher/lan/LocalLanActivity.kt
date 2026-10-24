@@ -31,8 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.droiddeck.launcher.R
+import com.droiddeck.launcher.SessionActivity
 import com.droiddeck.launcher.core.AppLanguage
 import com.droiddeck.launcher.session.SessionPrefs
+import com.droiddeck.launcher.session.SessionService
+import com.droiddeck.launcher.session.SessionState
 import com.droiddeck.launcher.ui.ActionRow
 import com.droiddeck.launcher.ui.DroidDeckTheme
 import com.droiddeck.launcher.ui.Note
@@ -44,6 +47,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 class LocalLanActivity : ComponentActivity() {
+    private var clientInstalled by mutableStateOf(false)
+    private var hostRunning by mutableStateOf(false)
+
     override fun attachBaseContext(base: Context) = super.attachBaseContext(AppLanguage.wrap(base))
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +59,12 @@ class LocalLanActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) { LanSetup() }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        clientInstalled = SteamLinkCoop.clientIntent(this) != null
+        hostRunning = SessionState.running && SessionState.mode == SessionService.MODE_STEAM
     }
 
     @Composable
@@ -68,12 +80,29 @@ class LocalLanActivity : ComponentActivity() {
         LaunchedEffect(Unit) {
             while (true) {
                 interfaces = withContext(Dispatchers.IO) { LocalLan.interfaces() }
+                hostRunning = SessionState.running && SessionState.mode == SessionService.MODE_STEAM
                 delay(2000)
             }
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.lan_title), style = MaterialTheme.typography.headlineSmall)
             Note(stringResource(R.string.lan_experimental))
+            SteamLinkCoopPanel(
+                hostAddress = interfaces.firstOrNull { it.name == selected }?.addresses?.firstOrNull()?.address?.hostAddress,
+                hostRunning = hostRunning,
+                clientInstalled = clientInstalled,
+                onHost = {
+                    if (SessionState.running && SessionState.mode == SessionService.MODE_STEAM) {
+                        startActivity(Intent(this@LocalLanActivity, SessionActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                    } else finish()
+                },
+                onClient = {
+                    if (!SteamLinkCoop.openClientOrStore(this@LocalLanActivity)) {
+                        android.widget.Toast.makeText(this@LocalLanActivity, R.string.lan_coop_client_unavailable, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                },
+            )
             SettingsGroup(stringResource(R.string.lan_wireless)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.lan_wireless_help))

@@ -29,6 +29,10 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.vr.headtracking" android:version="1" android:required="false" />
 
+    <queries>
+        <package android:name="com.valvesoftware.steamlink" />
+    </queries>
+
     <application
         android:name=".App"
         android:localeConfig="@xml/locales_config"
