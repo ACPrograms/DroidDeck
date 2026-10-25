@@ -279,8 +279,10 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
             // left it on for good (it wins over the pair). Under Auto that switch is taken as Auto's.
             if (!SessionPrefs.maliFallbackKnown(activity))
                 SessionPrefs.setMaliFallbackByAuto(activity, if (SessionPrefs.vkBridge(activity)) "bridge" else "")
+            // A lone imported PanVK Android driver set by hand stalls the display the same way
+            // ("black screen with the start-up logo"), so under Auto any imported display goes.
             val display = SessionPrefs.androidDriver(activity)
-            if (display.isNotEmpty() && DriverPairs.isNonAdreno(DriverBundle.containing(activity, display, false)?.id)) {
+            if (display != TurnipDriver.AUTO) {
                 SessionPrefs.setAndroidDriver(activity, TurnipDriver.AUTO)
                 Log.i(TAG, "auto: Mali display back on the phone's own driver (was $display)")
             }
@@ -288,6 +290,8 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         AutoDriverTrial.rollbackDue(activity)?.let { trial ->
             AutoDriverTrial.rollBack(activity, trial)
             autoStatus = activity.getString(R.string.drivers_rolled_back, trial.name)
+            // The drivers before the trial on a Mali are the runtime's Turnip, which finds no GPU there.
+            if (gpu.family.mali && maliHasNoRoute()) useMaliFallback(trial.name)
             refreshDrivers()
             return
         }
@@ -350,9 +354,16 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                         refreshDrivers()
                     }
                     gpu.family.mali && (pair == null || !pair.complete) &&
-                        (problem != null || TurnipReleases.cached(activity)?.failed?.contains(TurnipReleases.NON_ADRENO_LABEL) == true) ->
-                        // The list could not be read: nothing is known to be missing, so nothing is switched.
+                        (problem != null || TurnipReleases.cached(activity)?.failed?.contains(TurnipReleases.NON_ADRENO_LABEL) == true) -> {
+                        // The list could not be read: nothing is known to be missing, so a working route stays.
+                        // With no open driver, Venus or bridge the session would run the runtime's Turnip,
+                        // which finds no GPU on a Mali, so the stand-in goes on anyway.
                         autoStatus = activity.getString(R.string.upd_couldnt_check, problem ?: TurnipReleases.NON_ADRENO_LABEL)
+                        if (maliHasNoRoute()) {
+                            useMaliFallback(null)
+                            refreshDrivers()
+                        }
+                    }
                     gpu.family.mali && (pair == null || !pair.complete) -> {
                         // No open driver for this Mali published yet: the phone's own driver until it is.
                         autoStatus = useMaliFallback(key?.let { DriverPairs.nonAdrenoName(it) } ?: gpu.name)
@@ -360,8 +371,13 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                     }
                     pair == null || !pair.complete ->
                         autoStatus = problem?.let { activity.getString(R.string.upd_couldnt_check, it) } ?: activity.getString(R.string.drivers_recommended_unpublished)
-                    AutoDriverTrial.release(pair) in AutoDriverTrial.bad(activity) ->
+                    AutoDriverTrial.release(pair) in AutoDriverTrial.bad(activity) -> {
                         autoStatus = activity.getString(R.string.drivers_skipping_bad, pair.name, pair.version)
+                        if (gpu.family.mali && maliHasNoRoute()) {
+                            useMaliFallback(pair.name)
+                            refreshDrivers()
+                        }
+                    }
                     SessionState.running -> autoStatus = activity.getString(R.string.drivers_auto_waits_for_session)
                     holdBack && row?.installed != true -> autoStatus = activity.getString(R.string.drivers_auto_waits_for_network, pair.name, pair.version)
                     else -> installPair(pair, auto = true)
@@ -395,6 +411,13 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         Log.i(TAG, "auto: Mali stand-in route $route (missing pair: ${missing ?: "none covers ${gpu.name}"})")
         return if (missing == null) activity.getString(R.string.drivers_mali_no_pair_auto, route)
         else activity.getString(R.string.drivers_mali_unpublished_auto, missing, route)
+    }
+
+    /** Neither an installed open Linux driver nor Venus or the bridge: the runtime's Turnip would run. */
+    private fun maliHasNoRoute(): Boolean {
+        if (SessionPrefs.venus(activity) || SessionPrefs.vkBridge(activity)) return false
+        val linux = SessionPrefs.linuxDriver(activity)
+        return linux.isEmpty() || !LinuxVulkanDriverManager(activity).isInstalled(linux)
     }
 
     /** A pair is installed for this Mali: the route Auto switched on in its place goes off again. */
