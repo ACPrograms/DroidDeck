@@ -597,7 +597,7 @@ object SessionPrefs {
     fun zinkLazy(context: Context): Boolean = prefs(context).getBoolean("zinkLazy", true)
 
     @JvmStatic
-    fun vkBridge(context: Context): Boolean = prefs(context).getBoolean("vkBridge", false)
+    fun vkBridge(context: Context): Boolean = prefs(context).getBoolean("vkBridge", com.droiddeck.launcher.core.DeviceSupport.mali())
 
     fun setVkBridge(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("vkBridge", on).apply()
