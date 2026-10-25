@@ -1,5 +1,3 @@
-# sdl3droiddeck: SDL3 and the SDL3 bridge's controller loop, built into the app (libSDL3.so + libmain.so, loaded by
-# the bridge in its own ":sdl3" process). Written by patch-droiddeck.sh (step 30); the sources are SdlBridge's.
 set(SDL_SHARED ON CACHE BOOL "" FORCE)
 set(SDL_STATIC OFF CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -14,10 +12,15 @@ include(FetchContent)
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
+set(SDL3_MANIFEST "${DROIDDECK_CONTROLLER_SOURCES_DIR}/sdl3/upstream.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SDL3_MANIFEST}")
+file(READ "${SDL3_MANIFEST}" SDL3_UPSTREAM)
+string(JSON SDL3_ARCHIVE GET "${SDL3_UPSTREAM}" source archive)
+string(JSON SDL3_SHA256 GET "${SDL3_UPSTREAM}" source sha256)
 FetchContent_Declare(sdl3
-    URL https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18.tar.gz
-    URL_HASH SHA256=9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3
+    URL "${SDL3_ARCHIVE}"
+    URL_HASH "SHA256=${SDL3_SHA256}"
 )
 FetchContent_MakeAvailable(sdl3)
-add_library(main SHARED src/main.c)
+add_library(main SHARED "${DROIDDECK_CONTROLLER_SOURCES_DIR}/sdlbridge/native/main.c")
 target_link_libraries(main PRIVATE SDL3::SDL3 log)

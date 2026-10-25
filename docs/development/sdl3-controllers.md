@@ -16,10 +16,16 @@ Gyro, touchpad, remapping and lightbar settings belong to Steam while Hook-up is
 ## Source and attribution
 
 The controller implementation is by [pablo89898991](https://github.com/pablo89898991),
-imported from [SdlBridge at 63feeac6](https://github.com/pablo89898991/SdlBridge/tree/63feeac6)
-through [SDLApiDroidDeck at 131f1cef](https://github.com/pablo89898991/SDLApiDroidDeck/tree/131f1cef).
+imported from [SdlBridge at 63feeac6](https://github.com/pablo89898991/SdlBridge/tree/63feeac6a3b9f3b51ec7664d677e099cdf5ae4d0)
+through [SDLApiDroidDeck at 131f1cef](https://github.com/pablo89898991/SDLApiDroidDeck/tree/131f1ceffe52554758079c6a3bb3c045b9be2afe).
 The imported commit retains Pablo's Git author identity. DroidDeck integration and
 build adjustments are recorded separately.
+
+Reusable bridge code and SDL's Android Java bindings are unchanged snapshots under
+`third_party/sdlbridge` and `third_party/sdl3`. Their manifests pin upstream revisions
+and every source file's hash. Small patches hold the embedded-mode changes. Gradle
+verifies and prepares the patched sources under `app/build/controller-sources` before
+Java or native compilation. See [the update procedure](../../third_party/README.md).
 
 The port keeps DroidDeck's name, signing, workflows and test failure handling. It
 excludes the fork's ADPF changes, cursor-compositing default, Steam controller-rate
@@ -27,8 +33,8 @@ override, and CI/download fallbacks.
 
 SDL 3.4.18 is downloaded by CMake from its official release archive and verified
 against its SHA-256 digest. Its Android Java classes are imported from the same
-release. `HIDDeviceManager.java` retains the bridge's marked Bluetooth-permission
-adjustment. SDL uses the zlib license, included in
+release. The separate SDL Java patch leaves Bluetooth handling with DroidDeck.
+SDL uses the zlib license, included in
 `app/src/main/assets/licenses/sdl3/LICENSE.txt`; the bridge is distributed under
 DroidDeck's GPLv3 license.
 

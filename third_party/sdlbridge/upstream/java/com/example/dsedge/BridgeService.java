@@ -214,7 +214,7 @@ public class BridgeService extends Service implements NativeBridge.Listener {
                 : "SDL3Bridge · Steam Native Hook-up")
             .setContentText(text)
             .setStyle(new Notification.BigTextStyle().bigText(text))
-            .setSmallIcon(com.droiddeck.launcher.R.drawable.sdl3_ic_stat_bridge)
+            .setSmallIcon(R.drawable.ic_stat_bridge)
             .setColor(0xFF4FC3F7)
             .setContentIntent(open)
             .setOngoing(true)
@@ -832,7 +832,6 @@ public class BridgeService extends Service implements NativeBridge.Listener {
         b.putInt("presentAs", Settings.presentAs);
         b.putBoolean("driverEnabled", Settings.driverEnabled);
         b.putBoolean("forceUsb", Settings.forceUsb);
-        b.putBoolean("embedded", Host.embedded(this));
         b.putInt("pollMs", Settings.pollMs);
         b.putBoolean("bubble", Settings.bubble);
         // choices

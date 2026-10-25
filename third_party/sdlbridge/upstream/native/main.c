@@ -359,7 +359,8 @@ static void refresh_status(JNIEnv *env)
         SDL_free(ids);
         snprintf(diag, sizeof(diag),
                  "Forced SDL3 USB mode: waiting for the USB driver. Plug the controller in with a USB-C cable, "
-                 "then tap 'Force SDL3 USB driver' and allow USB access. Android-only controllers: %d", ignored);
+                 "then tap 'Force SDL3 USB driver' and allow USB access (or switch Controller source to Auto to "
+                 "also use Bluetooth / Android-only controllers). Ignored Android-only controllers: %d", ignored);
         if (!atomic_load(&g_force))
             snprintf(diag, sizeof(diag), "Waiting for a controller: plug any SDL3-supported controller in via USB-C "
                      "(full features) or connect it over Bluetooth");
