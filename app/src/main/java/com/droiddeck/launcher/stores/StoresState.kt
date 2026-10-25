@@ -10,9 +10,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.droiddeck.launcher.stores.download.DownloadEntry
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 object StoresState {
     private const val TAG = "Stores"
@@ -79,7 +76,7 @@ object StoresState {
         val app = context.applicationContext
         com.droiddeck.launcher.stores.download.SavedQueue.restore(app)
         background("stores-refresh") {
-            val found = Store.entries.mapNotNull { store -> StoreAccounts.signedInAs(app, store)?.let { store to it } }
+            val found = Store.entries.mapNotNull { store -> StoreAccounts.displayName(app, store)?.let { store to it } }
             val onDisk = StoreInstallRoot.gameFolders(app).mapNotNull { folder ->
                 StoreGameSidecar.read(folder)?.takeIf { it.isInstalled }?.let { InstalledStoreGame(it, folder) }
             }
@@ -129,7 +126,9 @@ object StoresState {
     fun installedGame(store: Store, id: String): InstalledStoreGame? = installed.firstOrNull { it.sidecar.store == store && it.sidecar.id == id }
 
     fun detailItem(store: Store, id: String): CatalogItem? = detailCatalogItem(
-        store, id, library[store].orEmpty(), found[store].orEmpty(), shelves[store],
+        store, id, library[store].orEmpty(),
+        found[store].orEmpty() + if (store == Store.ITCH) com.droiddeck.launcher.stores.itch.ItchBrowseState.items else emptyList(),
+        shelves[store],
     )
 
     fun open(context: Context, store: Store, force: Boolean = false) {
@@ -185,6 +184,8 @@ object StoresState {
     }
 
     var openDownloads by mutableStateOf(false)
+    /** A "store:id" key another page asks the Stores page to open. */
+    var openGameRequest by mutableStateOf<String?>(null)
 
     private fun askForNotifications(context: Context) {
         val activity = context as? android.app.Activity ?: return
@@ -262,7 +263,7 @@ object StoresState {
         val text = StoreLog.redactLine(raw)
         Log.i(TAG, text)
         val app = appContext ?: return
-        StoreLogFiles.append(app, "${synchronized(CLOCK) { CLOCK.format(Date()) }}  $text")
+        StoreLogFiles.stamped(app, text)
     }
 
     private var appContext: Context? = null
@@ -295,8 +296,6 @@ object StoresState {
             }
         }, name).start()
     }
-
-    private val CLOCK = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 }
 
 interface StoreBackend {
