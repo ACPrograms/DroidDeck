@@ -90,7 +90,7 @@ Proton games in Qualcomm sessions present through Gamescope's WSI layer instead 
 - A device with those extensions, `VK_KHR_swapchain` and `VK_EXT_swapchain_maintenance1` with its feature (which Gamescope's WSI layer forces on) is created through the session's layers, and a LINEAR image's dedicated memory is exported with `vkGetMemoryFdKHR`. The WSI layer implements the swapchain extensions without listing them, so only device creation confirms them.
 - Gamescope's Wayland display offers `zwp_linux_dmabuf_v1`.
 
-Any failure, timeout or crash leaves games on SHM. The session log records the result, for example `== qualcomm: zero-copy off: missing VK_EXT_external_memory_dma_buf; Gamescope offers no linux-dmabuf (Adreno (TM) 740, driver 0.676.1)`.
+Any failure, timeout or crash leaves games on SHM. With Performance mode on, the session log also says which of its parts reach games: on SHM only the unpaced release and Wine's window-check cache apply, because Gamescope's WSI layer is not used. The session log records the result, for example `== qualcomm: zero-copy off: missing VK_EXT_external_memory_dma_buf; Gamescope offers no linux-dmabuf (Adreno (TM) 740, driver 0.676.1)`.
 
 The Qualcomm HAL used for development has DMA-BUF export but no `VK_EXT_image_drm_format_modifier`, and Android has no DRM device. The WSI layer is therefore rebuilt with its Wayland backend and `wsi-patches`:
 

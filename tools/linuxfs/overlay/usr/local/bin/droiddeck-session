@@ -302,6 +302,14 @@ if [ "${DROIDDECK_SYSTEM_QUALCOMM:-0}" = 1 ]; then
   echo "== qualcomm: ${bl_caps:-zero-copy off: the capability probe gave no answer}"
   export DROIDDECK_QUALCOMM_ZERO_COPY
   unset bl_caps
+  if [ "${DROIDDECK_WSI_BYPASS_CHECK_MS:-0}" != 0 ]; then
+    if [ "$DROIDDECK_QUALCOMM_ZERO_COPY" = 1 ]; then
+      echo "== qualcomm: performance mode: games present through Gamescope's WSI layer, so it applies as in other sessions"
+    else
+      echo "== qualcomm: performance mode: only the unpaced release (no frame limit) and Wine's window-check cache;" \
+        "games present through X11 SHM, so Gamescope's WSI parts (more swapchain images, present-check cache) do not apply"
+    fi
+  fi
 fi
 # Chromium's GPU compositor corrupts the Steam UI on Qualcomm drivers where Zink stops below OpenGL 4.0.
 # An explicit BL_STEAM_CEF_SOFTWARE decides instead.
