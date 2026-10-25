@@ -119,6 +119,9 @@ app's Wayland-hosted gamescope never reaches, or need a newer gamescope than the
   modifiers the driver supports but does not report EXPORTABLE uses them anyway, and an image with no
   usable modifier fails with a log line instead of asserting in `CVulkanTexture::BInit`. The Mali
   bridge forwards the phone driver's answer, which leaves EXPORTABLE out, though it exports dma-bufs.
+- `0134-flippable-image-no-backend-modifiers.patch`: when the nested backend offers no modifier at all
+  for a flippable image's format, `CVulkanTexture::BInit` tries linear and logs it instead of asserting
+  `!modifiers.empty()`. NieR Replicant ended the session there on a Pixel 9a under Venus.
 
 The shared DroidDeck patch also includes `0116-release-cursor-shm-buffers.patch`: pointer cursor
 surfaces have no X11/xdg window association, so routing their commits through `g_PendingCommits`

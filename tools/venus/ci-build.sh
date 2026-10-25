@@ -13,7 +13,7 @@ OUT=$W/out
 rm -rf "$OUT" && mkdir -p "$OUT/jniLibs/arm64-v8a" "$OUT/assets/venus" \
   "$OUT/assets/linuxfs/usr/local/lib/droiddeck-mali" "$OUT/assets/linuxfs/usr/local/share/vulkan/implicit_layer.d"
 
-# --- Linux side: Mesa 26.2.4's Venus ICD and the Mali compatibility layer (aarch64 glibc) ---
+# --- Linux side: Mesa 26.2.5's Venus ICD and the Mali compatibility layer (aarch64 glibc) ---
 docker run --rm --platform linux/amd64 -v "$W":/w -v "$REPO/tools/venus":/venus:ro -w /tmp debian:trixie bash -c '
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -41,7 +41,7 @@ cpu_family = '"'"'aarch64'"'"'
 cpu = '"'"'armv8-a'"'"'
 endian = '"'"'little'"'"'
 EOC
-git clone -q --depth 1 -b mesa-26.2.4 https://gitlab.freedesktop.org/mesa/mesa.git
+git clone -q --depth 1 -b mesa-26.2.5 https://gitlab.freedesktop.org/mesa/mesa.git
 (cd mesa && git apply /venus/mesa-venus-vtest.patch)
 meson setup venus-build mesa --cross-file /tmp/arm64.ini --prefix=/usr --libdir=lib \
   --buildtype=release -Db_ndebug=true \
