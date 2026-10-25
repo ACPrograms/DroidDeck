@@ -250,15 +250,6 @@ jobs:
         if: steps.proot.outputs.cache-hit != 'true'
         run: python3 tools/components/prepare.py proot
 
-      - name: Check the preloads
-        run: |
-          set -euo pipefail
-          bash tools/linuxfs/check-preloads.sh app/src/main/assets/linuxfs
-
-      - name: Build GOG Galaxy companion
-        if: steps.comet.outputs.cache-hit != 'true'
-        run: python3 tools/components/prepare.py comet
-
       - name: Build the non-Adreno test additions (Mali bridge client, Venus GL probe, Xclipse layer)
         run: |
           set -euo pipefail
@@ -272,6 +263,15 @@ jobs:
           external/MaliBridge/scripts/build-client-linux.sh "$D" aarch64-linux-gnu-gcc
           aarch64-linux-gnu-gcc -O2 -Wall -o "$D/usr/local/bin/droiddeck-glprobe" tools/venus/glprobe.c -ldl
           aarch64-linux-gnu-strip --strip-unneeded "$D/usr/local/bin/droiddeck-glprobe"
+
+      - name: Check the preloads
+        run: |
+          set -euo pipefail
+          bash tools/linuxfs/check-preloads.sh app/src/main/assets/linuxfs
+
+      - name: Build GOG Galaxy companion
+        if: steps.comet.outputs.cache-hit != 'true'
+        run: python3 tools/components/prepare.py comet
 
       - name: Prepare graphics driver variants
         run: python3 tools/quest/build-driver.py "$ANDROID_HOME/ndk/$NDK_VERSION"
