@@ -305,15 +305,24 @@ if [ "${DROIDDECK_SYSTEM_QUALCOMM:-0}" = 1 ]; then
 fi
 # Chromium's GPU compositor corrupts the Steam UI on Qualcomm drivers where Zink stops below OpenGL 4.0.
 # An explicit BL_STEAM_CEF_SOFTWARE decides instead.
+# glxinfo starts the driver through libhybris (up to 15 s), so the version is saved per driver file and bridge build.
 bl_qualcomm_browser_gpu() {
   [ "${DROIDDECK_SYSTEM_QUALCOMM:-0}" = 1 ] && [ -z "${BL_STEAM_CEF_SOFTWARE+x}" ] || return 0
-  local gl
-  gl=$(timeout 15 glxinfo -B 2>/dev/null | sed -n 's/^ *Max core profile version: *\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)
+  local gl key saved_key saved= cache=$XDG_CACHE_HOME/droiddeck/qualcomm-gl
+  key=$({ sha256sum "${HYBRIS_VULKAN_HAL:-/vendor/lib64/hw/vulkan.adreno.so}" &&
+          printf '%s\n' "${DROIDDECK_QUALCOMM_DRIVER:-}" "${DROIDDECK_QUALCOMM_ROOT:-}"; } 2>/dev/null |
+        sha256sum | cut -c1-32)
+  if read -r saved_key gl 2>/dev/null < "$cache" && [ "$saved_key" = "$key" ] && [ -n "$gl" ]; then
+    saved="; saved earlier"
+  else
+    gl=$(timeout 15 glxinfo -B 2>/dev/null | sed -n 's/^ *Max core profile version: *\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)
+    [ -z "$gl" ] || { mkdir -p "${cache%/*}" && printf '%s %s\n' "$key" "$gl" > "$cache"; } 2>/dev/null
+  fi
   if [ "${gl%%.*}" -ge 4 ] 2>/dev/null; then
-    echo "== steam: browser GPU compositing on (Zink OpenGL $gl)"
+    echo "== steam: browser GPU compositing on (Zink OpenGL $gl$saved)"
     return 0
   fi
-  echo "== steam: browser software compositing (Zink offers OpenGL ${gl:-unknown}; GPU compositing needs 4.0)"
+  echo "== steam: browser software compositing (Zink offers OpenGL ${gl:-unknown}$saved; GPU compositing needs 4.0)"
   return 1
 }
 reap_orphans() {

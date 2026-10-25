@@ -83,7 +83,7 @@ The recipes pin upstream source revisions and retain local outputs under `build/
 
 Proton games in Qualcomm sessions present through Gamescope's WSI layer instead of X11 shared memory when the driver can export LINEAR DMA-BUFs. The Steam client, its browser and other session programs keep `WSI_X11_FORCE_SHM=1` and `DISABLE_GAMESCOPE_WSI=1`; the Proton wrapper's `bl_present` drops both for the game only when `DROIDDECK_QUALCOMM_ZERO_COPY=1`. Set `BL_QUALCOMM_SHM=1` in the session environment to keep games on the shared-memory path regardless.
 
-`droiddeck-session` sets `DROIDDECK_QUALCOMM_ZERO_COPY` from `droiddeck-qualcomm-caps`, which runs once per session through the bridge ICD and the session's layers, so an imported AdrenoTools driver is judged rather than the system one. Zero-copy is enabled only when all of these hold:
+`droiddeck-session` sets `DROIDDECK_QUALCOMM_ZERO_COPY` from `droiddeck-qualcomm-caps`, which runs once per session through the bridge ICD and the session's layers, so an imported AdrenoTools driver is judged rather than the system one. Its driver checks are saved in `$XDG_CACHE_HOME/droiddeck/qualcomm-caps.json` and reused while the driver file (by SHA-256), the selected driver, the bridge build, the layers and the script are unchanged; Gamescope's `zwp_linux_dmabuf_v1` is checked every session, and failed probes are never saved. The Steam browser's OpenGL check (`glxinfo -B`) is saved the same way in `qualcomm-gl`. Zero-copy is enabled only when all of these hold:
 
 - The driver offers `VK_KHR_external_memory_fd`, `VK_EXT_external_memory_dma_buf`, `VK_KHR_image_format_list` and `VK_KHR_external_fence_fd`.
 - LINEAR `B8G8R8A8_UNORM` images are exportable as DMA-BUF colour attachments and importable as sampled images.

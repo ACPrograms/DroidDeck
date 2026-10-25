@@ -2,8 +2,12 @@
 """Decide whether this Qualcomm session can present Proton games zero-copy through Gamescope's WSI layer.
 
 Prints one line and exits 0 only when every check passes; anything else keeps games on X11 SHM.
+The driver checks start the driver through libhybris, so their result is saved and reused while the driver file,
+the selected driver, the bridge build, the layers and this script are unchanged. Gamescope is checked every time.
 """
 import ctypes as c
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -81,6 +85,58 @@ def decide(caps):
     return not reasons, reasons
 
 
+CACHE_VERSION = 1
+CACHE_INPUTS = ('DROIDDECK_QUALCOMM_DRIVER', 'DROIDDECK_QUALCOMM_ROOT', 'VK_ICD_FILENAMES', 'VK_LAYER_PATH',
+                'VK_INSTANCE_LAYERS')
+
+
+def cache_path(environ=os.environ):
+    root = environ.get('XDG_CACHE_HOME') or os.path.join(os.path.expanduser('~'), '.cache')
+    return os.path.join(root, 'droiddeck', 'qualcomm-caps.json')
+
+
+def cache_key(environ=os.environ, script=__file__):
+    """Fingerprint of everything the driver checks depend on, or None when the driver file cannot be read."""
+    digest = hashlib.sha256(str(CACHE_VERSION).encode())
+    try:
+        for path in (environ.get('HYBRIS_VULKAN_HAL', '/vendor/lib64/hw/vulkan.adreno.so'), script):
+            with open(path, 'rb') as data:
+                digest.update(hashlib.sha256(data.read()).digest())
+    except OSError:
+        return None
+    for name in CACHE_INPUTS:
+        digest.update(b'\0' + environ.get(name, '').encode())
+    return digest.hexdigest()
+
+
+def cached_probe(path, key):
+    """Return (caps, saved): the saved driver checks for this key, or a new probe saved for the next session."""
+    if key:
+        try:
+            with open(path) as data:
+                stored = json.load(data)
+            if stored.get('key') == key:
+                caps = dict(stored['caps'])
+                caps['extensions'] = set(caps.get('extensions', ()))
+                return caps, True
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            pass
+    try:
+        caps = probe()
+    except Exception as error:
+        return {'error': str(error)}, False
+    if key:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            temporary = f'{path}.{os.getpid()}'
+            with open(temporary, 'w') as data:
+                json.dump({'key': key, 'caps': dict(caps, extensions=sorted(caps.get('extensions', ())))}, data)
+            os.replace(temporary, path)
+        except OSError:
+            pass
+    return caps, False
+
+
 def gamescope_dmabuf():
     if not os.environ.get('WAYLAND_DISPLAY'):
         return False
@@ -106,7 +162,7 @@ def probe():
     def names(values):
         return (c.c_char_p * len(values))(*[value.encode() for value in values])
 
-    caps = {'gamescope_dmabuf': gamescope_dmabuf()}
+    caps = {}
     count = U()
     enumerate_instance = function('vkEnumerateInstanceExtensionProperties', [c.c_char_p, c.POINTER(U), H])
     check(enumerate_instance(None, c.byref(count), None), 'vkEnumerateInstanceExtensionProperties')
@@ -228,12 +284,11 @@ def export_linear_image(function, device):
 
 
 def main():
-    try:
-        caps = probe()
-    except Exception as error:
-        caps = {'error': str(error)}
+    caps, saved = cached_probe(cache_path(), cache_key())
+    caps['gamescope_dmabuf'] = gamescope_dmabuf()
     enabled, reasons = decide(caps)
-    where = f" ({caps['device']}, driver {caps['driver']})" if caps.get('device') else ''
+    where = f" ({caps['device']}, driver {caps['driver']}{'; driver checks saved earlier' if saved else ''})" \
+        if caps.get('device') else ''
     print(('zero-copy on' if enabled else 'zero-copy off: ' + '; '.join(reasons)) + where)
     return 0 if enabled else 1
 
