@@ -236,7 +236,9 @@ internal fun SdlBridgeSettingsTab(host: MenuHost, track: (String) -> Modifier = 
         ToggleRow(host, "sdl3-driver", "SDL3 driver",
             "On: SDL3 reads the controller (all its features). Off: the controller goes back to Android and DroidDeck.",
             s.getBoolean("driverEnabled"), chipModifier = track("sdl3-driver")) { SdlBridgeLink.set("driverEnabled", bool = it) }
-        BridgeChoiceRow(host, "sdl3-source", "Controller source", "Which controllers SDL3 uses.",
+        if (s.getBoolean("embedded")) SettingsRow("Bluetooth and built-in controllers",
+            "Handled by DroidDeck's Android input. SDL3 handles USB controllers.") {}
+        else BridgeChoiceRow(host, "sdl3-source", "Controller source", "Which controllers SDL3 uses.",
             listOf(false to "USB + Bluetooth (auto)", true to "USB only (forced)"), s.getBoolean("forceUsb"), chipModifier = track("sdl3-source")) {
             SdlBridgeLink.set("forceUsb", bool = it)
         }

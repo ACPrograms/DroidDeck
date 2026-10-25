@@ -2,6 +2,7 @@ package com.example.dsedge
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,5 +41,17 @@ class EmbeddedBridgeTest {
         assertTrue(Host.embedded(app))
         assertEquals("sdl3bridge_settings", Host.prefs(app, "settings"))
         assertEquals("sdl3bridge_engine", Host.prefs(app, "engine"))
+    }
+
+    @Test
+    fun headlessEmbeddedDriverLeavesAndroidControllersToDroidDeck() {
+        val app = RuntimeEnvironment.getApplication()
+        assertTrue(Host.usbOnly(app, false))
+        assertTrue(Host.usbOnly(app, true))
+        val standalone = object : ContextWrapper(app) {
+            override fun getPackageName() = Host.OWN_PACKAGE
+        }
+        assertFalse(Host.usbOnly(standalone, false))
+        assertTrue(Host.usbOnly(standalone, true))
     }
 }

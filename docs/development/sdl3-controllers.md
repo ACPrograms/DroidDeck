@@ -3,7 +3,9 @@
 The integrated bridge runs in DroidDeck's `:sdl3` process. Open **Settings → SDL3Bridge**
 or the SDL3Bridge page in the session drawer to configure up to four controllers.
 USB controllers use SDL3's HID drivers; Android input remains the fallback for
-Bluetooth and built-in controllers. Steam Native Hook-up forwards a USB controller's
+Bluetooth and built-in controllers. The embedded driver only claims USB controllers:
+Android events are delivered to DroidDeck's activity and cannot reach the separate
+headless SDL process. Steam Native Hook-up forwards a USB controller's
 identity and reports to Steam so Steam can use its own controller driver.
 
 USB access requires Android's device permission. The optional floating control also

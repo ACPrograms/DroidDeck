@@ -174,7 +174,7 @@ public class BridgeActivity extends android.app.Activity implements NativeBridge
         // ---- SDL3 driver ----
         LinearLayout drv = card(root);
         cardTitle(drv, "SDL3 driver");
-        addSpinner(drv, "Controller source", new String[] {
+        if (!Host.embedded(this)) addSpinner(drv, "Controller source", new String[] {
             "Auto: any controller (SDL3 USB driver when plugged in, else Android/Bluetooth)",
             "Forced: only SDL3's USB driver (USB cable only)"
         }, Settings.forceUsb ? 1 : 0, v -> {

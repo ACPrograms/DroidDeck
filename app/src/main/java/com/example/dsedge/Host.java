@@ -16,6 +16,11 @@ final class Host {
         return c != null && !OWN_PACKAGE.equals(c.getPackageName());
     }
 
+    static boolean usbOnly(Context c, boolean configured) {
+        // Android input events go to DroidDeck's activity, outside the headless SDL process.
+        return embedded(c) || configured;
+    }
+
     /** A preferences file name of the bridge: unchanged as its own app, prefixed when built into another app. */
     static String prefs(Context c, String name) {
         return embedded(c) ? "sdl3bridge_" + name : name;

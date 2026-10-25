@@ -305,7 +305,7 @@ public final class NativeBridge {
 
     /** Forced mode: ignore Android's basic input and only use SDL's own USB driver. */
     static void applyForce() {
-        try { nativeSetForce(Settings.forceUsb ? 1 : 0); } catch (UnsatisfiedLinkError e) { }
+        try { nativeSetForce(Host.usbOnly(appContext, Settings.forceUsb) ? 1 : 0); } catch (UnsatisfiedLinkError e) { }
     }
 
     static void rescan() {
@@ -321,7 +321,7 @@ public final class NativeBridge {
         try {
             nativeSetDriver(Settings.driverEnabled ? 1 : 0);
             nativeSetHookup(hookupMode());
-            if (Settings.driverEnabled) nativeSetForce(Settings.forceUsb ? 1 : 0);
+            if (Settings.driverEnabled) nativeSetForce(Host.usbOnly(appContext, Settings.forceUsb) ? 1 : 0);
         } catch (UnsatisfiedLinkError e) { }
     }
 
