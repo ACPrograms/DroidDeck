@@ -510,6 +510,22 @@ jobs:
       - name: Build the add-on packs
         run: bash tools/packs/build.sh app/build/packs
 
+      # Mali (Venus), David Cimo's route: the vtest server (jniLibs), the Venus ICD (assets/venus)
+      # and the Mali compatibility layer (assets/linuxfs), built by build-venus.yml and fetched by
+      # tag + sha256 like gamescope. The app uses it only on a GPU that is not an Adreno.
+      - name: Fetch the Mali (Venus) component (tools/venus/release.env)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          . tools/venus/release.env
+          gh release download "${VENUS_TAG}" -R "${VENUS_REPO}" -p venus.tzst -O venus.tzst
+          echo "${VENUS_SHA256}  venus.tzst" | sha256sum -c -
+          tar --use-compress-program=unzstd -xf venus.tzst -C app/src/main
+          test -f app/src/main/jniLibs/arm64-v8a/libvirgl_test_server.so
+          test -f app/src/main/assets/venus/libvulkan_virtio.so
+          rm venus.tzst
+
       - name: Build
         id: build
         env:
