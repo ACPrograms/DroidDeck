@@ -316,15 +316,15 @@ fi
 # glxinfo starts the driver through libhybris (up to 15 s), so the version is saved per driver file and bridge build.
 bl_qualcomm_browser_gpu() {
   [ "${DROIDDECK_SYSTEM_QUALCOMM:-0}" = 1 ] && [ -z "${BL_STEAM_CEF_SOFTWARE+x}" ] || return 0
-  local gl key saved_key saved= cache=$XDG_CACHE_HOME/droiddeck/qualcomm-gl
-  key=$({ sha256sum "${HYBRIS_VULKAN_HAL:-/vendor/lib64/hw/vulkan.adreno.so}" &&
-          printf '%s\n' "${DROIDDECK_QUALCOMM_DRIVER:-}" "${DROIDDECK_QUALCOMM_ROOT:-}"; } 2>/dev/null |
-        sha256sum | cut -c1-32)
-  if read -r saved_key gl 2>/dev/null < "$cache" && [ "$saved_key" = "$key" ] && [ -n "$gl" ]; then
+  local gl hal key= saved_key saved= cache=${XDG_CACHE_HOME:-$HOME/.cache}/droiddeck/qualcomm-gl
+  # No key, no saved answer: an unreadable driver file is checked every time.
+  hal=$(sha256sum "${HYBRIS_VULKAN_HAL:-/vendor/lib64/hw/vulkan.adreno.so}" 2>/dev/null) &&
+    key=$(printf '%s\n' "${hal%% *}" "${DROIDDECK_QUALCOMM_DRIVER:-}" "${DROIDDECK_QUALCOMM_ROOT:-}" | sha256sum | cut -c1-32)
+  if [ -n "$key" ] && read -r saved_key gl 2>/dev/null < "$cache" && [ "$saved_key" = "$key" ] && [ -n "$gl" ]; then
     saved="; saved earlier"
   else
     gl=$(timeout 15 glxinfo -B 2>/dev/null | sed -n 's/^ *Max core profile version: *\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)
-    [ -z "$gl" ] || { mkdir -p "${cache%/*}" && printf '%s %s\n' "$key" "$gl" > "$cache"; } 2>/dev/null
+    [ -z "$gl" ] || [ -z "$key" ] || { mkdir -p "${cache%/*}" && printf '%s %s\n' "$key" "$gl" > "$cache"; } 2>/dev/null
   fi
   if [ "${gl%%.*}" -ge 4 ] 2>/dev/null; then
     echo "== steam: browser GPU compositing on (Zink OpenGL $gl$saved)"
