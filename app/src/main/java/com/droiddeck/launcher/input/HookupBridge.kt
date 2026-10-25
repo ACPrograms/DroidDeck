@@ -376,5 +376,6 @@ object HookupBridge {
     }
 
     /** True when DroidDeck should set the hook-up file up this session (the bridge app is installed). */
-    @JvmStatic fun wanted(context: Context): Boolean = DualSenseBridge.isBridgeInstalled(context)
+    @JvmStatic fun wanted(context: Context): Boolean =
+        com.droiddeck.launcher.session.SessionPrefs.sdl3Controllers(context) && DualSenseBridge.isBridgeInstalled(context)
 }

@@ -92,6 +92,7 @@ public class FakeInputWriter {
     public static final int PAD_TYPE_STEAM_2015 = 6;
     public static final int PAD_TYPE_NONE = 7;
     private static volatile int padType = -1;
+    public static int currentPadType() { return padType; }
     private static volatile boolean tritonConnected = false;
     private static final int TRITON_OFFSET = RING_SIZE + 64;
     private static final int TRITON_MAGIC = 0x4e525454;

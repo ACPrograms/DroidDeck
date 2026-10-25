@@ -11,11 +11,29 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class EmbeddedBridgeTest {
+    @Test
+    fun calibrationUsesOnlyTheSelectedPlayer() {
+        Settings.init(RuntimeEnvironment.getApplication())
+        val activity = Robolectric.buildActivity(BridgeActivity::class.java).get()
+        fun field(name: String) = BridgeActivity::class.java.getDeclaredField(name).apply { isAccessible = true }
+        field("calibPlayer").setInt(activity, 2)
+        field("calibCount").setInt(activity, 0)
+        val frame = FloatArray(13).apply { this[7] = 0.5f; this[8] = -1f; this[9] = 2f }
+        activity.onFrame(frame, 1)
+        assertEquals(0, field("calibCount").getInt(activity))
+        repeat(180) { activity.onFrame(frame, 2) }
+        assertEquals(-1, field("calibCount").getInt(activity))
+        assertEquals(28.64789f, Settings.gyroBias[2][0], 0.0001f)
+        assertEquals(-57.29578f, Settings.gyroBias[2][1], 0.0001f)
+        assertEquals(114.59156f, Settings.gyroBias[2][2], 0.0001f)
+    }
+
     @Test
     fun driverComponentsStayPrivateAndRunOutsideTheSessionProcess() {
         val app = RuntimeEnvironment.getApplication()

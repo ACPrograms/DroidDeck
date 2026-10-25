@@ -176,6 +176,16 @@ internal fun SdlBridgeSettingsTab(host: MenuHost, track: (String) -> Modifier = 
     }
     val s = SdlBridgeLink.snapshot
 
+    var sessionEnabled by remember { mutableStateOf(com.droiddeck.launcher.session.SessionPrefs.sdl3Controllers(ctx)) }
+    SettingsGroup("Session integration") {
+        ToggleRow(host, "sdl3-session", "Use SDL3 controllers in sessions",
+            "Enable USB controller input, controller presentation and Steam Native Hook-up for the next session.",
+            sessionEnabled, chipModifier = track("sdl3-session")) {
+            sessionEnabled = it
+            com.droiddeck.launcher.session.SessionPrefs.setSdl3Controllers(ctx, it)
+        }
+    }
+
     // ---------------- status ----------------
     SettingsGroup("SDL3Bridge") {
         if (s == null) {

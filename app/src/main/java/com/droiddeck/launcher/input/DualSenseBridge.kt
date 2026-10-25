@@ -26,7 +26,7 @@ import android.view.MotionEvent
  *  gyro / accel        -> FakeInputWriter.writeMotion (slot 0)
  *
  * Usage:  DualSenseBridge.attach(context, padBridge)  when the session starts,
- *         DualSenseBridge.detach()                    when it stops.
+ *         DualSenseBridge.endSession(token)           when it stops.
  */
 object DualSenseBridge {
     private const val BRIDGE_PKG = "com.example.dsedge"
@@ -95,6 +95,7 @@ object DualSenseBridge {
 
     private var appContext: Context? = null
     @Volatile private var owner: Any? = null
+    private var sessionOwner: Any? = null
     private var pad: PadBridge? = null
     private var server: Messenger? = null
     private var bound = false
@@ -160,6 +161,7 @@ object DualSenseBridge {
         }
 
         override fun handleMessage(m: Message) {
+            if (!sessionActive) return
             when (m.what) {
                 MSG_FRAME -> onFrame(m.data)
                 MSG_STATUS -> if (m.data.getString("text")?.startsWith("Connected") != true) release()
@@ -210,6 +212,22 @@ object DualSenseBridge {
     @JvmStatic
     @Synchronized
     fun attach(context: Context, padBridge: PadBridge): Boolean {
+        if (!com.droiddeck.launcher.session.SessionPrefs.sdl3Controllers(context)) return false
+        if (pad !== padBridge) {
+            release()
+            releaseSep()
+            lastMask = -1
+            lastAxes.fill(Float.NaN)
+            lastApplyMs = 0L
+            for (slot in 1 until SLOTS) {
+                maskS[slot] = -1
+                axesS[slot].fill(Float.NaN)
+                applyMsS[slot] = 0L
+            }
+            sepMask = -1
+            sepAxes.fill(Float.NaN)
+            sepApplyMs = 0L
+        }
         pad = padBridge
         owner = context
         if (!sessionActive) {
@@ -235,7 +253,15 @@ object DualSenseBridge {
 
     @JvmStatic
     @Synchronized
-    fun detach() = detach(null)
+    fun beginSession(token: Any) { sessionOwner = token }
+
+    @JvmStatic
+    @Synchronized
+    fun endSession(token: Any) {
+        if (sessionOwner !== token) return
+        sessionOwner = null
+        disconnect()
+    }
 
     /**
      * The session screen is closing (Android also does this when you switch apps; a new screen attaches when you
@@ -248,17 +274,23 @@ object DualSenseBridge {
         if (who !== owner) return
         HookupBridge.note("bridge: session screen closed; the bridge stays connected until the session ends")
         owner = null
+        release()
+        releaseSep()
         pad = null
     }
 
     /** Only the screen that attached last may detach (an old screen's late onDestroy must not cut the new one off). */
     @JvmStatic
     @Synchronized
-    fun detach(who: Any?) {
-        if (who != null && who !== owner) {
+    fun detach(who: Any) {
+        if (who !== owner || sessionOwner != null) {
             HookupBridge.note("bridge: an old session screen closed; the bridge stays connected")
             return
         }
+        disconnect()
+    }
+
+    private fun disconnect() {
         HookupBridge.note("bridge: disconnected (session ended)")
         sessionActive = false
         steamAwayNoted = null
@@ -270,7 +302,9 @@ object DualSenseBridge {
             bound = false
         }
         release()
-        workerHandler.post { setTriton(false, "session ended"); HookupBridge.removeAll() }
+        releaseSep()
+        setTriton(false, "session ended")
+        HookupBridge.removeAll()
         pad = null
         server = null
     }
@@ -419,10 +453,7 @@ object DualSenseBridge {
     // is withdrawn so the real controller is player 1 in Steam (pad type 7 = none), like on a PC.
     private var hookupPadHidden = false
 
-    private val padTypeField = runCatching {
-        FakeInputWriter::class.java.getDeclaredField("padType").apply { isAccessible = true }
-    }.getOrNull()
-    private fun currentPadType(): Int = runCatching { padTypeField?.getInt(null) ?: -2 }.getOrDefault(-2)
+    private fun currentPadType(): Int = FakeInputWriter.currentPadType()
 
     private fun updateHookupPad() {
         val hide = HookupBridge.anyPresent() && !isActive()
@@ -720,7 +751,7 @@ object DualSenseBridge {
     @JvmStatic fun isBridged(e: MotionEvent): Boolean = isBridged(e.device)
 
     /** A controller in bridge slot [slot] was unplugged. */
-    private fun padGone(slot: Int) {
+    @Synchronized private fun padGone(slot: Int) {
         if (slot !in 0 until SLOTS) return
         if (slot == 0) { release(); return }
         val p = pad
@@ -838,7 +869,7 @@ object DualSenseBridge {
         return floatArrayOf(x, y)
     }
 
-    private fun releaseSep() {
+    @Synchronized private fun releaseSep() {
         val p = pad
         if (p != null && sepSlot > 0) {
             FakeInputWriter.writeDeckControls(sepSlot, 0, ShortArray(4), ShortArray(2))
@@ -860,7 +891,8 @@ object DualSenseBridge {
         FakeInputWriter.setPadType(pt)
     }
 
-    private fun onFrame(b: Bundle) {
+    @Synchronized private fun onFrame(b: Bundle) {
+        if (pad == null) return
         val slot = b.getInt("slot", 0).coerceIn(0, SLOTS - 1)
         if (slot != 0) { onExtraFrame(slot, b); return }
         val pt = b.getInt("ptype", 0)
@@ -988,7 +1020,7 @@ object DualSenseBridge {
         ShortArray(3) { (v[it] * scale * sign[it]).coerceIn(-32768f, 32767f).toInt().toShort() }
 
     /** Neutral state: called when the bridge disconnects so nothing stays stuck. */
-    private fun release() {
+    @Synchronized private fun release() {
         frameMsS[0] = 0L
         if (lastPadType != 0 && !hookupPadHidden) { lastPadType = 0; applyPadType(0) }
         updateHookupPad()

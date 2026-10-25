@@ -169,6 +169,7 @@ class SessionService : Service() {
         updateSuspendPolicy()
     }
     @Volatile private var sessionGen = 0
+    private var bridgeSession: Any? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -314,6 +315,7 @@ class SessionService : Service() {
         }
         startForeground(NOTIFICATION_ID, buildNotification())
         if (SessionState.running) return START_NOT_STICKY
+        bridgeSession = Any().also { com.droiddeck.launcher.input.DualSenseBridge.beginSession(it) }
         if (SessionState.stopRequested) {
             SessionState.running = true
             stopSession(0)
@@ -824,7 +826,7 @@ class SessionService : Service() {
             SessionState.steamUi != "desktop" || sdl3Desktop) &&
             !File(Environment.getExternalStorageDirectory(), NO_DECK_PAD_SWITCH).exists()
         val wantsTouch = wantsDeck && !sdl3Desktop && !File(Environment.getExternalStorageDirectory(), NO_STEAM_TOUCH_SWITCH).exists()
-        val wantsTriton = wantsDeck && (SteamControllerBle.hasPairedController(this) || com.droiddeck.launcher.input.DualSenseBridge.isBridgeInstalled(this))
+        val wantsTriton = wantsDeck && (SteamControllerBle.hasPairedController(this) || com.droiddeck.launcher.input.HookupBridge.wanted(this))
         deckBinds = if (wantsDeck) SteamDeckPad.prepare(this, fakeInputDir.parentFile!!.parentFile!!, wantsTouch, wantsTriton,
             SessionPrefs.padType(SessionPrefs.steamController(this))) else emptyList()
         SessionState.deckPad = deckBinds.isNotEmpty()
@@ -1686,6 +1688,8 @@ class SessionService : Service() {
             SessionEvents.record("guest.exited", mapOf("status" to status))
             SessionEvents.transition(SessionPhase.STOPPING, "session.stopping", mapOf("status" to status))
             SessionState.running = false
+            bridgeSession?.let { com.droiddeck.launcher.input.DualSenseBridge.endSession(it) }
+            bridgeSession = null
             SessionPaths.take() to SessionState.steamClientArch
         }
         SessionState.micAvailable = false
@@ -1771,7 +1775,8 @@ class SessionService : Service() {
     override fun onDestroy() {
         stopSession(0)
         GameThreadHints.stop() // also when the session never got as far as running
-        com.droiddeck.launcher.input.DualSenseBridge.detach()
+        bridgeSession?.let { com.droiddeck.launcher.input.DualSenseBridge.endSession(it) }
+        bridgeSession = null
         if (screenReceiverRegistered) {
             unregisterReceiver(screenReceiver)
             screenReceiverRegistered = false

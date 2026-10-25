@@ -69,6 +69,7 @@
     }
   },
   "patches": [
-    "patches/0001-droiddeck-integration.patch"
+    "patches/0001-droiddeck-integration.patch",
+    "patches/0002-controller-state-fixes.patch"
   ]
 }

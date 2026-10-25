@@ -1,7 +1,9 @@
 # SDL3 controller bridge
 
-The integrated bridge runs in DroidDeck's `:sdl3` process. Open **Settings → SDL3Bridge**
+The integrated bridge runs in DroidDeck's `:sdl3` process. Open **Setup → SDL3Bridge**
 or the SDL3Bridge page in the session drawer to configure up to four controllers.
+Enable **Use SDL3 controllers in sessions** before starting a session. This opt-in
+also enables SDL3 controller presentation on the desktop and Steam Native Hook-up.
 USB controllers use SDL3's HID drivers; Android input remains the fallback for
 Bluetooth and built-in controllers. The embedded driver only claims USB controllers:
 Android events are delivered to DroidDeck's activity and cannot reach the separate

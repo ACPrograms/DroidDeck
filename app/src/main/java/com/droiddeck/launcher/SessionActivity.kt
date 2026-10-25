@@ -3527,6 +3527,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         handCamera?.stop()
         handCamera = null
         padBridge?.stop()
+        if (isFinishing && !SessionState.running) com.droiddeck.launcher.input.DualSenseBridge.detach(this)
         com.droiddeck.launcher.input.DualSenseBridge.screenClosed(this)
         steamController?.stop()
         if (SessionState.padBridge === padBridge) SessionState.padBridge = null
