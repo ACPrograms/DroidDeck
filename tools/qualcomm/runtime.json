@@ -1,27 +1,56 @@
 {
-  "url": "https://github.com/wallentx/DroidDeck/releases/download/hybris-4ed93fb9ee6e2a0b24ff087196f2e93d247fd985/runtime.tzst",
+  "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/qualcomm-runtime-r3-4b8c7f84-qa/hybris-runtime-4ed93fb9.tzst",
   "sha256": "a4e1ab9581c83ee6feff95e0e527930977a6c14c0e72bd2c4abf777e8472d987",
   "size": 5799930,
   "provenance": {
     "component_ci_run": "https://github.com/wallentx/DroidDeck/actions/runs/39360327540",
     "note": "Candidate pin: publish this exact archive and verify its URL before updating release.json.",
     "producer_commit": "4ed93fb9ee6e2a0b24ff087196f2e93d247fd985",
-    "upstream_source_commit": "bc8cb3586b79d208fd21b925fa0209b3e432e008"
+    "upstream_source_commit": "bc8cb3586b79d208fd21b925fa0209b3e432e008",
+    "mirrored_from": "https://github.com/wallentx/DroidDeck/releases/download/hybris-4ed93fb9ee6e2a0b24ff087196f2e93d247fd985/runtime.tzst"
   },
   "gamescope": {
     "source_commit": "8f212644c46460549035971ab914421180f61a7c",
-    "member_sha256": "795f11c31adb1a1aa3447d913255c872626114c2713c6d80f8a82df10cf94185",
+    "member_sha256": "8c0c4ac3e3dc8223ded69945335f17f98d011e72380f4ae5e6d8daf284ded42c",
     "build": {
       "binary": "build/qualcomm-gamescope/gamescope",
       "source": "build/qualcomm-gamescope/source.tar.gz",
-      "source_sha256": "49e48fa2dc3b98c15633789d0a6c383630f34ed54e48649dcb46c55e446f0417",
-      "source_size": 10055262
+      "source_sha256": "c6484b98d8fe1f51042245360359dde6de0381db5316e50b78699a28423d8c97",
+      "source_size": 10054134
+    },
+    "patches": {
+      "tools/gamescope/patches/0002-steamcompmgr-fallback-appid-focus.patch": "611989049383b9d3a5d30f908a5dbe164c7ee5a4d451bebb9c108d6ba9a2d02b",
+      "tools/gamescope/patches/0009-fix-arm64-steam-night-mode.patch": "201ca8388f5376f03e5d001b3dbb8e5c404b38b81d443f456ae4fac17365866e",
+      "tools/gamescope/patches/0019-steamcompmgr-arm64-virtual-white.patch": "eeb5a5ea9b2a876ebbf04168f95b6520973ed05c2cf587bcf762cfc5460ecfe9",
+      "tools/gamescope/patches/0020-color-p3-red-is-wide-gamut.patch": "4a2532480acabce47dde01674fd0258b47141d2ab1233e0f8d0498ec0537da98",
+      "tools/gamescope/patches/0100-realtime-queue-and-gamepad-cursor.patch": "d7ad2ab66d7d0ecc73f20f412194fac74b764610fb651d23abb8fcec4e06ba04",
+      "tools/gamescope/patches/0101-nested-wayland-cursor-routing.patch": "4502958ed9a481e4c028fbee35340bc02637e484e6e5dc4e006e9c208e985440",
+      "tools/gamescope/patches/0110-wayland-backend-touch.patch": "2fab269c671829e75f8a45b3ebd2d8432969a13de8ac4421d7067444c51af312",
+      "tools/gamescope/patches/0111-wayland-pointer-warps-in-passthrough.patch": "8aeffc39fe778b73d9117badfb318cbdb3b7931bcf2626c6e6c8ace9b85776ac",
+      "tools/gamescope/patches/0112-restore-iconified-game-on-resume.patch": "475398b3435d2619932eaff9eacb4108a2efc85441cc48fde43d13da4e869d4d",
+      "tools/gamescope/patches/0114-take-override-redirect-from-mapnotify.patch": "56cf10c38f48569872263e63fc46964133e238c9421b3eba7a55fa78c24cc8a7",
+      "tools/gamescope/patches/0115-limiter-paces-per-window.patch": "6ee6df85d9d8093ee8b86fc146151dbb19c3c73f475849648751f553be4629ad",
+      "tools/gamescope/patches/0116-hold-overlay-repaint-for-next-frame.patch": "0affbf6d41cc7cfbf22b2f06bb5caa8504ac38506dc96abe684f35b60f18007d",
+      "tools/gamescope/patches/0116-release-cursor-shm-buffers.patch": "17e189efafbc9f086f62d2cb61adf03816827da1364e2161ec9015e9dea99375",
+      "tools/gamescope/patches/0117-wsi-cache-present-bypass-check.patch": "bf476ae58f77f0b6ca35b99930eae8fa554e2d565884dce5165d9f3faf3027d7",
+      "tools/qualcomm/gamescope-patches/0120-nested-swapchain-capability-fallback.patch": "905bd09e78025058ba0a777e96462f81b21775c641cc439669c2d75d39806e9c",
+      "tools/qualcomm/gamescope-patches/0122-dmabuf-import-memory-type.patch": "7c56d2b9cabb83e5ae0767a1d8fb3a026a68386a7840a225a515a4546f39f3b1",
+      "tools/qualcomm/gamescope-patches/0124-sdl-preserve-explicit-refresh.patch": "049012ccb4612e664530ebe9b8b4f00f60b0e82029b25fb58b6e09325c1c9ea0",
+      "tools/qualcomm/gamescope-patches/0125-sdl-wait-before-present.patch": "a0795bf0281692e121cee6dfcd3e7a0fa9d0bdeae1d7ed49db76691c7f636b82",
+      "tools/qualcomm/gamescope-patches/0126-shm-commit-ready.patch": "78c3f70565a5dd5b7c5ff0540156ae45a17a9f7ecc1a2954d663d845c2b8ba4b",
+      "tools/qualcomm/gamescope-patches/0127-refresh-shm-buffer-contents.patch": "cc9599d1699862a32f57edf74f8ec95f4db70e660777329af3d8ead3283a23f3",
+      "tools/qualcomm/gamescope-patches/0128-keep-swapchain-shm-textures-internal.patch": "929c9376c97124d1dcac72425ea9d71c71afb5eb775374a76fd21f64ed1a078d",
+      "tools/qualcomm/gamescope-patches/0129-keep-swapchain-cursors-internal.patch": "b4c81ff643a0c326c4a235210ef5508be5cc5cdc31967fdb76c76a7abfd4e241",
+      "tools/qualcomm/gamescope-patches/0130-explicit-float-header.patch": "4ee21fc758f460be15a503c714daadf3d930ee8bf0306ee4e8ba28b1f0d609c9",
+      "tools/qualcomm/constant-yuv-samplers.patch": "0d55360a560d13e28b8d57befc2a6e95b5b2678e0d1c11b9e275937d698698a5",
+      "tools/qualcomm/gamescope-no-dmabuf.patch": "b4ffa0fd0dbfc754b896261669df924e5545e486f2438bc130965702f006090d",
+      "tools/qualcomm/gamescope-linear-dmabuf.patch": "b58933508e0c879a91bc174ed7995371bb35a91afab313e6d44994d52583ec9f"
     }
   },
   "builds": {
-    "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/qualcomm-runtime-r2/qualcomm-builds.tar.xz",
-    "sha256": "f9db946db80b4db477cecfeae69eccb9496b1d6081550732a811f5d34a1772b6",
-    "size": 15138484
+    "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/qualcomm-runtime-r3-4b8c7f84-qa/qualcomm-builds.tar.xz",
+    "sha256": "aac4a5dea4acacfb7004e9c4703a8e606d1032c7dfb9732b8609a1257997865f",
+    "size": 15136448
   },
   "wsi": {
     "files": [
@@ -136,7 +165,8 @@
           "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/8d6039a455a7ecc7d2a592ff97f62db4e59b70bf/LICENSE.md",
           "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/8d6039a455a7ecc7d2a592ff97f62db4e59b70bf/LICENSES/MIT.txt"
         ]
-      }
+      },
+      "mirrored_from": "https://github.com/wallentx/DroidDeck/releases/download/v0.3.2-progress.20261010.4/wsi-abe5861.zip"
     },
     "recipe_inputs": {
       "tools/vulkan-wsi/build.sh": "9e403151c58e6b2ee15241f525c4bacb2495f072191da6a63065e7fcc25b3b3c",
@@ -147,7 +177,7 @@
     },
     "sha256": "348f9ec42159c1ee6e2baba4312a5e845d26687238f29e3f4a1b0c3c97e13b3c",
     "size": 362717,
-    "url": "https://github.com/wallentx/DroidDeck/releases/download/v0.3.2-progress.20261010.4/wsi-abe5861.zip",
+    "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/qualcomm-runtime-r3-4b8c7f84-qa/wsi-abe5861.zip",
     "build": {
       "directory": "build/qualcomm-wsi"
     }
