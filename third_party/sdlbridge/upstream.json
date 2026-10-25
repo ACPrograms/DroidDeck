@@ -70,6 +70,7 @@
   },
   "patches": [
     "patches/0001-droiddeck-integration.patch",
-    "patches/0002-controller-state-fixes.patch"
+    "patches/0002-controller-state-fixes.patch",
+    "patches/0003-persist-controller-settings.patch"
   ]
 }

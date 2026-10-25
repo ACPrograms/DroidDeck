@@ -1,6 +1,7 @@
 import difflib
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -41,6 +42,15 @@ class ControllerSourcesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'hash changed'):
             prepare(self.root)
         self.assertEqual('keep', (output / 'previous').read_text())
+
+    def test_accepts_a_relative_output_path(self):
+        previous = Path.cwd()
+        try:
+            os.chdir(self.root)
+            prepare(self.root, Path('app/build/relative'))
+        finally:
+            os.chdir(previous)
+        self.assertEqual(b'embedded\n', (self.root / 'app/build/relative/sdlbridge/java/Input.java').read_bytes())
 
     def test_fails_when_an_upstream_update_breaks_a_patch(self):
         vendor = self.root / 'third_party/sdlbridge'

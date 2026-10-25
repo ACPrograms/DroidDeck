@@ -23,6 +23,7 @@ def prepare(root=ROOT, output=None):
     output = output or build / 'controller-sources'
     if output.is_symlink() or output.resolve() == build.resolve() or not output.resolve().is_relative_to(build.resolve()):
         raise ValueError('Controller sources must be generated below app/build')
+    output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='controller-sources-', dir=output.parent) as temporary:
         stage = Path(temporary)
