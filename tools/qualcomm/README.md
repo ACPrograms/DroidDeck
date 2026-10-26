@@ -2,6 +2,10 @@
 
 The Linux backend uses the installed Qualcomm Vulkan HAL through a pinned libhybris ICD. The Android compositor imports gralloc buffers through `android_wlegl`. Choosing **System Qualcomm driver** in the runtime driver list also selects the system display driver. Restart the app after changing an already loaded display driver.
 
+## Bridge patch for Android 14 loaders
+
+The bridge creates the Vulkan instance through Android's `libvulkan.so` and then checks that this instance dispatches to the same HAL it loaded itself. Upstream compares only `vkGetPhysicalDeviceProperties`. Android 14's loader wraps that query (seen on an AYANEO Pocket FIT, Adreno 750, Qualcomm 0.762.24, SDK 34): it resolved into `libvulkan.so` while `vkGetPhysicalDeviceFeatures` resolved to the same `vulkan.adreno.so` entry from both sides, so every session failed with `Android instance and configured HAL use different dispatch implementations` and `vkCreateInstance` -9. `hybris-patches/0012-android-loader-wrapped-queries.patch` accepts the instance when any of five core physical-device queries resolves to the HAL's own entry; another driver matches none. The bridge is rebuilt with wallentx's builder (`tools/hybris` at `4ed93fb9`, patches 0001-0011) plus this patch on DroidDeck-Components.
+
 ## Imported AdrenoTools Qualcomm packages
 
 Import a Qualcomm Android driver with **Change display driver → Import an AdrenoTools zip…**. In **Mix and match → Change runtime driver**, select its **Qualcomm (AdrenoTools, experimental)** entry. Previously imported packages appear without reimporting. This selects the package for Linux applications and the system driver for Android presentation. The runtime change applies to the next session; restart DroidDeck if its display driver was already loaded. Changing only the display selection does not change the Linux runtime driver.
