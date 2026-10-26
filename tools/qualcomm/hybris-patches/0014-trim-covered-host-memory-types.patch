@@ -1,0 +1,89 @@
+diff --git a/hybris/vulkan/icd/instance.c b/hybris/vulkan/icd/instance.c
+index 7f30014..b9db254 100644
+--- a/hybris/vulkan/icd/instance.c
++++ b/hybris/vulkan/icd/instance.c
+@@ -9,6 +9,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <stdio.h>
++#include <sys/auxv.h>
+ 
+ /* Driver handles keep their loader-owned dispatch header untouched. */
+ struct physical_state {
+@@ -285,6 +286,63 @@ static VkResult VKAPI_CALL create_device(VkPhysicalDevice physical,
+     return hybris_icd_create_device(create, resolver, state->generation, physical, info, allocator, device);
+ }
+ 
++/* DXVK before its 2025 memory rework takes the first memory type with the requested property
++ * flags and skips later device-local ones. Qualcomm HALs list DEVICE_LOCAL|HOST_VISIBLE types
++ * that no buffer or image may use ahead of the cached coherent type that buffers do use, so DXVK
++ * found no memory for its upload buffers. Report host flags only on host-visible types that no
++ * other host-visible type of the same heap strictly contains; indices and heaps are unchanged. */
++static void trim_host_memory_types(VkPhysicalDeviceMemoryProperties *memory)
++{
++    const char *keep = getauxval(AT_SECURE) ? NULL : getenv("HYBRIS_VULKAN_KEEP_MEMORY_TYPES");
++    if (keep && !strcmp(keep, "1")) return;
++    const VkMemoryPropertyFlags host = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
++        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
++    VkMemoryPropertyFlags original[VK_MAX_MEMORY_TYPES];
++    uint32_t count = memory->memoryTypeCount < VK_MAX_MEMORY_TYPES ? memory->memoryTypeCount : VK_MAX_MEMORY_TYPES;
++    for (uint32_t i = 0; i < count; ++i) original[i] = memory->memoryTypes[i].propertyFlags;
++    for (uint32_t i = 0; i < count; ++i) {
++        if (!(original[i] & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) continue;
++        for (uint32_t j = 0; j < count; ++j) {
++            if (j == i || !(original[j] & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) ||
++                memory->memoryTypes[j].heapIndex != memory->memoryTypes[i].heapIndex) continue;
++            if ((original[i] & original[j]) == original[i] && original[j] != original[i]) {
++                memory->memoryTypes[i].propertyFlags = original[i] & ~host;
++                break;
++            }
++        }
++    }
++}
++
++static void VKAPI_CALL memory_properties(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties *out)
++{
++    struct hybris_icd_physical context;
++    if (!hybris_icd_lookup_physical(physical, &context)) return;
++    PFN_vkGetPhysicalDeviceMemoryProperties query = (PFN_vkGetPhysicalDeviceMemoryProperties)
++        context.resolver(context.instance, "vkGetPhysicalDeviceMemoryProperties");
++    query(physical, out);
++    trim_host_memory_types(out);
++}
++
++static void memory_properties2(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties2 *out, const char *name)
++{
++    struct hybris_icd_physical context;
++    if (!hybris_icd_lookup_physical(physical, &context)) return;
++    PFN_vkGetPhysicalDeviceMemoryProperties2 query = (PFN_vkGetPhysicalDeviceMemoryProperties2)
++        context.resolver(context.instance, name);
++    query(physical, out);
++    trim_host_memory_types(&out->memoryProperties);
++}
++
++static void VKAPI_CALL memory_properties2_core(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties2 *out)
++{
++    memory_properties2(physical, out, "vkGetPhysicalDeviceMemoryProperties2");
++}
++
++static void VKAPI_CALL memory_properties2_khr(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties2 *out)
++{
++    memory_properties2(physical, out, "vkGetPhysicalDeviceMemoryProperties2KHR");
++}
++
+ PFN_vkVoidFunction hybris_icd_instance_proc(VkInstance instance, const char *name)
+ {
+     pthread_mutex_lock(&instance_guard);
+@@ -310,6 +368,12 @@ PFN_vkVoidFunction hybris_icd_instance_proc(VkInstance instance, const char *nam
+     PFN_vkVoidFunction image = backend ? hybris_icd_swapchain_image_proc(name) : NULL;
+     if (image) return image;
+     /* Preserve the HAL's command scope and extension gating. */
++    if (backend && !strcmp(name, "vkGetPhysicalDeviceMemoryProperties"))
++        return (PFN_vkVoidFunction)memory_properties;
++    if (backend && !strcmp(name, "vkGetPhysicalDeviceMemoryProperties2"))
++        return (PFN_vkVoidFunction)memory_properties2_core;
++    if (backend && !strcmp(name, "vkGetPhysicalDeviceMemoryProperties2KHR"))
++        return (PFN_vkVoidFunction)memory_properties2_khr;
+     if (backend && !strcmp(name, "vkDestroyInstance"))
+         return (PFN_vkVoidFunction)destroy_instance;
+     if (backend && !strcmp(name, "vkEnumeratePhysicalDevices"))
