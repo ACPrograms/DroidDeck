@@ -1,0 +1,63 @@
+diff --git a/src/Backends/WaylandBackend.cpp b/src/Backends/WaylandBackend.cpp
+index 40164ba..fa6060e 100644
+--- a/src/Backends/WaylandBackend.cpp
++++ b/src/Backends/WaylandBackend.cpp
+@@ -1698,6 +1698,22 @@ namespace gamescope
+         }
+     }
+ 
++    // -r sets the refresh gamescope starts with. With GAMESCOPE_NESTED_REFRESH_FOLLOWS_HOST=1 a refresh
++    // the host compositor reports later replaces it, so pacing and the frame limiter follow a panel
++    // switched to another mode during the session.
++    static void FollowHostRefresh( int32_t nRefreshmHz )
++    {
++        static const bool s_bFollow = []
++        {
++            const char *pszFollow = getenv( "GAMESCOPE_NESTED_REFRESH_FOLLOWS_HOST" );
++            return pszFollow && atoi( pszFollow ) != 0;
++        }();
++        if ( !s_bFollow || !g_nNestedRefresh || g_nNestedRefresh == nRefreshmHz )
++            return;
++        xdg_log.infof( "Nested refresh follows the host: %.3fhz", ConvertmHzToHz( (float) nRefreshmHz ) );
++        g_nNestedRefresh = nRefreshmHz;
++    }
++
+     void CWaylandPlane::UpdateVRRRefreshRate()
+     {
+         if ( m_pParent )
+@@ -1724,6 +1740,7 @@ namespace gamescope
+             // TODO(strategy): We should pick the largest refresh rate.
+             xdg_log.infof( "Changed refresh to: %.3fhz", ConvertmHzToHz( (float) nLargestRefreshRateMhz ) );
+             g_nOutputRefresh = nLargestRefreshRateMhz;
++            FollowHostRefresh( nLargestRefreshRateMhz );
+         }
+     }
+ 
+@@ -1798,6 +1815,7 @@ namespace gamescope
+             {
+                 xdg_log.infof( "Changed refresh to: %.3fhz", ConvertmHzToHz( (float) nRefresh ) );
+                 g_nOutputRefresh = nRefresh;
++                FollowHostRefresh( nRefresh );
+             }
+ 
+             m_pConnector->SetHostCompositorIsCurrentlyVRR( false );
+diff --git a/src/steamcompmgr.cpp b/src/steamcompmgr.cpp
+index 6c9299d..5fb9086 100644
+--- a/src/steamcompmgr.cpp
++++ b/src/steamcompmgr.cpp
+@@ -9254,6 +9254,15 @@ void update_vrr_atoms(xwayland_ctx_t *root_ctx, bool force, bool* needs_flush =
+ 		g_nCurrentRefreshRate_CachedValue = g_nOutputRefresh;
+ 		if (needs_flush)
+ 			*needs_flush = true;
++
++		// Steam reads the display's refresh rates from gamescope_control when it binds; send them again.
++		if ( !force )
++		{
++			wlserver_lock();
++			for ( const auto &control : wlserver.gamescope_controls )
++				wlserver_send_gamescope_control( control );
++			wlserver_unlock();
++		}
+ 	}
+ 
+ 	// Don't update this in-sync with DRM vrr usage.
