@@ -1,16 +1,17 @@
 {
-  "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/hybris-runtime-4ed93fb9-dd06dd70c6-qa/runtime.tzst",
-  "sha256": "92170e76a0eabd6b18cb7b5734c8acde31f66b87b2990d882b0351c9bb42f6ae",
-  "size": 5800738,
+  "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/hybris-runtime-4ed93fb9-dd7150e19d-qa/runtime.tzst",
+  "sha256": "894b243447006e872baea7fa1d65fd2542895b0080a6e7da63b35b29fe1f9110",
+  "size": 5801886,
   "provenance": {
     "builder": "wallentx/DroidDeck tools/hybris",
     "producer_commit": "4ed93fb9ee6e2a0b24ff087196f2e93d247fd985",
     "upstream_source_commit": "bc8cb3586b79d208fd21b925fa0209b3e432e008",
     "added_patches": [
-      "tools/qualcomm/hybris-patches/0012-android-loader-wrapped-queries.patch"
+      "tools/qualcomm/hybris-patches/0012-android-loader-wrapped-queries.patch",
+      "tools/qualcomm/hybris-patches/0013-calibrated-timestamps-khr-alias.patch"
     ],
-    "patch_commit": "06dd70c67e01ab8ed4916b8a430714d9a1e367d2",
-    "component_ci_run": "https://github.com/Droid-Deck/DroidDeck-Components/actions/runs/40252158527",
+    "patch_commit": "7150e19db3554feb2d9a0d27d49b4223c1efd162",
+    "component_ci_run": "https://github.com/Droid-Deck/DroidDeck-Components/actions/runs/40254437721",
     "previous_build": {
       "url": "https://github.com/wallentx/DroidDeck/releases/download/hybris-4ed93fb9ee6e2a0b24ff087196f2e93d247fd985/runtime.tzst",
       "component_ci_run": "https://github.com/wallentx/DroidDeck/actions/runs/39360327540"
