@@ -1,13 +1,20 @@
 {
-  "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/qualcomm-runtime-r3-4b8c7f84-qa/hybris-runtime-4ed93fb9.tzst",
-  "sha256": "a4e1ab9581c83ee6feff95e0e527930977a6c14c0e72bd2c4abf777e8472d987",
-  "size": 5799930,
+  "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/hybris-runtime-4ed93fb9-dd06dd70c6-qa/runtime.tzst",
+  "sha256": "92170e76a0eabd6b18cb7b5734c8acde31f66b87b2990d882b0351c9bb42f6ae",
+  "size": 5800738,
   "provenance": {
-    "component_ci_run": "https://github.com/wallentx/DroidDeck/actions/runs/39360327540",
-    "note": "Candidate pin: publish this exact archive and verify its URL before updating release.json.",
+    "builder": "wallentx/DroidDeck tools/hybris",
     "producer_commit": "4ed93fb9ee6e2a0b24ff087196f2e93d247fd985",
     "upstream_source_commit": "bc8cb3586b79d208fd21b925fa0209b3e432e008",
-    "mirrored_from": "https://github.com/wallentx/DroidDeck/releases/download/hybris-4ed93fb9ee6e2a0b24ff087196f2e93d247fd985/runtime.tzst"
+    "added_patches": [
+      "tools/qualcomm/hybris-patches/0012-android-loader-wrapped-queries.patch"
+    ],
+    "patch_commit": "06dd70c67e01ab8ed4916b8a430714d9a1e367d2",
+    "component_ci_run": "https://github.com/Droid-Deck/DroidDeck-Components/actions/runs/40252158527",
+    "previous_build": {
+      "url": "https://github.com/wallentx/DroidDeck/releases/download/hybris-4ed93fb9ee6e2a0b24ff087196f2e93d247fd985/runtime.tzst",
+      "component_ci_run": "https://github.com/wallentx/DroidDeck/actions/runs/39360327540"
+    }
   },
   "gamescope": {
     "source_commit": "8f212644c46460549035971ab914421180f61a7c",
