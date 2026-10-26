@@ -1,7 +1,7 @@
 {
-  "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/hybris-runtime-4ed93fb9-dde7fad94b-qa/runtime.tzst",
-  "sha256": "8c30d39171a39ae408616c6230e4e98e0c640aeb5ce6c83cbda5fc7507e82aa4",
-  "size": 5804421,
+  "url": "https://github.com/Droid-Deck/DroidDeck-Components/releases/download/hybris-runtime-4ed93fb9-dda132a6de-qa/runtime.tzst",
+  "sha256": "743d11363e73b41ef33167e598bf23c7f21b673281faaf18f22e99ee4fda1952",
+  "size": 5806382,
   "provenance": {
     "builder": "wallentx/DroidDeck tools/hybris",
     "producer_commit": "4ed93fb9ee6e2a0b24ff087196f2e93d247fd985",
@@ -9,10 +9,11 @@
     "added_patches": [
       "tools/qualcomm/hybris-patches/0012-android-loader-wrapped-queries.patch",
       "tools/qualcomm/hybris-patches/0013-calibrated-timestamps-khr-alias.patch",
-      "tools/qualcomm/hybris-patches/0014-trim-covered-host-memory-types.patch"
+      "tools/qualcomm/hybris-patches/0014-trim-covered-host-memory-types.patch",
+      "tools/qualcomm/hybris-patches/0015-placed-memory-dedicated-export.patch"
     ],
-    "patch_commit": "e7fad94b704e5e88ad277e84834581b91492dee6",
-    "component_ci_run": "https://github.com/Droid-Deck/DroidDeck-Components/actions/runs/40279099523",
+    "patch_commit": "a132a6de9786fd449d7fd9f0075a8fe897e935e1",
+    "component_ci_run": "https://github.com/Droid-Deck/DroidDeck-Components/actions/runs/40284992208",
     "previous_build": {
       "url": "https://github.com/wallentx/DroidDeck/releases/download/hybris-4ed93fb9ee6e2a0b24ff087196f2e93d247fd985/runtime.tzst",
       "component_ci_run": "https://github.com/wallentx/DroidDeck/actions/runs/39360327540"
