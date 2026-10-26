@@ -1,0 +1,31 @@
+diff --git a/hybris/vulkan/icd/device.c b/hybris/vulkan/icd/device.c
+index 1758b37..a9bfee4 100644
+--- a/hybris/vulkan/icd/device.c
++++ b/hybris/vulkan/icd/device.c
+@@ -148,6 +148,9 @@ PFN_vkVoidFunction VKAPI_CALL hybris_icd_device_proc(VkDevice device, const char
+     int swapchain_enabled = state ? state->swapchain_enabled : 0;
+     pthread_mutex_unlock(&device_guard);
+     PFN_vkVoidFunction backend = resolver ? resolver(device, name) : NULL;
++    /* Same promotion as vkGetPhysicalDeviceCalibrateableTimeDomainsKHR. */
++    if (!backend && resolver && !strcmp(name, "vkGetCalibratedTimestampsKHR"))
++        backend = resolver(device, "vkGetCalibratedTimestampsEXT");
+     PFN_vkVoidFunction local = hybris_icd_swapchain_proc(name, swapchain_enabled);
+     if (local) return local;
+     if (backend && swapchain_enabled) {
+diff --git a/hybris/vulkan/icd/instance.c b/hybris/vulkan/icd/instance.c
+index 6717d19..7f30014 100644
+--- a/hybris/vulkan/icd/instance.c
++++ b/hybris/vulkan/icd/instance.c
+@@ -295,6 +295,12 @@ PFN_vkVoidFunction hybris_icd_instance_proc(VkInstance instance, const char *nam
+     int platforms_enabled = state ? state->platforms_enabled : 0;
+     pthread_mutex_unlock(&instance_guard);
+     PFN_vkVoidFunction backend = resolver ? resolver(instance, name) : NULL;
++    /* VK_KHR_calibrated_timestamps is VK_EXT_calibrated_timestamps promoted with
++     * the same signature and time-domain values. A HAL that only has the EXT
++     * name returns NULL for the KHR one, and the desktop loader aborts when an
++     * application or layer calls the KHR trampoline. */
++    if (!backend && resolver && !strcmp(name, "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"))
++        backend = resolver(instance, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
+     PFN_vkVoidFunction local_wsi = hybris_icd_wsi_proc(name, surface_enabled, platforms_enabled);
+     if (local_wsi) return local_wsi;
+     /* Device WSI entry points are adapter-owned. Enablement is checked on the
