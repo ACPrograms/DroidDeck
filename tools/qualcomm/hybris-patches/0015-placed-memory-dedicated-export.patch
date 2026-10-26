@@ -1,0 +1,233 @@
+diff --git a/hybris/vulkan/placed/placed_layer.c b/hybris/vulkan/placed/placed_layer.c
+index 15bf8f5..9dc8b7d 100644
+--- a/hybris/vulkan/placed/placed_layer.c
++++ b/hybris/vulkan/placed/placed_layer.c
+@@ -37,7 +37,7 @@
+ #define MAP_FIXED_NOREPLACE 0x100000
+ #endif
+ 
+-enum backend { BACKEND_UNSUPPORTED, BACKEND_OPAQUE, BACKEND_NATIVE_ALIAS };
++enum backend { BACKEND_UNSUPPORTED, BACKEND_OPAQUE, BACKEND_NATIVE_ALIAS, BACKEND_DEDICATED_EXPORT };
+ 
+ struct alloc {
+     VkAllocationCallbacks cb;
+@@ -162,6 +162,7 @@ struct resource {
+ };
+ struct memory {
+     VkDeviceMemory h;
++    VkBuffer hidden;
+     VkDeviceSize size;
+     int exportable, fd;
+     void *native, *alias;
+@@ -477,10 +478,6 @@ static enum backend select_backend(struct instance *i, VkPhysicalDevice p) {
+     if (!properties)
+         return BACKEND_OPAQUE;
+     properties(p, &props);
+-    /* Preserve the original OPAQUE_FD path for non-Mali drivers. Some drivers
+-     * reject a combined capability query while supporting each real resource. */
+-    if (props.vendorID != 0x13b5)
+-        return BACKEND_OPAQUE;
+     PFN_vkGetPhysicalDeviceExternalBufferProperties f =
+         (void *)iproc(i, "vkGetPhysicalDeviceExternalBufferProperties");
+     if (!f)
+@@ -494,11 +491,21 @@ static enum backend select_backend(struct instance *i, VkPhysicalDevice p) {
+             .handleType = OPAQUE};
+         VkExternalBufferProperties out = {.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES};
+         f(p, &in, &out);
+-        if ((out.externalMemoryProperties.externalMemoryFeatures &
+-             VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) &&
+-            (out.externalMemoryProperties.compatibleHandleTypes & OPAQUE))
++        VkExternalMemoryFeatureFlags features = out.externalMemoryProperties.externalMemoryFeatures;
++        int exportable = (features & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) &&
++                         (out.externalMemoryProperties.compatibleHandleTypes & OPAQUE);
++        /* Qualcomm reports OPAQUE_FD export as dedicated-only: external resources then bind
++         * only to dedicated exported memory and cannot use the cached host-visible type. */
++        if (props.vendorID != 0x13b5 && exportable &&
++            (features & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT))
++            return BACKEND_DEDICATED_EXPORT;
++        if (exportable)
+             return BACKEND_OPAQUE;
+     }
++    /* Preserve the original OPAQUE_FD path for non-Mali drivers. Some drivers
++     * reject a combined capability query while supporting each real resource. */
++    if (props.vendorID != 0x13b5)
++        return BACKEND_OPAQUE;
+     return have_mali_mapping_lock() ? BACKEND_NATIVE_ALIAS : BACKEND_UNSUPPORTED;
+ }
+ static VkResult VKAPI_CALL l_CreateDevice(VkPhysicalDevice p, const VkDeviceCreateInfo *ci,
+@@ -609,7 +616,7 @@ static VkResult VKAPI_CALL l_CreateDevice(VkPhysicalDevice p, const VkDeviceCrea
+     for (uint32_t n = 0; n < d->props.memoryTypeCount; n++)
+         if (d->props.memoryTypes[n].propertyFlags & HOST)
+             d->host_bits |= 1u << n;
+-    if (d->active && d->backend == BACKEND_OPAQUE && !d->GetMemoryFdKHR) {
++    if (d->active && d->backend != BACKEND_NATIVE_ALIAS && !d->GetMemoryFdKHR) {
+         d->DestroyDevice(d->h, ac);
+         result = VK_ERROR_EXTENSION_NOT_PRESENT;
+         goto failed;
+@@ -620,7 +627,10 @@ static VkResult VKAPI_CALL l_CreateDevice(VkPhysicalDevice p, const VkDeviceCrea
+     pthread_mutex_unlock(&lock);
+     if (d->active)
+         fprintf(stderr, "DD_PLACED device active backend=%s page=%zu host_bits=%08x\n",
+-                d->backend == BACKEND_NATIVE_ALIAS ? "native-alias" : "opaque", page_size(),
++                d->backend == BACKEND_NATIVE_ALIAS       ? "native-alias"
++                : d->backend == BACKEND_DEDICATED_EXPORT ? "dedicated-export"
++                                                         : "opaque",
++                page_size(),
+                 d->host_bits);
+     chain_free(&chain);
+     dealloc(a, exts);
+@@ -794,7 +804,7 @@ static VkResult VKAPI_CALL l_CreateBuffer(VkDevice h, const VkBufferCreateInfo *
+         return VK_ERROR_INITIALIZATION_FAILED;
+     if (!d->active)
+         return d->CreateBuffer(h, ci, ac, out);
+-    if (d->backend == BACKEND_NATIVE_ALIAS)
++    if (d->backend != BACKEND_OPAQUE)
+         return d->CreateBuffer(h, ci, ac, out);
+     if (unsupported_external(ci->pNext, 0))
+         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+@@ -845,7 +855,7 @@ static VkResult VKAPI_CALL l_CreateImage(VkDevice h, const VkImageCreateInfo *ci
+         return VK_ERROR_INITIALIZATION_FAILED;
+     if (!d->active)
+         return d->CreateImage(h, ci, ac, out);
+-    if (d->backend == BACKEND_NATIVE_ALIAS)
++    if (d->backend != BACKEND_OPAQUE)
+         return d->CreateImage(h, ci, ac, out);
+     if (unsupported_external(ci->pNext, 1))
+         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+@@ -978,7 +988,7 @@ static void VKAPI_CALL l_GetDeviceBufferMemoryRequirements(
+         d->GetDeviceBufferMemoryRequirements(h, in, out);
+         return;
+     }
+-    if (d->backend == BACKEND_NATIVE_ALIAS) {
++    if (d->backend != BACKEND_OPAQUE) {
+         d->GetDeviceBufferMemoryRequirements(h, in, out);
+         return;
+     }
+@@ -1011,7 +1021,7 @@ static void VKAPI_CALL l_GetDeviceImageMemoryRequirements(VkDevice h,
+         d->GetDeviceImageMemoryRequirements(h, in, out);
+         return;
+     }
+-    if (d->backend == BACKEND_NATIVE_ALIAS) {
++    if (d->backend != BACKEND_OPAQUE) {
+         d->GetDeviceImageMemoryRequirements(h, in, out);
+         return;
+     }
+@@ -1051,6 +1061,84 @@ static int allocation_chain_supported(const void *p) {
+     return 1;
+ }
+ static int has_import(const void *p) { return !allocation_chain_supported(p); }
++static void track_memory(struct device *d, struct memory *m) {
++    pthread_mutex_lock(&lock);
++    m->next = d->memories;
++    d->memories = m;
++    pthread_mutex_unlock(&lock);
++}
++/* Resources stay native. A host-visible allocation that is not dedicated already is
++ * dedicated to a hidden buffer of its size so that it can be exported; the driver binds
++ * other resources to it and the layer never uses the buffer. */
++static VkResult allocate_dedicated_export(struct device *d, VkDevice h,
++                                          const VkMemoryAllocateInfo *ci,
++                                          const VkAllocationCallbacks *ac, VkDeviceMemory *out,
++                                          struct memory *m) {
++    int host = !!(d->host_bits & (1u << ci->memoryTypeIndex));
++    const VkMemoryDedicatedAllocateInfo *ded =
++        (void *)find_chain(ci->pNext, VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO);
++    int own = ded && (ded->buffer || ded->image);
++    VkResult r;
++    if (!host || has_import(ci->pNext) ||
++        find_chain(ci->pNext, VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO)) {
++        r = d->AllocateMemory(h, ci, ac, out);
++        goto done;
++    }
++    VkMemoryAllocateInfo copy = *ci;
++    VkMemoryDedicatedAllocateInfo hidden = {.sType =
++                                                VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO};
++    VkExportMemoryAllocateInfo ext = {.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
++                                      .handleTypes = OPAQUE};
++    struct chain_copy chain = {.a = m->a};
++    if (!own) {
++        VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
++                                 .size = ci->allocationSize,
++                                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
++                                          VK_BUFFER_USAGE_TRANSFER_DST_BIT,
++                                 .sharingMode = VK_SHARING_MODE_EXCLUSIVE};
++        VkMemoryRequirements req = {0};
++        if (d->CreateBuffer(h, &bi, ac, &m->hidden) == VK_SUCCESS) {
++            d->GetBufferMemoryRequirements(h, m->hidden, &req);
++            if (!(req.memoryTypeBits & (1u << ci->memoryTypeIndex)) ||
++                req.size < ci->allocationSize) {
++                d->DestroyBuffer(h, m->hidden, ac);
++                m->hidden = VK_NULL_HANDLE;
++            }
++        } else
++            m->hidden = VK_NULL_HANDLE;
++        if (!m->hidden) {
++            if (atomic_fetch_add(&failure_logs, 1) < 64)
++                fprintf(stderr, "DD_PLACED dedicated-export: no hidden buffer for size=%llu type=%u\n",
++                        (unsigned long long)ci->allocationSize, ci->memoryTypeIndex);
++            r = d->AllocateMemory(h, ci, ac, out);
++            goto done;
++        }
++        hidden.buffer = m->hidden;
++        copy.allocationSize = req.size;
++        r = chain_edit(ci->pNext, hidden.sType, &hidden, m->a, &chain);
++        if (r != VK_SUCCESS)
++            goto failed;
++        ext.pNext = chain.head;
++    } else
++        ext.pNext = (void *)ci->pNext;
++    copy.pNext = &ext;
++    r = d->AllocateMemory(h, &copy, ac, out);
++    chain_free(&chain);
++    if (r != VK_SUCCESS)
++        goto failed;
++    m->exportable = 1;
++done:
++    if (r != VK_SUCCESS)
++        goto failed;
++    m->h = *out;
++    track_memory(d, m);
++    return VK_SUCCESS;
++failed:
++    if (m->hidden)
++        d->DestroyBuffer(h, m->hidden, ac);
++    dealloc(m->a, m);
++    return r;
++}
+ static VkResult VKAPI_CALL l_AllocateMemory(VkDevice h, const VkMemoryAllocateInfo *ci,
+                                             const VkAllocationCallbacks *ac, VkDeviceMemory *out) {
+     struct device *d = get_device(h);
+@@ -1084,6 +1172,8 @@ static VkResult VKAPI_CALL l_AllocateMemory(VkDevice h, const VkMemoryAllocateIn
+         pthread_mutex_unlock(&lock);
+         return VK_SUCCESS;
+     }
++    if (d->backend == BACKEND_DEDICATED_EXPORT)
++        return allocate_dedicated_export(d, h, ci, ac, out, m);
+     const VkExportMemoryAllocateInfo *existing =
+         (void *)find_chain(ci->pNext, VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO);
+     VkExportMemoryAllocateInfo ext = {.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+@@ -1176,12 +1266,15 @@ static void VKAPI_CALL l_FreeMemory(VkDevice h, VkDeviceMemory memory,
+             break;
+         }
+     pthread_mutex_unlock(&lock);
++    VkBuffer hidden = m ? m->hidden : VK_NULL_HANDLE;
+     if (m) {
+         pthread_mutex_lock(&placement_lock);
+         cleanup_memory(d, m);
+         pthread_mutex_unlock(&placement_lock);
+     }
+     d->FreeMemory(h, memory, ac);
++    if (hidden)
++        d->DestroyBuffer(h, hidden, ac);
+ }
+ static VkResult VKAPI_CALL l_MapMemory(VkDevice h, VkDeviceMemory memory, VkDeviceSize offset,
+                                        VkDeviceSize size, VkMemoryMapFlags flags, void **out) {
+@@ -1671,6 +1764,8 @@ static void VKAPI_CALL l_DestroyDevice(VkDevice h, const VkAllocationCallbacks *
+     while (d->memories) {
+         struct memory *m = d->memories;
+         d->memories = m->next;
++        if (m->hidden)
++            d->DestroyBuffer(h, m->hidden, m->a.custom ? &m->a.cb : NULL);
+         pthread_mutex_lock(&placement_lock);
+         cleanup_memory(d, m);
+         pthread_mutex_unlock(&placement_lock);
