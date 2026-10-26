@@ -3085,4 +3085,17 @@
     <string name="xbox_filter_show">Vis</string>
     <string name="xbox_filter_cloud">Sky</string>
     <string name="stores_xbox_cloud_settings">Skyinnstillinger</string>
+    <string name="setup_gpu_bridge_off">Mali-bro: av</string>
+    <string name="setup_gpu_bridge_on">Mali-bro: på</string>
+    <string name="setup_gpu_bridge_detail">%1$s er ikke en Adreno. Den eksperimentelle Vulkan-broen er på: økten tegner gjennom telefonens egen driver. Forvent feil; send øktloggene.</string>
+    <string name="setup_bridge_safe">Sikker modus</string>
+    <string name="setup_bridge_safe_on">Sikker modus: på</string>
+    <string name="setup_bridge_safe_off">Sikker modus: av</string>
+    <string name="setup_bridge_safe_on_detail">Mest kompatibel. Anbefales for en ny enhet.</string>
+    <string name="setup_bridge_safe_off_detail">Raskere der denne GPU-en besto kontrollene sine.</string>
+    <string name="setup_bridge_dxvk">DXVK</string>
+    <string name="setup_bridge_dxvk_auto">DXVK: automatisk</string>
+    <string name="setup_bridge_dxvk_proton">DXVK: Protons egen</string>
+    <string name="setup_bridge_dxvk_auto_detail">Bruker en eldre DXVK der denne GPU-ens Vulkan er for gammel for Protons.</string>
+    <string name="setup_bridge_dxvk_proton_detail">Hver Proton beholder sin egen DXVK, selv der denne GPU-ens Vulkan kan være for gammel for den.</string>
 </resources>

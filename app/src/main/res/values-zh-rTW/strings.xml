@@ -3068,4 +3068,12 @@
     <string name="setup_bridge_dxvk_proton">DXVK：Proton 內建</string>
     <string name="setup_bridge_dxvk_auto_detail">此 GPU 的 Vulkan 版本對 Proton 內建的 DXVK 來說太舊時，改用較舊的 DXVK。</string>
     <string name="setup_bridge_dxvk_proton_detail">每個 Proton 都使用內建的 DXVK，即使此 GPU 的 Vulkan 版本可能太舊。</string>
+    <string name="setup_gpu_bridge_off">Mali 橋接：關</string>
+    <string name="setup_gpu_bridge_on">Mali 橋接：開</string>
+    <string name="setup_gpu_bridge_detail">%1$s 不是 Adreno。實驗性 Vulkan 橋接已開啟：工作階段透過手機內建的驅動程式繪製。可能會有問題，請傳送工作階段記錄。</string>
+    <string name="setup_bridge_safe">安全模式</string>
+    <string name="setup_bridge_safe_on">安全模式：開</string>
+    <string name="setup_bridge_safe_off">安全模式：關</string>
+    <string name="setup_bridge_safe_on_detail">相容性最好。建議新裝置使用。</string>
+    <string name="setup_bridge_safe_off_detail">在此 GPU 通過檢查的地方較快。</string>
 </resources>
