@@ -143,7 +143,7 @@ namespace DroidDeckXboxHost
             {
                 File.Delete(marker);
                 byte[] copy = new byte[checked(width * height * 4)];
-                Buffer.BlockCopy(pixels, 0, copy, 0, copy.Length);
+                System.Buffer.BlockCopy(pixels, 0, copy, 0, copy.Length);
                 var file = await ApplicationData.Current.LocalFolder.CreateFileAsync(
                     "droiddeck-runtime-preview.png", CreationCollisionOption.ReplaceExisting);
                 using (var output = await file.OpenAsync(FileAccessMode.ReadWrite))
