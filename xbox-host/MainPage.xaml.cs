@@ -253,10 +253,11 @@ namespace DroidDeckXboxHost
                                 platform = "Xbox_UWP_WebView2"
                             });
                             sender.PostWebMessageAsString(ack);
+                            await CaptureUiPreviewAsync(sender);
                         }
                         else
                         {
-                            _diagnostics.AddMessage("Received message of type: " + messageType);
+                            _diagnostics.AddMessage("Unsupported UI message");
                         }
                     }
                 }
@@ -265,6 +266,24 @@ namespace DroidDeckXboxHost
             {
                 _diagnostics.AddMessage("Failed to process web message: " + ex.Message);
             }
+        }
+
+        private async System.Threading.Tasks.Task CaptureUiPreviewAsync(CoreWebView2 core)
+        {
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(1000);
+                var preview = await ApplicationData.Current.LocalFolder.CreateFileAsync(
+                    "droiddeck-ui-preview.png", CreationCollisionOption.ReplaceExisting);
+                using (var stream = await preview.OpenAsync(FileAccessMode.ReadWrite))
+                    await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+                _diagnostics.AddMessage("UI preview captured");
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.AddMessage("UI preview HRESULT=0x" + ex.HResult.ToString("X8"));
+            }
+            await _diagnostics.SaveToDiskAsync();
         }
 
         private async void OnNavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
