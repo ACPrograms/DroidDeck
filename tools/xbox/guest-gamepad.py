@@ -9,7 +9,8 @@ import socket
 import struct
 
 PACKET = struct.Struct("<4sII6h")
-BUTTONS = {4: 304, 8: 305, 16: 308, 32: 307, 1024: 310, 2048: 311,
+# Match Linux xpad's Xbox 360 BTN_X / BTN_Y ABI for the advertised 045e:028e device.
+BUTTONS = {4: 304, 8: 305, 16: 307, 32: 308, 1024: 310, 2048: 311,
            2: 314, 1: 315, 4096: 317, 8192: 318}
 AXES = (0, 1, 3, 4, 2, 5, 16, 17)
 

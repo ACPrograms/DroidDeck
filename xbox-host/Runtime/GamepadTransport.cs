@@ -45,7 +45,7 @@ namespace DroidDeckXboxHost.Runtime
                                 packet.Position = 0;
                                 writer.Write(new byte[] { 68, 68, 80, 49 }); // DDP1
                                 writer.Write(++sequence);
-                                writer.Write((uint)reading.Buttons);
+                                writer.Write((uint)reading.Buttons & 0x3FFF); // Paddles do not invalidate standard pad packets.
                                 writer.Write(Axis(reading.LeftThumbstickX));
                                 writer.Write(Axis(-reading.LeftThumbstickY));
                                 writer.Write(Axis(reading.RightThumbstickX));

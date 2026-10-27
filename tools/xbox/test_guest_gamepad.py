@@ -24,6 +24,13 @@ class ControllerProtocolTests(unittest.TestCase):
         neutral = pad.PACKET.pack(b"DDP1", 0, 0, 0, 0, 0, 0, 0, 0)
         self.assertTrue(all(value == 0 for kind, code, value in pad.events(neutral)))
 
+    def test_x_and_y_match_the_advertised_xbox_360_driver(self):
+        for flag, code, other in ((16, 307, 308), (32, 308, 307)):
+            packet = pad.PACKET.pack(b"DDP1", 1, flag, 0, 0, 0, 0, 0, 0)
+            event = {(kind, key): value for kind, key, value in pad.events(packet)}
+            self.assertEqual(event[1, code], 1)
+            self.assertEqual(event[1, other], 0)
+
     def test_fragmented_tcp_packets_and_disconnect(self):
         expected = pad.PACKET.pack(b"DDP1", 7, 0, 0, 0, 0, 0, 0, 0)
 

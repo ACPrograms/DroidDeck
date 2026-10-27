@@ -159,6 +159,10 @@ namespace DroidDeckXboxHost.Runtime
                 "-device", "virtio-tablet-pci"
             });
 
+            // Same public SDK's native Xbox XAudio2 output, exposed as a standard Linux HDA card.
+            if (config.AudioEnabled)
+                list.AddRange(new string[] { "-audiodev", "xaudio2,id=snd0", "-device", "intel-hda", "-device", "hda-output,audiodev=snd0" });
+
             // Optional: read-only vvfat shared folder
             if (!string.IsNullOrEmpty(config.SharedFolderPath))
             {

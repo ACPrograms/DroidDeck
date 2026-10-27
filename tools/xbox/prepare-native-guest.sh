@@ -16,9 +16,11 @@ apt-get install -y --no-install-recommends \
   xserver-xorg-core xserver-xorg-video-fbdev xserver-xorg-video-vesa \
   xserver-xorg-input-libinput x11-utils openbox dbus-x11 curl ca-certificates \
   file unzip python3 procps util-linux libgtk-3-0 libnss3 libxss1 libasound2 \
-  libpulse0 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri \
+  pulseaudio libpulse0 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri \
   libc6:i386 libstdc++6:i386 libx11-6:i386 libxrandr2:i386 libglib2.0-0:i386 \
-  libgl1-mesa-dri:i386 libgl1:i386
+  libgl1-mesa-dri:i386 libgl1:i386 libvulkan1:i386 mesa-vulkan-drivers:i386
+usermod -aG input,video,audio droiddeck
+if getent group render >/dev/null; then usermod -aG render droiddeck; fi
 install -d /usr/local/bin /usr/local/libexec/droiddeck-xbox
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/guest-gamepad.py" /usr/local/libexec/droiddeck-xbox/gamepad
 find "$original/usr/local/bin" -maxdepth 1 -type f -name 'droiddeck-*' \
@@ -42,6 +44,7 @@ for attempt in $(seq 1 120); do
   sleep 1
 done
 xdpyinfo >/dev/null 2>&1
+pulseaudio --start --exit-idle-time=-1
 openbox >/dev/null 2>&1 &
 wm=$!
 trap 'kill "$wm" 2>/dev/null || true' EXIT
