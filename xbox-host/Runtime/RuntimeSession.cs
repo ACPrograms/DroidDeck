@@ -91,6 +91,17 @@ namespace DroidDeckXboxHost.Runtime
                     DisplayWidth = 1024, DisplayHeight = 768,
                     OutLogPath = Path.Combine(_local, "droiddeck-qemu-boot.log")
                 };
+                // Explicit development-only early-boot diagnostics. Never export serial output
+                // after Steam/authentication starts; the normal runtime keeps serial disabled.
+                if (File.Exists(Path.Combine(_local, "runtime-early-boot.request")))
+                    config.SerialBootLogPath = Path.Combine(_local, "droiddeck-early-boot.log");
+                if (File.Exists(Path.Combine(_local, "runtime-safe-cpu.request")))
+                {
+                    config.CpuModel = "qemu64";
+                    config.CpuCount = 1;
+                    config.RamMegabytes = 2048;
+                    config.TbCacheMegabytes = 128;
+                }
                 var validation = QemuPackageVerifier.Validate(Package.Current.InstalledLocation.Path, config, true);
                 if (!validation.IsValid) throw new InvalidOperationException(validation.ErrorMessage);
                 // Persist the protection flag BEFORE entering any native guest code.

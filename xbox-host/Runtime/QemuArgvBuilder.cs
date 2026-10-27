@@ -107,7 +107,7 @@ namespace DroidDeckXboxHost.Runtime
                 "-m", config.RamMegabytes.ToString() + "M",
                 "-nodefaults",
                 "-monitor", "none",
-                "-serial", "none"
+                "-serial", string.IsNullOrEmpty(config.SerialBootLogPath) ? "none" : "file:" + config.SerialBootLogPath
             };
 
             // Graphics pipeline

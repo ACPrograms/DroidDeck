@@ -83,6 +83,8 @@ namespace DroidDeckXboxHost.Runtime
         /// </summary>
         public string OutLogPath { get; set; }
 
+        public string SerialBootLogPath { get; set; }
+
         /// <summary>
         /// Optional path to local directory exposed as read-only vvfat shared folder.
         /// </summary>
