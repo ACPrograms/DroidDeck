@@ -1,0 +1,28 @@
+name: Xbox runtime adaptation checks
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/xbox-adaptation]
+    paths:
+      - tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-x64
+      - tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-launch
+      - tools/linuxfs/overlay/usr/local/bin/droiddeck-session
+      - tools/tests/test_steam_native_x64.py
+      - tools/tests/test_steam_desktop_launch.py
+      - .github/workflows/xbox-runtime.yml
+permissions:
+  contents: read
+jobs:
+  linux-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check native host path and original session regressions
+        run: |
+          bash -n tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-x64 tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-launch tools/linuxfs/overlay/usr/local/bin/droiddeck-session
+          python3 -m unittest discover -s tools/tests -p test_steam_native_x64.py -v
+          python3 -m unittest discover -s tools/tests -p test_steam_desktop_launch.py -v
+          python3 -m unittest discover -s tools/tests -p test_steam_client_setup_failure.py -v

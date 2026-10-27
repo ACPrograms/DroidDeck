@@ -3,6 +3,7 @@ import fcntl
 import os
 from pathlib import Path
 import subprocess
+import shlex
 import tempfile
 import time
 import unittest
@@ -28,8 +29,8 @@ class DesktopSteamLaunchTest(unittest.TestCase):
         x64.chmod(0o755)
         self.launcher = self.root / 'launch'
         self.launcher.write_text((BIN / 'droiddeck-steam-launch').read_text().replace(
-            '/usr/local/bin/droiddeck-session', str(supervisor)).replace(
-            '/usr/local/bin/droiddeck-steam-x64', str(x64)))
+            '/usr/local/bin/droiddeck-session', shlex.quote(str(supervisor))).replace(
+            '/usr/local/bin/droiddeck-steam-x64', shlex.quote(str(x64))))
 
     def launch(self, *args):
         return subprocess.run(['bash', str(self.launcher), *args], env=self.env,
@@ -90,6 +91,22 @@ class DesktopSteamLaunchTest(unittest.TestCase):
         self.assertEqual(result.stdout.splitlines(), ['x64', '--exec', '-nobigpicture', '-no-cef-sandbox',
                                                    '-cef-ozone-platform=x11', '-cef-disable-gpu',
                                                    'steam://rungameid/501590'])
+
+    def test_native_x86_64_forwarding_uses_the_normal_home_profile(self):
+        lock = self.root / 'cache/droiddeck/steam-desktop.lock'
+        lock.parent.mkdir(parents=True)
+        (self.root / '.steam').mkdir()
+        os.mkfifo(self.root / '.steam/steam.pipe')
+        (self.root / '.steam/steam.pid').write_text(str(os.getpid()))
+        self.env.update(BL_STEAM_CLIENT_ARCH='x86_64', BL_X64_NATIVE='1')
+        self.env.pop('BL_X64_HOME', None)
+        with lock.open('w') as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.launch('desktop', 'steam://open/library')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[:2], ['x64', '--exec'])
+        self.assertEqual(result.stdout.splitlines()[-1], 'steam://open/library')
+        self.assertFalse((self.session / 'steam-launch').exists())
 
     def test_second_click_waits_for_steam_ipc_during_startup(self):
         lock = self.root / 'cache/droiddeck/steam-desktop.lock'

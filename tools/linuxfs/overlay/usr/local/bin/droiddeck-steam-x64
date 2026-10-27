@@ -8,7 +8,15 @@ X64_CHANNEL=steamdeck_publicbeta
 MANIFEST=steam_client_${X64_CHANNEL}_steamrt64
 
 REAL_HOME=${HOME:-/root}
-X64_HOME=${BL_X64_HOME:-$REAL_HOME/.droiddeck-x64}
+if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
+  [ "$(uname -s):$(uname -m)" = Linux:x86_64 ] || {
+    echo "droiddeck-steam-x64: native execution requires an x86-64 Linux host" >&2
+    exit 64
+  }
+  X64_HOME=${BL_X64_HOME:-$REAL_HOME}
+else
+  X64_HOME=${BL_X64_HOME:-$REAL_HOME/.droiddeck-x64}
+fi
 ROOTFS=$X64_HOME/rootfs
 STEAM_X64=$X64_HOME/.local/share/Steam
 ARM_STEAM=${XDG_DATA_HOME:-$REAL_HOME/.local/share}/Steam
@@ -334,6 +342,16 @@ x64_fetch() {
 }
 
 x64_prepare() {
+if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
+  mkdir -p "$STEAM_X64/package"
+  : > "$STEAM_X64/.steam-enable-steamrt64-client"
+  x64_sync_client
+  [ -x "$STEAM_X64/steam.sh" ] && [ -x "$STEAM_X64/steamrt64/steam" ] || {
+    step "native x86-64 Steam client is not installed"
+    return 69
+  }
+  return 0
+fi
 fex_ready || { step "FEX could not be installed; see $LOG"; exit 1; }
 step "FEX ready ($FEX_NOW, $FEX_FROM)"
 # The client's opt-in to its SteamRT3 build; without it, it re-executes through steam.sh, whose checks fail under proot.
@@ -800,6 +818,10 @@ x64_gpu_watch() {
 }
 
 x64_exec() {
+  if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
+    cd "$STEAM_X64"
+    exec "$STEAM_X64/steam.sh" "$@"
+  fi
   x64_env
   cd "$STEAM_X64"
   # The client checksums its files at start and reinstalls over edited ones, so the session shim (preload/net.c)
@@ -962,6 +984,11 @@ if a is not None or x is not None:
 PY
 }
 
+if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
+  # A native client has one profile and uses Steam's own x86-64 compatibility tools.
+  case "${1:-}" in --sync-login|--share|--map-direct|--default-tool) exit 0 ;; esac
+fi
+
 case "${1:-}" in
   --sync-login) x64_sync_login; exit 0 ;;
   --share) x64_share arm64; exit 0 ;;
@@ -972,6 +999,11 @@ case "${1:-}" in
   --default-tool) x64_default_tool; exit 0 ;;
   --map-direct) shift; x64_map_direct "$@"; exit 0 ;;
 esac
+
+if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
+  x64_prepare
+  x64_exec "$@"
+fi
 
 if pgrep -f 'steamrtarm64/steam( |$)' >/dev/null 2>&1; then
   step "shutting down the arm64 client first"
