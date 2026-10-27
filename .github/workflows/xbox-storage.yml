@@ -1,0 +1,23 @@
+name: Xbox sparse storage checks
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/xbox-adaptation]
+    paths: [xbox-runtime/Storage/**, .github/workflows/xbox-storage.yml]
+permissions:
+  contents: read
+jobs:
+  windows-storage:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Compile UWP-compatible storage library
+        run: dotnet build xbox-runtime/Storage/Storage.csproj -c Release
+      - name: Exercise real Windows sparse files and failure cleanup
+        run: dotnet run --project xbox-runtime/Storage/StorageTest.csproj -c Release

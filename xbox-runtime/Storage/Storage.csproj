@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>DroidDeck.XboxRuntime.Storage</RootNamespace>
+    <AssemblyName>DroidDeck.XboxRuntime.Storage</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Program.cs" />
+    <Compile Remove="SparseProvisionerTests.cs" />
+  </ItemGroup>
+</Project>
