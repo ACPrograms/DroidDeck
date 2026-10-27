@@ -26,6 +26,7 @@ jobs:
           python tools/xbox/test_guest_gamepad.py -v
           bash -n tools/xbox/prepare-native-guest.sh
           bash -n tools/xbox/bootstrap-native-guest.sh
+          python -c "from pathlib import Path; files = list(Path('tools/xbox').glob('*.sh')) + list(Path('tools/xbox').glob('*.py')); assert all(b'\r' not in p.read_bytes() for p in files), 'Linux executables must use LF endings'"
       - uses: actions/cache@v4
         id: native-sdk
         with:
