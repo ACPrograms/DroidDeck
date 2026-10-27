@@ -17,6 +17,7 @@ apt-get install -y --no-install-recommends \
   xserver-xorg-input-libinput x11-utils openbox dbus-x11 curl ca-certificates \
   file unzip xz-utils fonts-dejavu-core fonts-liberation python3 procps util-linux libgtk-3-0 libnss3 libxss1 libasound2 \
   pulseaudio libpulse0 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri \
+  libgtk2.0-0 libpipewire-0.3-0 libxcb-res0 libopenal1 libnm0 libibus-1.0-5 \
   libc6:i386 libstdc++6:i386 libx11-6:i386 libxrandr2:i386 libglib2.0-0:i386 \
   libgl1-mesa-dri:i386 libgl1:i386 libvulkan1:i386 mesa-vulkan-drivers:i386
 usermod -aG input,video,audio droiddeck
