@@ -83,7 +83,8 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
                 RawFormat = BackendProvisionerConstants.RawFormat,
                 CreatedAtUtc = "2026-10-27T10:00:00.0000000Z",
                 LastVerifiedAtUtc = "2026-10-27T10:05:00.0000000Z",
-                GuestBootAttempted = false,
+                GuestBootAttempted = true,
+                LastBootAttemptUtc = "2026-10-27T10:06:00.0000000Z",
                 NonZeroBytesWritten = 1048576,
                 ZeroBytesSkipped = 2097152,
                 IsSparseConfirmed = true,
@@ -101,6 +102,9 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
             Assert(deserialized.TargetLogicalBytes == receipt.TargetLogicalBytes, "Logical size must roundtrip.");
             Assert(deserialized.GuestBootAttempted == receipt.GuestBootAttempted, "Boot attempted flag must roundtrip.");
             Assert(deserialized.IsSparseConfirmed == receipt.IsSparseConfirmed, "Sparse flag must roundtrip.");
+            Assert(deserialized.LastBootAttemptUtc == receipt.LastBootAttemptUtc, "Boot timestamp must roundtrip.");
+            Assert(deserialized.NonZeroBytesWritten == receipt.NonZeroBytesWritten && deserialized.ZeroBytesSkipped == receipt.ZeroBytesSkipped, "Sparse byte counts must roundtrip.");
+            Assert(deserialized.Matches(BackendProvisionerConstants.PinnedRawSha512, BackendProvisionerConstants.TargetLogicalSizeBytes), "Roundtripped receipt must validate.");
         }
 
         private static void TestReceiptMatching()

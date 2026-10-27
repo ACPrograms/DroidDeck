@@ -9,7 +9,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text;
 
 namespace DroidDeckXboxHost.Runtime.Provisioning
 {
@@ -21,12 +21,6 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
     /// </summary>
     public sealed class ProvisioningReceipt
     {
-        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNameCaseInsensitive = true
-        };
-
         /// <summary>
         /// Verified SHA-512 cryptographic hash of the uncompressed public source image.
         /// </summary>
@@ -122,7 +116,28 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         /// </summary>
         public string ToJson()
         {
-            return JsonSerializer.Serialize(this, JsonOptions);
+            // Explicit JSON avoids reflection metadata loss under the Xbox .NET Native toolchain.
+            using (var buffer = new MemoryStream())
+            {
+                using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString(nameof(SourceSha512), SourceSha512);
+                    writer.WriteNumber(nameof(ExpectedSourceSizeBytes), ExpectedSourceSizeBytes);
+                    writer.WriteNumber(nameof(TargetLogicalBytes), TargetLogicalBytes);
+                    writer.WriteString(nameof(RawFormat), RawFormat);
+                    writer.WriteString(nameof(CreatedAtUtc), CreatedAtUtc);
+                    writer.WriteString(nameof(LastVerifiedAtUtc), LastVerifiedAtUtc);
+                    writer.WriteBoolean(nameof(GuestBootAttempted), GuestBootAttempted);
+                    writer.WriteString(nameof(LastBootAttemptUtc), LastBootAttemptUtc);
+                    writer.WriteNumber(nameof(NonZeroBytesWritten), NonZeroBytesWritten);
+                    writer.WriteNumber(nameof(ZeroBytesSkipped), ZeroBytesSkipped);
+                    writer.WriteBoolean(nameof(IsSparseConfirmed), IsSparseConfirmed);
+                    writer.WriteNumber(nameof(ChunkSizeBytes), ChunkSizeBytes);
+                    writer.WriteEndObject();
+                }
+                return Encoding.UTF8.GetString(buffer.ToArray());
+            }
         }
 
         /// <summary>
@@ -131,7 +146,40 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         public static ProvisioningReceipt FromJson(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return null;
-            return JsonSerializer.Deserialize<ProvisioningReceipt>(json, JsonOptions);
+            using (var document = JsonDocument.Parse(json))
+            {
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                    throw new JsonException("Receipt must be a JSON object.");
+                var receipt = new ProvisioningReceipt();
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, nameof(SourceSha512), StringComparison.OrdinalIgnoreCase))
+                        receipt.SourceSha512 = property.Value.GetString();
+                    if (string.Equals(property.Name, nameof(ExpectedSourceSizeBytes), StringComparison.OrdinalIgnoreCase))
+                        receipt.ExpectedSourceSizeBytes = property.Value.GetInt64();
+                    if (string.Equals(property.Name, nameof(TargetLogicalBytes), StringComparison.OrdinalIgnoreCase))
+                        receipt.TargetLogicalBytes = property.Value.GetInt64();
+                    if (string.Equals(property.Name, nameof(RawFormat), StringComparison.OrdinalIgnoreCase))
+                        receipt.RawFormat = property.Value.GetString();
+                    if (string.Equals(property.Name, nameof(CreatedAtUtc), StringComparison.OrdinalIgnoreCase))
+                        receipt.CreatedAtUtc = property.Value.GetString();
+                    if (string.Equals(property.Name, nameof(LastVerifiedAtUtc), StringComparison.OrdinalIgnoreCase))
+                        receipt.LastVerifiedAtUtc = property.Value.GetString();
+                    if (string.Equals(property.Name, nameof(GuestBootAttempted), StringComparison.OrdinalIgnoreCase))
+                        receipt.GuestBootAttempted = property.Value.GetBoolean();
+                    if (string.Equals(property.Name, nameof(LastBootAttemptUtc), StringComparison.OrdinalIgnoreCase))
+                        receipt.LastBootAttemptUtc = property.Value.GetString();
+                    if (string.Equals(property.Name, nameof(NonZeroBytesWritten), StringComparison.OrdinalIgnoreCase))
+                        receipt.NonZeroBytesWritten = property.Value.GetInt64();
+                    if (string.Equals(property.Name, nameof(ZeroBytesSkipped), StringComparison.OrdinalIgnoreCase))
+                        receipt.ZeroBytesSkipped = property.Value.GetInt64();
+                    if (string.Equals(property.Name, nameof(IsSparseConfirmed), StringComparison.OrdinalIgnoreCase))
+                        receipt.IsSparseConfirmed = property.Value.GetBoolean();
+                    if (string.Equals(property.Name, nameof(ChunkSizeBytes), StringComparison.OrdinalIgnoreCase))
+                        receipt.ChunkSizeBytes = property.Value.GetInt32();
+                }
+                return receipt;
+            }
         }
 
         /// <summary>
