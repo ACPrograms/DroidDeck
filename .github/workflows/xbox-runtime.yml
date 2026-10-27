@@ -9,6 +9,8 @@ on:
       - tools/linuxfs/overlay/usr/local/bin/droiddeck-session
       - tools/tests/test_steam_native_x64.py
       - tools/tests/test_steam_desktop_launch.py
+      - tools/xbox/native-client-status.py
+      - tools/xbox/test_native_client_status.py
       - .github/workflows/xbox-runtime.yml
 permissions:
   contents: read
@@ -23,6 +25,7 @@ jobs:
       - name: Check native host path and original session regressions
         run: |
           bash -n tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-x64 tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-launch tools/linuxfs/overlay/usr/local/bin/droiddeck-session
+          python3 -B tools/xbox/test_native_client_status.py -v
           python3 -m unittest discover -s tools/tests -p test_steam_native_x64.py -v
           python3 -m unittest discover -s tools/tests -p test_steam_desktop_launch.py -v
           python3 -m unittest discover -s tools/tests -p test_steam_client_setup_failure.py -v

@@ -52,6 +52,7 @@ fi
 mount -o remount,size=3G /dev/shm
 install -d /usr/local/bin /usr/local/libexec/droiddeck-xbox
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/guest-gamepad.py" /usr/local/libexec/droiddeck-xbox/gamepad
+install -m 755 "$(dirname "${BASH_SOURCE[0]}")/native-client-status.py" /usr/local/libexec/droiddeck-xbox/client-status
 find "$original/usr/local/bin" -maxdepth 1 -type f \
   -exec install -m 755 '{}' /usr/local/bin/ \;
 
@@ -79,7 +80,7 @@ openbox >/dev/null 2>&1 &
 wm=$!
 trap 'kill "$wm" 2>/dev/null || true' EXIT
 # BL_INSIDE selects the existing inner session, replacing Android's compositor boundary.
-/usr/local/bin/droiddeck-session steam
+/usr/local/libexec/droiddeck-xbox/client-status
 SESSION
 chmod 755 /usr/local/libexec/droiddeck-xbox/x11-session
 cat > /etc/systemd/system/droiddeck-steam.service <<'UNIT'
