@@ -3,7 +3,7 @@
 //
 // Streams and decompresses public official Debian raw cloud images via caller-supplied factory,
 // delegates sparse hole allocation directly to Storage SparseRawProvisioner via exact Stream signature,
-// enforces pinned SHA-512 and 8 GiB capacity, and manages metadata receipts with strict protection
+// enforces pinned SHA-512 and 16 GiB capacity, and manages metadata receipts with strict protection
 // for booted guest disks.
 // ------------------------------------------------------------------------------------------------
 
@@ -134,6 +134,7 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 State = ProvisioningState.CheckingExisting;
+                FactoryDiskCapacity.UpgradeLegacyDisk(TargetDiskPath, ReceiptPath);
 
                 // 1. Check existing disk under strict safety contracts
                 if (File.Exists(TargetDiskPath))

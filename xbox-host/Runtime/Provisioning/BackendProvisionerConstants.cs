@@ -25,10 +25,10 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         public const long ExpectedSourceSizeBytes = 3221225472L;
 
         /// <summary>
-        /// Target logical capacity for the sparse raw root disk: 8,589,934,592 bytes (8 GiB / 8L * 1024 * 1024 * 1024).
-        /// Confirmed feasible on Xbox Series S Dev Mode hardware (192 KiB physical allocation across 0, 3, 5 GiB offsets).
+        /// Target logical capacity for the sparse raw root disk: 17,179,869,184 bytes (16 GiB).
+        /// Earlier 8 GiB factory disks are expanded in place by metadata-only capacity migration.
         /// </summary>
-        public const long TargetLogicalSizeBytes = 8L * 1024 * 1024 * 1024; // 8,589,934,592 bytes
+        public const long TargetLogicalSizeBytes = 16L * 1024 * 1024 * 1024; // 17,179,869,184 bytes
 
         /// <summary>
         /// Sparse evaluation block size: 64 KiB (65,536 bytes).

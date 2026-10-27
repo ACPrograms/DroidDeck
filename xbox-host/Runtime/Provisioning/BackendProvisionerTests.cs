@@ -44,6 +44,7 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
             {
                 Directory.CreateDirectory(testDir);
 
+                FactoryDiskCapacityTests.Run(testDir);
                 TestReceiptSerialization();
                 TestReceiptMatching();
                 TestAtomicReceiptFileOperations(testDir);
@@ -163,9 +164,11 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
             string diskPath = Path.Combine(runtimeDir, BackendProvisionerConstants.DiskFileName);
             string receiptPath = Path.Combine(runtimeDir, BackendProvisionerConstants.ReceiptFileName);
 
-            // Create synthetic 8 GiB disk file (sparse or zero-length simulation with SetLength)
+            // Create a sparse public test fixture without allocating the logical capacity.
             using (FileStream fs = new FileStream(diskPath, FileMode.CreateNew, FileAccess.Write))
             {
+                int sparseError;
+                Assert(SparseRawProvisioner.SetSparse(fs.SafeFileHandle, out sparseError), "Fixture must be sparse: " + sparseError);
                 fs.SetLength(BackendProvisionerConstants.TargetLogicalSizeBytes);
             }
 
@@ -209,6 +212,8 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
             // Create existing disk WITHOUT receipt
             using (FileStream fs = new FileStream(diskPath, FileMode.CreateNew, FileAccess.Write))
             {
+                int sparseError;
+                Assert(SparseRawProvisioner.SetSparse(fs.SafeFileHandle, out sparseError), "Fixture must be sparse: " + sparseError);
                 fs.SetLength(BackendProvisionerConstants.TargetLogicalSizeBytes);
             }
 
@@ -230,6 +235,8 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
 
             using (FileStream fs = new FileStream(diskPath, FileMode.CreateNew, FileAccess.Write))
             {
+                int sparseError;
+                Assert(SparseRawProvisioner.SetSparse(fs.SafeFileHandle, out sparseError), "Fixture must be sparse: " + sparseError);
                 fs.SetLength(BackendProvisionerConstants.TargetLogicalSizeBytes);
             }
 
