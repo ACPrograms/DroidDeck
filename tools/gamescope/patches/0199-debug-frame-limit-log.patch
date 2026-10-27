@@ -1,0 +1,49 @@
+diff --git a/src/steamcompmgr.cpp b/src/steamcompmgr.cpp
+index 6c9299d..bb42fbc 100644
+--- a/src/steamcompmgr.cpp
++++ b/src/steamcompmgr.cpp
+@@ -1278,6 +1278,8 @@ void steamcompmgr_set_app_refresh_cycle_override( gamescope::GamescopeScreenType
+ 	g_nCombinedAppRefreshCycleChangeRefresh[ type ] = change_refresh;
+ 	g_nCombinedAppRefreshCycleChangeFPS[ type ] = change_fps_cap;
+ 	update_app_target_refresh_cycle();
++	xwm_log.infof( "ddlimit: override type %d fps %d change_refresh %d change_fps %d -> target fps %d (refresh %d mHz, nested %d mHz)",
++		(int) type, override_fps, change_refresh, change_fps_cap, g_nSteamCompMgrTargetFPS, g_nOutputRefresh, g_nNestedRefresh );
+ }
+ 
+ gamescope::ConCommand cc_debug_set_fps_limit( "debug_set_fps_limit", "Set refresh cycle (debug)",
+@@ -7309,6 +7311,7 @@ handle_property_notify(xwayland_ctx_t *ctx, XPropertyEvent *ev)
+ 	if ( ev->atom == ctx->atoms.gamescopeFPSLimit )
+ 	{
+ 		g_nSteamCompMgrTargetFPS = get_prop( ctx, ctx->root, ctx->atoms.gamescopeFPSLimit, 0 );
++		xwm_log.infof( "ddlimit: GAMESCOPE_FPS_LIMIT atom -> target fps %d", g_nSteamCompMgrTargetFPS );
+ 		update_runtime_info();
+ 	}
+ 	for (int i = 0; i < gamescope::GAMESCOPE_SCREEN_TYPE_COUNT; i++)
+diff --git a/src/wlserver.cpp b/src/wlserver.cpp
+index 9a027a2..76d65e6 100644
+--- a/src/wlserver.cpp
++++ b/src/wlserver.cpp
+@@ -1164,6 +1164,7 @@ void wlserver_flush_frame_limiter_state( void )
+ 
+ 	wlserver_lock();
+ 	uint32_t uState = s_uFrameLimiterState;
++	wl_log.infof( "ddlimit: limiter state %u", uState );
+ 	for ( CGamescopeLimiter *pLimiter : CGamescopeLimiter::GetLimiters() )
+ 	{
+ 		pLimiter->SendState( uState );
+@@ -1203,6 +1204,7 @@ static void create_gamescope_pipewire( void )
+ 
+ static void gamescope_control_set_app_target_refresh_cycle( struct wl_client *client, struct wl_resource *resource, uint32_t fps, uint32_t flags )
+ {
++	wl_log.infof( "ddlimit: steam set_app_target_refresh_cycle fps=%u flags=0x%x", fps, flags );
+ 	auto display_type = gamescope::GAMESCOPE_SCREEN_TYPE_EXTERNAL;
+ 	if ( flags & GAMESCOPE_CONTROL_TARGET_REFRESH_CYCLE_FLAG_INTERNAL_DISPLAY )
+ 		display_type = gamescope::GAMESCOPE_SCREEN_TYPE_INTERNAL;
+@@ -1452,6 +1454,7 @@ void wlserver_send_gamescope_control( wl_resource *control )
+ 		uint32_t *ptr = (uint32_t *)wl_array_add( &display_rates, sizeof(uint32_t) );
+ 		*ptr = (uint32_t)gamescope::ConvertmHzToHz( g_nOutputRefresh );
+ 	}
++	wl_log.infof( "ddlimit: display info to steam, flags 0x%x, %zu rate(s), first %u", flags, display_rates.size / sizeof( uint32_t ), display_rates.size ? *(uint32_t *)display_rates.data : 0u );
+ 	gamescope_control_send_active_display_info( control, pConn->GetName(), pConn->GetMake(), pConn->GetModel(), flags, &display_rates );
+ 	wl_array_release(&display_rates);
+ }
