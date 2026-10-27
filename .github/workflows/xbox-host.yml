@@ -18,6 +18,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
+          cache-dependency-path: xbox-ui/*.kts
       - name: Compile original Compose sources
         shell: pwsh
         run: ./gradlew.bat -p xbox-ui wasmJsBrowserDistribution --no-daemon
