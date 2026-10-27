@@ -30,6 +30,7 @@ namespace DroidDeckXboxHost
         private WriteableBitmap _guestBitmap;
         private int _guestTicks;
         private bool _guestPanelBound;
+        private bool _guestCapturePending;
 
         public DiagnosticState Diagnostics => _diagnostics;
         internal System.Threading.Tasks.Task PauseRuntimeAsync() => _runtime.PauseAsync();
@@ -105,7 +106,12 @@ namespace DroidDeckXboxHost
                 }
                 byte[] pixels = display.GetSharedFramebuffer();
                 int width, height;
-                if (!display.TryGetFallbackFrame(pixels, out width, out height)) return;
+                if (!display.TryGetFallbackFrame(pixels, out width, out height))
+                {
+                    if (_guestBitmap != null)
+                        await CaptureGuestPreviewIfRequestedAsync(pixels, _guestBitmap.PixelWidth, _guestBitmap.PixelHeight);
+                    return;
+                }
                 if (width <= 0 || height <= 0 || width > 2560 || height > 1600) return;
                 if (_guestBitmap == null || _guestBitmap.PixelWidth != width || _guestBitmap.PixelHeight != height)
                 {
@@ -118,12 +124,39 @@ namespace DroidDeckXboxHost
                 GuestSurface.Visibility = Visibility.Visible;
                 HostWebView.IsEnabled = false;
                 backend.InputBridge.FlushAbsolute();
+                await CaptureGuestPreviewIfRequestedAsync(pixels, width, height);
             }
             catch (Exception ex)
             {
                 _guestTimer.Stop();
                 _diagnostics.AddMessage("Guest display HRESULT=0x" + ex.HResult.ToString("X8"));
             }
+        }
+
+        // Screenshot of the visible software display only; never exports guest disks or process memory.
+        private async System.Threading.Tasks.Task CaptureGuestPreviewIfRequestedAsync(byte[] pixels, int width, int height)
+        {
+            string marker = Path.Combine(ApplicationData.Current.LocalFolder.Path, "runtime-preview.request");
+            if (_guestCapturePending || !File.Exists(marker)) return;
+            _guestCapturePending = true;
+            try
+            {
+                File.Delete(marker);
+                byte[] copy = new byte[checked(width * height * 4)];
+                Buffer.BlockCopy(pixels, 0, copy, 0, copy.Length);
+                var file = await ApplicationData.Current.LocalFolder.CreateFileAsync(
+                    "droiddeck-runtime-preview.png", CreationCollisionOption.ReplaceExisting);
+                using (var output = await file.OpenAsync(FileAccessMode.ReadWrite))
+                {
+                    var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(
+                        Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId, output);
+                    encoder.SetPixelData(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
+                        Windows.Graphics.Imaging.BitmapAlphaMode.Ignore, (uint)width, (uint)height, 96, 96, copy);
+                    await encoder.FlushAsync();
+                }
+            }
+            catch (Exception ex) { _diagnostics.AddMessage("Guest screenshot HRESULT=0x" + ex.HResult.ToString("X8")); }
+            finally { _guestCapturePending = false; }
         }
 
         private void OnGuestPointer(object sender, PointerRoutedEventArgs args)
