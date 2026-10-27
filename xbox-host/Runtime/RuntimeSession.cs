@@ -87,7 +87,7 @@ namespace DroidDeckXboxHost.Runtime
                     BiosDirectory = Path.Combine(Package.Current.InstalledLocation.Path, "pc-bios"),
                     GpuMode = File.Exists(Path.Combine(_local, "runtime-gpu-angle.request"))
                         ? QemuGpuMode.GpuDirectAngle : QemuGpuMode.SoftwareFramebuffer,
-                    RamMegabytes = 2048, CpuCount = 4, TbCacheMegabytes = 128,
+                    RamMegabytes = 3072, CpuCount = 4, TbCacheMegabytes = 128,
                     DisplayWidth = 1024, DisplayHeight = 768,
                     OutLogPath = Path.Combine(_local, "droiddeck-qemu-boot.log")
                 };

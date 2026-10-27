@@ -22,6 +22,34 @@ apt-get install -y --no-install-recommends \
   libgl1-mesa-dri:i386 libgl1:i386 libvulkan1:i386 mesa-vulkan-drivers:i386
 usermod -aG input,video,audio droiddeck
 if getent group render >/dev/null; then usermod -aG render droiddeck; fi
+
+# Steam's Chromium renderer can exhaust the default RAM/2 shared-memory limit.
+swap=/var/swap/droiddeck.swap
+if [ ! -e "$swap" ] && [ ! -L "$swap" ]; then
+  install -d -m 700 -o root -g root /var/swap
+  (umask 077 && fallocate -l 1073741824 "$swap")
+  mkswap "$swap"
+fi
+# Never format or overwrite an existing file, including an interrupted creation.
+if [ ! -f "$swap" ] || [ -L "$swap" ] || [ "$(stat -c '%u:%a:%s' "$swap")" != '0:600:1073741824' ]; then
+  echo 'Refusing unexpected native guest swapfile' >&2
+  exit 1
+fi
+if ! swapon --show=NAME --noheadings | grep -Fxq "$swap"; then
+  [ "$(blkid -s TYPE -o value "$swap")" = swap ]
+  swapon "$swap"
+fi
+grep -Eq '^[[:space:]]*/var/swap/droiddeck\.swap[[:space:]]' /etc/fstab ||
+  printf '%s\n' '/var/swap/droiddeck.swap none swap sw 0 0' >> /etc/fstab
+if grep -Eq '^[^#]*[[:space:]]/dev/shm[[:space:]]' /etc/fstab; then
+  if ! grep -Eq '^tmpfs[[:space:]]+/dev/shm[[:space:]]+tmpfs[[:space:]]+defaults,nosuid,nodev,size=3G[[:space:]]+0[[:space:]]+0[[:space:]]*$' /etc/fstab; then
+    echo 'Refusing conflicting shared-memory mount configuration' >&2
+    exit 1
+  fi
+else
+  printf '%s\n' 'tmpfs /dev/shm tmpfs defaults,nosuid,nodev,size=3G 0 0' >> /etc/fstab
+fi
+mount -o remount,size=3G /dev/shm
 install -d /usr/local/bin /usr/local/libexec/droiddeck-xbox
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/guest-gamepad.py" /usr/local/libexec/droiddeck-xbox/gamepad
 find "$original/usr/local/bin" -maxdepth 1 -type f \

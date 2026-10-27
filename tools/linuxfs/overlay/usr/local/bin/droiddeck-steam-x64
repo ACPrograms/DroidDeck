@@ -824,6 +824,11 @@ x64_gpu_watch() {
 
 x64_exec() {
   if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
+    # Retain the existing software-rendering workaround without importing FEX/PRoot state.
+    if [ "${BL_X64_CLIENT_SOFTWARE:-1}" = 1 ]; then
+      export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe LIBGL_DRI3_DISABLE=1
+    fi
+    export STEAM_RUNTIME=1 STEAM_STEAMRT_RECURSION_GUARD=1
     cd "$STEAM_X64"
     exec "$STEAM_X64/steam.sh" "$@"
   fi

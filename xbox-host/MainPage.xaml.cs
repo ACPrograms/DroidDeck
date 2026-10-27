@@ -150,6 +150,7 @@ namespace DroidDeckXboxHost
                         {
                             bool suspended = await HostWebView.CoreWebView2.TrySuspendAsync();
                             _diagnostics.AddMessage("Launcher suspended for runtime: " + suspended);
+                            await _diagnostics.SaveToDiskAsync();
                         }
                         catch (Exception ex) { _diagnostics.AddMessage("Launcher suspend HRESULT=0x" + ex.HResult.ToString("X8")); }
                     }
