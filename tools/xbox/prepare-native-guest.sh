@@ -80,6 +80,12 @@ UNIT
 systemctl daemon-reload
 modprobe uinput
 printf '%s\n' uinput > /etc/modules-load.d/droiddeck-gamepad.conf
+cat > /etc/udev/rules.d/60-droiddeck-uinput.rules <<'RULES'
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
+RULES
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=misc --sysname-match=uinput
+udevadm settle
 cat > /etc/systemd/system/droiddeck-gamepad.service <<'UNIT'
 [Unit]
 Description=DroidDeck Xbox standard controller adapter
