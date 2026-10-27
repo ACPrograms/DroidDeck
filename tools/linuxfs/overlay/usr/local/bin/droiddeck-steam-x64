@@ -5,7 +5,10 @@ ROOTFS_SHA256=2854b06d3ff1b8f6e526135bfb6dd5b7b30ab3ab73e79ae933a3d9fed959a178
 CDN=https://client-update.fastly.steamstatic.com
 # Must match the -clientbeta droiddeck-session starts this client with (steam_channel).
 X64_CHANNEL=steamdeck_publicbeta
-MANIFEST=steam_client_${X64_CHANNEL}_steamrt64
+if [ "${BL_X64_NATIVE:-0}" = 1 ] && [ "${BL_NATIVE_STEAM_STABLE:-1}" = 1 ]; then
+  X64_CHANNEL=
+fi
+MANIFEST=steam_client_${X64_CHANNEL:+${X64_CHANNEL}_}steamrt64
 
 REAL_HOME=${HOME:-/root}
 if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
@@ -48,12 +51,13 @@ x64_client_parts() {
 }
 
 x64_sync_client() {
-  local chan cur version work total i block file sum old
+  local chan cur version work total i block file sum old manifest_name
   chan=$(cat "$STEAM_X64/package/beta" 2>/dev/null || echo "$X64_CHANNEL")
-  old=$STEAM_X64/package/steam_client_${chan}_steamrt64.manifest
+  manifest_name=steam_client_${chan:+${chan}_}steamrt64
+  old=$STEAM_X64/package/$manifest_name.manifest
   cur=$(awk -F'"' '$2 == "version" { print $4; exit }' "$old" 2>/dev/null || true)
   work=$(mktemp -d)
-  if ! curl -fsSL "$CDN/steam_client_${chan}_steamrt64" -o "$work/manifest"; then
+  if ! curl -fsSL "$CDN/$manifest_name" -o "$work/manifest"; then
     rm -rf "$work"; return 0
   fi
   version=$(awk -F'"' '$2 == "version" { print $4; exit }' "$work/manifest")
@@ -345,7 +349,9 @@ x64_prepare() {
 if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
   mkdir -p "$STEAM_X64/package"
   : > "$STEAM_X64/.steam-enable-steamrt64-client"
-  if [ -s "$STEAM_X64/package/droiddeck-installed" ] &&
+  [ -n "$X64_CHANNEL" ] || rm -f "$STEAM_X64/package/beta"
+  if [ -s "$STEAM_X64/package/$MANIFEST.manifest" ] &&
+     [ -s "$STEAM_X64/package/droiddeck-installed" ] &&
      [ -x "$STEAM_X64/steam.sh" ] && [ -x "$STEAM_X64/steamrt64/steam" ]; then
     return 0
   fi
@@ -438,7 +444,13 @@ if [ ! -x "$STEAM_X64/steamrt64/steam" ] || [ ! -f "$STEAM_X64/package/droiddeck
   done < "$work/parts"
   cp -f "$work/manifest" "$STEAM_X64/package/$MANIFEST.manifest"
   rm -rf "$work"
-  echo "$X64_CHANNEL" > "$STEAM_X64/package/beta"
+  channel_args=()
+  if [ -n "$X64_CHANNEL" ]; then
+    echo "$X64_CHANNEL" > "$STEAM_X64/package/beta"
+    channel_args=(-clientbeta "$X64_CHANNEL")
+  else
+    rm -f "$STEAM_X64/package/beta"
+  fi
   echo "$version" > "$STEAM_X64/package/droiddeck-installed"
   chmod +x "$STEAM_X64/steam.sh" "$STEAM_X64/steamrt64/steam" "$STEAM_X64/ubuntu12_32/steam" 2>/dev/null || true
 fi
@@ -1088,7 +1100,7 @@ for attempt in 1 2 3 4 5; do
   step "starting the x86-64 SteamRT3 client under FEX (attempt $attempt): $*"
   rc=0
   if [ "${BL_X64_X86_WEBHELPER:-0}" != 1 ] || x64_webhelper_gpu; then cef=(-cef-force-gpu -cef-ozone-platform=x11 -cef-use-gl=angle -cef-use-angle=vulkan); else cef=(-cef-disable-gpu); fi
-  ( x64_exec -clientbeta "$X64_CHANNEL" -no-cef-sandbox "${cef[@]}" "$@" ) >>"$LOG" 2>&1 || rc=$?
+  ( x64_exec "${channel_args[@]}" -no-cef-sandbox "${cef[@]}" "$@" ) >>"$LOG" 2>&1 || rc=$?
   step "client exited rc=$rc"
   [ "$rc" = 42 ] || break
 done

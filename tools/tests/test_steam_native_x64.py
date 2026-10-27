@@ -43,6 +43,7 @@ class NativeX64Test(unittest.TestCase):
         (self.steam / 'steamrt64').mkdir(parents=True)
         (self.steam / 'package').mkdir()
         (self.steam / 'package/droiddeck-installed').write_text('1\n')
+        (self.steam / 'package/steam_client_steamrt64.manifest').write_text('\"version\" \"1\"\n')
         for path in (self.steam / 'steam.sh', self.steam / 'steamrt64/steam'):
             path.write_text('#!/bin/bash\nprintf "%s\\n" "$@"\n')
             path.chmod(0o755)
@@ -90,9 +91,11 @@ class NativeX64Test(unittest.TestCase):
         manifest = self.root / 'manifest'
         manifest.write_text('"version"\t"1"\n\t"bootstrap_all"\n\t{\n'
                             '\t\t"file"\t"client.zip"\n\t\t"sha2"\t"' + digest + '"\n\t}\n')
-        self.env.update(TEST_MANIFEST=str(manifest), TEST_ARCHIVE=str(archive))
+        self.env.update(TEST_MANIFEST=str(manifest), TEST_ARCHIVE=str(archive),
+                        TEST_REQUESTS=str(self.root / "public-requests"))
         self.stub('curl', 'url= out=\nwhile [ "$#" -gt 0 ]; do\n'
                          ' case "$1" in -o) out=$2; shift 2 ;; -*) shift ;; *) url=$1; shift ;; esac\ndone\n'
+                         'printf \"%s\\n\" \"$url\" >> \"$TEST_REQUESTS\"\n'
                          'case "$url" in */client.zip) cp "$TEST_ARCHIVE" "$out" ;; '
                          '*/steam_client_*) cp "$TEST_MANIFEST" "$out" ;; *) exit 22 ;; esac\n')
 
@@ -102,6 +105,26 @@ class NativeX64Test(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.steam / 'package/droiddeck-installed').read_text().strip(), '1')
         self.assertTrue(os.access(self.steam / 'steamrt64/steam', os.X_OK))
+        self.assertIn('/steam_client_steamrt64\n', (self.root / 'public-requests').read_text())
+
+    def test_native_beta_opt_in_keeps_original_channel(self):
+        self.client_archive()
+        self.env['BL_NATIVE_STEAM_STABLE'] = '0'
+        result = self.run_client('--prepare')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('/steam_client_steamdeck_publicbeta_steamrt64',
+                      (self.root / 'public-requests').read_text())
+
+    def test_native_session_stable_channel_does_not_change_legacy_launch(self):
+        source = (SCRIPT.parent / 'droiddeck-session').read_text()
+        block = source[source.index('    steam_channel=steamdeck_publicbeta'):source.index('    _bl_lang=()')]
+        for native, stable, expected in [('1', '1', ['0']), ('1', '0', ['2', '-clientbeta', 'steamdeck_publicbeta']),
+                                          ('0', '1', ['2', '-clientbeta', 'steamdeck_publicbeta'])]:
+            env = dict(self.env, BL_X64_NATIVE=native, BL_NATIVE_STEAM_STABLE=stable)
+            command = 'steam_x64=1\n' + block + '\nprintf "%s\\n" "${#_bl_channel[@]}"; if [ "${#_bl_channel[@]}" -gt 0 ]; then printf "%s\\n" "${_bl_channel[@]}"; fi'
+            result = subprocess.run(['bash', '-c', command], env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), expected)
 
     def test_bad_download_checksum_cannot_become_an_install(self):
         self.client_archive(corrupt=True)

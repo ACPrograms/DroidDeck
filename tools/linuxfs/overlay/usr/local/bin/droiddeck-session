@@ -993,7 +993,11 @@ BUSCONF
     steam_channel=steamdeck_publicbeta
     if [ "$steam_x64" = 0 ]; then
       steam_channel=$(droiddeck-steam-install --channel 2>/dev/null || echo steamdeck_publicbeta)
+    elif [ "${BL_X64_NATIVE:-0}" = 1 ] && [ "${BL_NATIVE_STEAM_STABLE:-1}" = 1 ]; then
+      steam_channel=
     fi
+    _bl_channel=()
+    [ -z "$steam_channel" ] || _bl_channel=(-clientbeta "$steam_channel")
     _bl_lang=()
     [ -n "${BL_STEAM_LANGUAGE:-}" ] && _bl_lang=(-language "$BL_STEAM_LANGUAGE")
     steam_beta=$steam_root/package/beta
@@ -1298,7 +1302,9 @@ BUSCONF
     rm -f "$HOME/.bl-restart-game" "$HOME/.bl-restarted-for"
     while :; do
       rm -f "$HOME/.bl-restart-once" "$HOME/.bl-restart-lost"
-      if [ -f "$steam_beta" ] && [ "$(cat "$steam_beta" 2>/dev/null)" != "$steam_channel" ]; then
+      if [ -z "$steam_channel" ]; then
+        rm -f "$steam_beta"
+      elif [ -f "$steam_beta" ] && [ "$(cat "$steam_beta" 2>/dev/null)" != "$steam_channel" ]; then
         echo "== steam: client branch on disk was '$(cat "$steam_beta" 2>/dev/null)', set to '$steam_channel' to match -clientbeta"
         echo "$steam_channel" > "$steam_beta"
       fi
@@ -1320,7 +1326,7 @@ BUSCONF
         desktop_ui_pid=$!
       fi
       steam_started=$SECONDS
-      "${steam_client[@]}" "${_bl_ui[@]}" "${_bl_cdp[@]}" "${_bl_lang[@]}" -clientbeta "$steam_channel" \
+      "${steam_client[@]}" "${_bl_ui[@]}" "${_bl_cdp[@]}" "${_bl_lang[@]}" "${_bl_channel[@]}" \
         -no-cef-sandbox -cef-ozone-platform=x11 "${_bl_cef[@]}" "$@"
       rc=$?
       steam_ran=$((SECONDS - steam_started))

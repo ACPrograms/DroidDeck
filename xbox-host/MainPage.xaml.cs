@@ -155,6 +155,8 @@ namespace DroidDeckXboxHost
                         catch (Exception ex) { _diagnostics.AddMessage("Launcher suspend HRESULT=0x" + ex.HResult.ToString("X8")); }
                     }
                     var display = backend.DisplayBridge;
+                    // Input must advance even when the guest image is unchanged.
+                    backend.InputBridge.FlushAbsolute();
                     if (display.IsDirectModeRequested)
                     {
                         if (!_guestPanelBound)
@@ -194,7 +196,6 @@ namespace DroidDeckXboxHost
                     GuestImage.Visibility = Visibility.Visible;
                     GuestSurface.Visibility = Visibility.Visible;
                     HostWebView.IsEnabled = false;
-                    backend.InputBridge.FlushAbsolute();
                     await CaptureGuestPreviewIfRequestedAsync(pixels, width, height);
                 }
                 catch (Exception ex)
