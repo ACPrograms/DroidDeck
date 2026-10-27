@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,6 +10,10 @@ namespace DroidDeck.XboxRuntime.Storage
     /// </summary>
     public interface ISparseProvisioner
     {
+        ProvisionResult ProvisionRawImage(Stream publicSource, string destinationImagePath,
+            ProvisionOptions options = null, IProgress<ProvisionProgress> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken));
+
         /// <summary>
         /// Provisions a sparse raw disk from an official public source image synchronously.
         /// </summary>

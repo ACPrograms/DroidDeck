@@ -132,11 +132,12 @@ namespace DroidDeck.XboxRuntime.Storage
             }
         }
 
-        private static int ReadFullBlock(Stream stream, byte[] buffer, int count)
+        private static int ReadFullBlock(Stream stream, byte[] buffer, int count, CancellationToken cancellationToken)
         {
             int totalRead = 0;
             while (totalRead < count)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 int read = stream.Read(buffer, totalRead, count - totalRead);
                 if (read == 0)
                 {
@@ -166,6 +167,24 @@ namespace DroidDeck.XboxRuntime.Storage
             IProgress<ProvisionProgress> progress = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
+            return ProvisionRawImageCore(sourceImagePath, null, destinationImagePath, options, progress, cancellationToken);
+        }
+
+        /// <summary>Consumes a pinned public stream without seeking or closing the caller's stream.</summary>
+        public ProvisionResult ProvisionRawImage(
+            Stream publicSource,
+            string destinationImagePath,
+            ProvisionOptions options = null,
+            IProgress<ProvisionProgress> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return ProvisionRawImageCore(null, publicSource, destinationImagePath, options, progress, cancellationToken);
+        }
+
+        private ProvisionResult ProvisionRawImageCore(
+            string sourceImagePath, Stream publicSource, string destinationImagePath,
+            ProvisionOptions options, IProgress<ProvisionProgress> progress, CancellationToken cancellationToken)
+        {
             Stopwatch stopwatch = Stopwatch.StartNew();
             string tempFilePath = null;
             FileStream destStream = null;
@@ -189,10 +208,13 @@ namespace DroidDeck.XboxRuntime.Storage
                     throw new ArgumentNullException(nameof(options), "ProvisionOptions must be provided.");
                 }
 
-                if (string.IsNullOrEmpty(sourceImagePath))
+                if (publicSource == null && string.IsNullOrEmpty(sourceImagePath))
                 {
                     throw new ArgumentException("Source image path cannot be null or empty.", nameof(sourceImagePath));
                 }
+
+                if (publicSource != null && !publicSource.CanRead)
+                    throw new ArgumentException("Public source stream must be readable.", nameof(publicSource));
 
                 if (string.IsNullOrEmpty(destinationImagePath))
                 {
@@ -240,17 +262,13 @@ namespace DroidDeck.XboxRuntime.Storage
                         ". Overwriting or deleting existing destination is strictly prohibited.");
                 }
 
-                if (!File.Exists(sourceImagePath))
+                if (publicSource == null)
                 {
-                    throw new FileNotFoundException("Source public raw image does not exist: " + sourceImagePath);
-                }
-
-                FileInfo sourceInfo = new FileInfo(sourceImagePath);
-                if (sourceInfo.Length != options.ExpectedSourceSizeBytes)
-                {
-                    throw new InvalidDataException(
-                        "Source file length (" + sourceInfo.Length + " bytes) does not match ExpectedSourceSizeBytes (" + 
-                        options.ExpectedSourceSizeBytes + " bytes).");
+                    if (!File.Exists(sourceImagePath))
+                        throw new FileNotFoundException("Source public raw image does not exist: " + sourceImagePath);
+                    FileInfo sourceInfo = new FileInfo(sourceImagePath);
+                    if (sourceInfo.Length != options.ExpectedSourceSizeBytes)
+                        throw new InvalidDataException("Source file length does not match ExpectedSourceSizeBytes.");
                 }
 
                 string destDir = Path.GetDirectoryName(destinationImagePath);
@@ -282,9 +300,11 @@ namespace DroidDeck.XboxRuntime.Storage
 
                 byte[] buffer = new byte[options.ChunkSizeBytes];
 
-                using (FileStream sourceStream = new FileStream(sourceImagePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.SequentialScan))
+                using (Stream ownedSource = publicSource == null
+                    ? new FileStream(sourceImagePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.SequentialScan) : null)
                 using (SHA512 sha512 = SHA512.Create())
                 {
+                    Stream sourceStream = publicSource ?? ownedSource;
                     while (true)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -301,7 +321,7 @@ namespace DroidDeck.XboxRuntime.Storage
                             toRead = (int)remainingExpected;
                         }
 
-                        int bytesRead = ReadFullBlock(sourceStream, buffer, toRead);
+                        int bytesRead = ReadFullBlock(sourceStream, buffer, toRead, cancellationToken);
                         if (bytesRead == 0)
                         {
                             break;
@@ -377,6 +397,7 @@ namespace DroidDeck.XboxRuntime.Storage
                 destStream.Dispose();
                 destStream = null;
 
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(tempFilePath, destinationImagePath);
                 tempFilePath = null;
                 stopwatch.Stop();

@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Remove="Program.cs" />
     <Compile Remove="SparseProvisionerTests.cs" />
+    <Compile Remove="StreamingProvisionerTests.cs" />
   </ItemGroup>
 </Project>

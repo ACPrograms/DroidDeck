@@ -10,6 +10,7 @@ namespace DroidDeck.XboxRuntime.Storage
             try
             {
                 int exitCode = SparseProvisionerTests.RunAllTests();
+                if (exitCode == 0) exitCode = StreamingProvisionerTests.RunAllTests();
                 Console.WriteLine("Execution completed successfully with exit code: " + exitCode);
                 return exitCode;
             }
