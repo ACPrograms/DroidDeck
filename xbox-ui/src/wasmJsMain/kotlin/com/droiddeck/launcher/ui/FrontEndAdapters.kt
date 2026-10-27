@@ -1,6 +1,9 @@
 package com.droiddeck.launcher.ui
 
 import android.view.KeyEvent
+import android.view.keyCode as platformKeyCode
+import android.view.action as platformAction
+import android.view.repeatCount as platformRepeatCount
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -58,13 +61,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
 val Any.keyCode: Int
-    get() = android.view.extractKeyCode(this as? kotlin.js.JsAny)
+    get() = this.platformKeyCode
 
 val Any.action: Int
-    get() = android.view.extractAction(this as? kotlin.js.JsAny)
+    get() = this.platformAction
 
 val Any.repeatCount: Int
-    get() = android.view.extractRepeatCount(this as? kotlin.js.JsAny)
+    get() = this.platformRepeatCount
 
 val Dispatchers.IO: CoroutineDispatcher
     get() = Dispatchers.Default
