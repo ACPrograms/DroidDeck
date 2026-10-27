@@ -25,6 +25,23 @@ namespace DroidDeckXboxHost.Runtime
         public RuntimeSession(Action<string, int, bool> report) { _report = report; }
         public QemuBackendAdapter Backend => _backend;
 
+        public Task PauseAsync() => Task.Run(() =>
+        {
+            _gamepad?.Dispose();
+            _gamepad = null;
+            if (_backend != null && _backend.IsRunning) _backend.Pause(1000);
+        });
+
+        public Task ResumeAsync() => Task.Run(() =>
+        {
+            if (_backend == null || _backend.State != QemuAdapterState.Paused) return;
+            if (_backend.Resume(1000))
+            {
+                _gamepad = new GamepadTransport();
+                _gamepad.Start();
+            }
+        });
+
         public async Task StartIfRequestedAsync()
         {
             string request = Path.Combine(_local, "runtime-source.request");
@@ -124,6 +141,8 @@ namespace DroidDeckXboxHost.Runtime
                 });
                 File.WriteAllText(Path.Combine(_local, "droiddeck-runtime-state.json"), json);
             }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
             finally { _saveLock.Release(); }
         }
     }

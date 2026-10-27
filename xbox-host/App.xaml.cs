@@ -13,6 +13,7 @@ namespace DroidDeckXboxHost
         {
             this.InitializeComponent();
             this.Suspending += OnSuspending;
+            this.Resuming += OnResuming;
 
             // Enable gamepad virtual mouse pointer on Xbox when requested
             this.RequiresPointerMode = ApplicationRequiresPointerMode.WhenRequested;
@@ -50,10 +51,21 @@ namespace DroidDeckXboxHost
             throw new Exception("Failed to load Page " + e.SourcePageType.FullName);
         }
 
-        private void OnSuspending(object sender, SuspendingEventArgs e)
+        private async void OnSuspending(object sender, SuspendingEventArgs e)
         {
             var deferral = e.SuspendingOperation.GetDeferral();
-            deferral.Complete();
+            try
+            {
+                var page = (Window.Current.Content as Frame)?.Content as MainPage;
+                if (page != null) await page.PauseRuntimeAsync();
+            }
+            finally { deferral.Complete(); }
+        }
+
+        private async void OnResuming(object sender, object e)
+        {
+            var page = (Window.Current.Content as Frame)?.Content as MainPage;
+            if (page != null) await page.ResumeRuntimeAsync();
         }
     }
 }

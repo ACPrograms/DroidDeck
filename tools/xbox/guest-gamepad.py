@@ -4,7 +4,6 @@
 QEMU forwards ONLY host loopback port 2224. This accepts no commands or paths and
 returns no guest data. Disconnects and stalled input release every control.
 """
-import fcntl
 import os
 import socket
 import struct
@@ -37,6 +36,7 @@ def receive_exact(connection):
 
 
 def run():
+    import fcntl
     fd = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
     try:
         fcntl.ioctl(fd, 0x40045564, 1)  # UI_SET_EVBIT EV_KEY

@@ -32,6 +32,8 @@ namespace DroidDeckXboxHost
         private bool _guestPanelBound;
 
         public DiagnosticState Diagnostics => _diagnostics;
+        internal System.Threading.Tasks.Task PauseRuntimeAsync() => _runtime.PauseAsync();
+        internal System.Threading.Tasks.Task ResumeRuntimeAsync() => _runtime.ResumeAsync();
 
         public MainPage()
         {
