@@ -31,6 +31,9 @@ namespace DroidDeckXboxHost
         private int _guestTicks;
         private bool _guestPanelBound;
         private bool _guestCapturePending;
+        private bool _guestTickPending;
+        private bool _frontendSuspendAttempted;
+        private DateTimeOffset _guestRetryAfter;
 
         public DiagnosticState Diagnostics => _diagnostics;
         internal System.Threading.Tasks.Task PauseRuntimeAsync() => _runtime.PauseAsync();
@@ -112,70 +115,100 @@ namespace DroidDeckXboxHost
 
         private async void OnGuestTick(object sender, object args)
         {
-            if (++_guestTicks % 150 == 0)
-            {
-                try { await _runtime.RefreshStatusAsync(); }
-                catch (Exception ex) { _diagnostics.AddMessage("Runtime status HRESULT=0x" + ex.HResult.ToString("X8")); }
-            }
-            var backend = _runtime.Backend;
-            if (backend == null || !backend.IsRunning)
-            {
-                GuestImage.Visibility = Visibility.Collapsed;
-                GuestPanel.Visibility = Visibility.Collapsed;
-                GuestSurface.Visibility = Visibility.Collapsed;
-                HostWebView.IsEnabled = true;
-                return;
-            }
+            if (_guestTickPending || DateTimeOffset.UtcNow < _guestRetryAfter) return;
+            _guestTickPending = true;
             try
             {
-                var display = backend.DisplayBridge;
-                if (display.IsDirectModeRequested)
+                if (++_guestTicks % 150 == 0)
                 {
-                    if (!_guestPanelBound)
-                    {
-                        float scale = (float)Windows.Graphics.Display.DisplayInformation.GetForCurrentView().RawPixelsPerViewPixel;
-                        GuestPanel.Visibility = Visibility.Visible;
-                        GuestSurface.Visibility = Visibility.Visible;
-                        display.BindSwapChainPanel(GuestPanel, ActualWidth, ActualHeight, scale, scale);
-                        _guestPanelBound = true;
-                    }
-                    display.TryAttachPanel();
-                    int directWidth, directHeight;
-                    display.CheckDirectFrameUpdate(out directWidth, out directHeight);
-                    if (display.DirectFrameCount > 0)
-                    {
-                        GuestImage.Visibility = Visibility.Collapsed;
-                        HostWebView.IsEnabled = false;
-                        return;
-                    }
+                    try { await _runtime.RefreshStatusAsync(); }
+                    catch (Exception ex) { _diagnostics.AddMessage("Runtime status HRESULT=0x" + ex.HResult.ToString("X8")); }
                 }
-                byte[] pixels = display.GetSharedFramebuffer();
-                int width, height;
-                if (!display.TryGetFallbackFrame(pixels, out width, out height))
+                var backend = _runtime.Backend;
+                if (backend == null || !backend.IsRunning)
                 {
-                    if (_guestBitmap != null)
-                        await CaptureGuestPreviewIfRequestedAsync(pixels, _guestBitmap.PixelWidth, _guestBitmap.PixelHeight);
+                    GuestImage.Visibility = Visibility.Collapsed;
+                    GuestPanel.Visibility = Visibility.Collapsed;
+                    GuestSurface.Visibility = Visibility.Collapsed;
+                    HostWebView.IsEnabled = true;
+                    if (_frontendSuspendAttempted)
+                    {
+                        HostWebView.CoreWebView2?.Resume();
+                        HostWebView.Visibility = Visibility.Visible;
+                        _frontendSuspendAttempted = false;
+                    }
                     return;
                 }
-                if (width <= 0 || height <= 0 || width > 2560 || height > 1600) return;
-                if (_guestBitmap == null || _guestBitmap.PixelWidth != width || _guestBitmap.PixelHeight != height)
+                try
                 {
-                    _guestBitmap = new WriteableBitmap(width, height);
-                    GuestImage.Source = _guestBitmap;
+                    if (!_frontendSuspendAttempted)
+                    {
+                        _frontendSuspendAttempted = true;
+                        HostWebView.Visibility = Visibility.Collapsed;
+                        await System.Threading.Tasks.Task.Delay(100);
+                        try
+                        {
+                            bool suspended = await HostWebView.CoreWebView2.TrySuspendAsync();
+                            _diagnostics.AddMessage("Launcher suspended for runtime: " + suspended);
+                        }
+                        catch (Exception ex) { _diagnostics.AddMessage("Launcher suspend HRESULT=0x" + ex.HResult.ToString("X8")); }
+                    }
+                    var display = backend.DisplayBridge;
+                    if (display.IsDirectModeRequested)
+                    {
+                        if (!_guestPanelBound)
+                        {
+                            float scale = (float)Windows.Graphics.Display.DisplayInformation.GetForCurrentView().RawPixelsPerViewPixel;
+                            GuestPanel.Visibility = Visibility.Visible;
+                            GuestSurface.Visibility = Visibility.Visible;
+                            display.BindSwapChainPanel(GuestPanel, ActualWidth, ActualHeight, scale, scale);
+                            _guestPanelBound = true;
+                        }
+                        display.TryAttachPanel();
+                        int directWidth, directHeight;
+                        display.CheckDirectFrameUpdate(out directWidth, out directHeight);
+                        if (display.DirectFrameCount > 0)
+                        {
+                            GuestImage.Visibility = Visibility.Collapsed;
+                            HostWebView.IsEnabled = false;
+                            return;
+                        }
+                    }
+                    byte[] pixels = display.GetSharedFramebuffer();
+                    int width, height;
+                    if (!display.TryGetFallbackFrame(pixels, out width, out height))
+                    {
+                        if (_guestBitmap != null)
+                            await CaptureGuestPreviewIfRequestedAsync(pixels, _guestBitmap.PixelWidth, _guestBitmap.PixelHeight);
+                        return;
+                    }
+                    if (width <= 0 || height <= 0 || width > 2560 || height > 1600) return;
+                    if (_guestBitmap == null || _guestBitmap.PixelWidth != width || _guestBitmap.PixelHeight != height)
+                    {
+                        _guestBitmap = new WriteableBitmap(width, height);
+                        GuestImage.Source = _guestBitmap;
+                    }
+                    using (Stream stream = _guestBitmap.PixelBuffer.AsStream()) stream.Write(pixels, 0, width * height * 4);
+                    _guestBitmap.Invalidate();
+                    GuestImage.Visibility = Visibility.Visible;
+                    GuestSurface.Visibility = Visibility.Visible;
+                    HostWebView.IsEnabled = false;
+                    backend.InputBridge.FlushAbsolute();
+                    await CaptureGuestPreviewIfRequestedAsync(pixels, width, height);
                 }
-                using (Stream stream = _guestBitmap.PixelBuffer.AsStream()) stream.Write(pixels, 0, width * height * 4);
-                _guestBitmap.Invalidate();
-                GuestImage.Visibility = Visibility.Visible;
-                GuestSurface.Visibility = Visibility.Visible;
-                HostWebView.IsEnabled = false;
-                backend.InputBridge.FlushAbsolute();
-                await CaptureGuestPreviewIfRequestedAsync(pixels, width, height);
+                catch (Exception ex)
+                {
+                    _diagnostics.AddMessage("Guest display HRESULT=0x" + ex.HResult.ToString("X8"));
+                    if (ex.HResult == unchecked((int)0x800705AA) || ex.HResult == unchecked((int)0x8007000E))
+                    {
+                        GuestImage.Source = null;
+                        _guestBitmap = null;
+                        _guestRetryAfter = DateTimeOffset.UtcNow.AddSeconds(2);
+                    }
+                    else _guestTimer.Stop();
+                }
             }
-            catch (Exception ex)
-            {
-                _guestTimer.Stop();
-                _diagnostics.AddMessage("Guest display HRESULT=0x" + ex.HResult.ToString("X8"));
-            }
+            finally { _guestTickPending = false; }
         }
 
         // Screenshot of the visible software display only; never exports guest disks or process memory.
