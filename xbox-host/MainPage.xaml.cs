@@ -20,6 +20,8 @@ namespace DroidDeckXboxHost
 
         private readonly DiagnosticState _diagnostics = new DiagnosticState();
         private string _uiAssetFolderPath;
+        private bool _initializationStarted;
+        private int? _webViewInitializationHResult;
 
         public DiagnosticState Diagnostics => _diagnostics;
 
@@ -33,11 +35,25 @@ namespace DroidDeckXboxHost
             // Handle Xbox gamepad B-button navigation
             SystemNavigationManager.GetForCurrentView().BackRequested += OnBackRequested;
 
-            this.Loaded += OnPageLoaded;
+            HostWebView.CoreWebView2Initialized += OnCoreWebView2Initialized;
+            HostWebView.Loaded += OnPageLoaded;
+        }
+
+        private void OnCoreWebView2Initialized(Microsoft.UI.Xaml.Controls.WebView2 sender,
+            Microsoft.UI.Xaml.Controls.CoreWebView2InitializedEventArgs args)
+        {
+            if (args.Exception != null)
+            {
+                _webViewInitializationHResult = args.Exception.HResult;
+                _diagnostics.AddMessage("CoreWebView2 initialization HRESULT=0x" + args.Exception.HResult.ToString("X8"));
+            }
+            else _diagnostics.AddMessage("CoreWebView2 initialization event succeeded");
         }
 
         private async void OnPageLoaded(object sender, RoutedEventArgs e)
         {
+            if (_initializationStarted) return;
+            _initializationStarted = true;
             _diagnostics.TransitionTo(HostLifecycleState.InitializingWebView2, "Starting EnsureCoreWebView2Async");
 
             try
@@ -51,7 +67,8 @@ namespace DroidDeckXboxHost
 
                 if (HostWebView.CoreWebView2 == null)
                 {
-                    _diagnostics.RecordError("CoreWebView2 failed to initialize (null).");
+                    _diagnostics.RecordError("CoreWebView2 is null; initialization HRESULT=" +
+                        (_webViewInitializationHResult.HasValue ? "0x" + _webViewInitializationHResult.Value.ToString("X8") : "unavailable"));
                     await _diagnostics.SaveToDiskAsync();
                     return;
                 }

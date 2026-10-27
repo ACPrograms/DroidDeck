@@ -64,6 +64,7 @@
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="DiagnosticState.cs" />
+    <Compile Include="Runtime\**\*.cs" Exclude="Runtime\QemuAdapterTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <None Include="Properties\Default.rd.xml" />
   </ItemGroup>
