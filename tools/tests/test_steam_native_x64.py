@@ -111,6 +111,22 @@ class NativeX64Test(unittest.TestCase):
         self.assertTrue((self.steam / 'steamrt64/steam').exists())
         self.assertFalse((self.steam / 'package/droiddeck-installed').exists())
 
+    def test_native_session_does_not_download_arm_proton(self):
+        source = (SCRIPT.parent / 'droiddeck-session').read_text()
+        start = source.index('    _bl_proton_root=$steam_root')
+        end = source.index('    if [ -s "$HOME/.bl-steam-urls" ]; then', start)
+        self.stub('droiddeck-proton-extra', 'touch "$HOME/arm-downloader-ran"\n')
+        self.stub('droiddeck-steam-x64', 'exit 0\n')
+        pending = self.root / '.bl-proton-extra'
+        pending.write_text('ge\n')
+        result = subprocess.run(['bash', '-c',
+                                 'steam_x64=1; steam_root=$HOME; XDG_DATA_HOME=$HOME; '
+                                 'step() { :; }; ' + source[start:end]],
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.root / 'arm-downloader-ran').exists())
+        self.assertEqual(pending.read_text(), 'ge\n')
+
     def test_arm_specific_profile_and_tool_mapping_are_not_applied(self):
         self.installed()
         profile = self.steam / 'config/config.vdf'

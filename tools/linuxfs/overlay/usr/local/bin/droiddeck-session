@@ -426,14 +426,14 @@ case $mode in
       fi
     fi
     _bl_proton_root=$steam_root
-    if [ "$steam_x64" = 1 ]; then
+    if [ "$steam_x64" = 1 ] && [ "${BL_X64_NATIVE:-0}" != 1 ]; then
       _bl_proton_root=$XDG_DATA_HOME/Steam
       if ! ls -d "$_bl_proton_root"/compatibilitytools.d/GE-Proton*-aarch64 >/dev/null 2>&1 &&
          ! grep -q '^ge' "$HOME/.bl-proton-extra" 2>/dev/null; then
         echo ge >> "$HOME/.bl-proton-extra"
       fi
     fi
-    if [ -s "$HOME/.bl-proton-extra" ]; then
+    if [ "${BL_X64_NATIVE:-0}" != 1 ] && [ -s "$HOME/.bl-proton-extra" ]; then
       _bl_left=$HOME/.bl-proton-extra.left
       : > "$_bl_left"
       _bl_got_proton=0
