@@ -58,24 +58,26 @@ namespace DroidDeckXboxHost
             _guestTimer.Start();
             Window.Current.CoreWindow.KeyDown += (sender, args) => ForwardFrontKey(args, true);
             Window.Current.CoreWindow.KeyUp += (sender, args) => ForwardFrontKey(args, false);
-            Dispatcher.AcceleratorKeyActivated += (sender, args) =>
-            {
-                var backend = _runtime.Backend;
-                if (backend == null || !backend.IsRunning || GuestSurface.Visibility != Visibility.Visible) return;
-                bool down = args.EventType == CoreAcceleratorKeyEventType.KeyDown || args.EventType == CoreAcceleratorKeyEventType.SystemKeyDown;
-                args.Handled = backend.InputBridge.ProcessKeyEvent(args.VirtualKey, args.KeyStatus, down);
-            };
         }
 
         private async void ForwardFrontKey(KeyEventArgs args, bool down)
         {
-            if (GuestSurface.Visibility == Visibility.Visible || HostWebView.CoreWebView2 == null ||
+            if (GuestSurface.Visibility == Visibility.Visible)
+            {
+                var backend = _runtime.Backend;
+                if (backend != null && backend.IsRunning)
+                    args.Handled = backend.InputBridge.ProcessKeyEvent(args.VirtualKey, args.KeyStatus, down);
+                return;
+            }
+            if (HostWebView.CoreWebView2 == null ||
                 !HostWebView.CoreWebView2.Source.StartsWith(VirtualBaseUri, StringComparison.OrdinalIgnoreCase)) return;
             string key;
             int code;
             switch ((int)args.VirtualKey)
             {
                 case 13: case 195: key = "Enter"; code = 13; break;
+                case 197: key = "x"; code = 88; break;
+                case 198: key = "y"; code = 89; break;
                 case 32: key = " "; code = 32; break;
                 case 27: case 196: key = "Escape"; code = 27; break;
                 case 37: case 205: key = "ArrowLeft"; code = 37; break;
@@ -88,11 +90,14 @@ namespace DroidDeckXboxHost
                 default: return;
             }
             args.Handled = true;
+            if (down && args.KeyStatus.WasKeyDown && (code == 13 || code == 32)) return;
             try
             {
                 string type = down ? "keydown" : "keyup";
-                string script = "(()=>{const c=document.querySelector('canvas');if(c){c.tabIndex=0;c.focus();c.dispatchEvent(new KeyboardEvent(" +
-                    JsonSerializer.Serialize(type) + ",{key:" + JsonSerializer.Serialize(key) + ",code:" + JsonSerializer.Serialize(key) +
+                string domCode = code == 32 ? "Space" : code == 88 ? "KeyX" : code == 89 ? "KeyY" :
+                    code == 219 ? "BracketLeft" : code == 221 ? "BracketRight" : key;
+                string script = "(()=>{const r=document.body.shadowRoot||document;const c=r.querySelector('canvas');if(c){c.tabIndex=0;c.focus();c.dispatchEvent(new KeyboardEvent(" +
+                    JsonSerializer.Serialize(type) + ",{key:" + JsonSerializer.Serialize(key) + ",code:" + JsonSerializer.Serialize(domCode) +
                     ",keyCode:" + code + ",which:" + code + ",repeat:" + (args.KeyStatus.WasKeyDown ? "true" : "false") +
                     ",bubbles:true,cancelable:true}));}})()";
                 await HostWebView.CoreWebView2.ExecuteScriptAsync(script);

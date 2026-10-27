@@ -4,7 +4,7 @@
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
          xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
          IgnorableNamespaces="uap mp rescap">
-  <Identity Name="DroidDeck.XboxHost" Publisher="CN=DroidDeckXboxHost" Version="1.0.0.12" ProcessorArchitecture="x64" />
+  <Identity Name="DroidDeck.XboxHost" Publisher="CN=DroidDeckXboxHost" Version="1.0.0.13" ProcessorArchitecture="x64" />
   <mp:PhoneIdentity PhoneProductId="1e9a2c34-87d1-4a1b-9f82-dd3c4b5a6e7f" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
     <DisplayName>DroidDeck</DisplayName>
