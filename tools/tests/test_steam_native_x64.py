@@ -39,6 +39,8 @@ class NativeX64Test(unittest.TestCase):
 
     def installed(self):
         (self.steam / 'steamrt64').mkdir(parents=True)
+        (self.steam / 'package').mkdir()
+        (self.steam / 'package/droiddeck-installed').write_text('1\n')
         for path in (self.steam / 'steam.sh', self.steam / 'steamrt64/steam'):
             path.write_text('#!/bin/bash\nprintf "%s\\n" "$@"\n')
             path.chmod(0o755)
@@ -96,6 +98,17 @@ class NativeX64Test(unittest.TestCase):
         result = self.run_client('--prepare')
         self.assertEqual(result.returncode, 69)
         self.assertFalse((self.steam / 'steamrt64/steam').exists())
+        self.assertFalse((self.steam / 'package/droiddeck-installed').exists())
+
+    def test_partial_install_with_client_executable_is_not_reported_as_ready(self):
+        self.client_archive()
+        manifest = self.root / 'manifest'
+        with manifest.open('a') as output:
+            output.write('\t"zzlate_steamrt64"\n\t{\n\t\t"file"\t"missing.zip"\n'
+                         '\t\t"sha2"\t"' + '0' * 64 + '"\n\t}\n')
+        result = self.run_client('--prepare')
+        self.assertEqual(result.returncode, 69)
+        self.assertTrue((self.steam / 'steamrt64/steam').exists())
         self.assertFalse((self.steam / 'package/droiddeck-installed').exists())
 
     def test_arm_specific_profile_and_tool_mapping_are_not_applied(self):

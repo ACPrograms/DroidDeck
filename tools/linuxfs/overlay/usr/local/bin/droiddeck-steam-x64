@@ -345,8 +345,13 @@ x64_prepare() {
 if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
   mkdir -p "$STEAM_X64/package"
   : > "$STEAM_X64/.steam-enable-steamrt64-client"
+  if [ -s "$STEAM_X64/package/droiddeck-installed" ] &&
+     [ -x "$STEAM_X64/steam.sh" ] && [ -x "$STEAM_X64/steamrt64/steam" ]; then
+    return 0
+  fi
   x64_sync_client
-  [ -x "$STEAM_X64/steam.sh" ] && [ -x "$STEAM_X64/steamrt64/steam" ] || {
+  [ -s "$STEAM_X64/package/droiddeck-installed" ] &&
+    [ -x "$STEAM_X64/steam.sh" ] && [ -x "$STEAM_X64/steamrt64/steam" ] || {
     step "native x86-64 Steam client is not installed"
     return 69
   }
