@@ -112,6 +112,9 @@ namespace DroidDeckXboxHost
                 {
                     State = State.ToString(),
                     AppVolumeFreeBytes,
+                    AppMemoryLimitBytes = Windows.System.MemoryManager.AppMemoryUsageLimit,
+                    AppMemoryUsageBytes = Windows.System.MemoryManager.AppMemoryUsage,
+                    NativeEnginePresent = File.Exists(Path.Combine(Windows.ApplicationModel.Package.Current.InstalledLocation.Path, "qemu.dll")),
                     IsUiReady,
                     InitializationTimestamp,
                     ReadyTimestamp,

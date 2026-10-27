@@ -78,6 +78,15 @@
     </AppxManifest>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="NativeSdk\*.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <TargetPath>%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="NativeSdk\pc-bios\**\*.bin">
+      <Link>pc-bios\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <TargetPath>pc-bios\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="ThirdParty\*" />
     <Content Include="Assets\*.png" />
     <Content Include="Assets\DroidDeckUI\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

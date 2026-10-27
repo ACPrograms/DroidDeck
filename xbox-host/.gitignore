@@ -16,3 +16,6 @@ Assets/DroidDeckUI/
 *.user
 *.suo
 .vs/
+
+# Checksum-locked native dependencies staged by CI
+NativeSdk/

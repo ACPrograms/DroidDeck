@@ -1,0 +1,74 @@
+{
+  "repository": "YoCanIGetUhhhh/XboxInstallOtherOS-dev",
+  "source_commit": "426235db19fc1ae17f8d50e8702015efbb676496",
+  "run": 39386346738,
+  "artifact": "XboxVmHost-package",
+  "msix": "XboxVmHost_1.2.76.0_x64.msix",
+  "msix_sha256": "c100a055887e9c066068c4fbc6b00253e3ffdaabd125ea8f095211b00917ff69",
+  "files": {
+    "libEGL.dll": {
+      "bytes": 32912,
+      "sha256": "0961b77a4542da1595c8a59c5e89265e93fe45be2a5a063d45ca2ac583ce0abb"
+    },
+    "libEGL_new.dll": {
+      "bytes": 60416,
+      "sha256": "36bd48445643a2ecf93568638d870429acbe9ea32a7ad32c573816203b01b9b5"
+    },
+    "libGLESv2.dll": {
+      "bytes": 1972880,
+      "sha256": "f083b0a9b5f1f7440a057a41b753ad43428f65c47cc023f47a794b56ab2c6203"
+    },
+    "libGLESv2_new.dll": {
+      "bytes": 5827584,
+      "sha256": "61d41fc7634d900fec62ddb5e5378fe4ca681da8e6f80ccba7d9ffa48d785e3f"
+    },
+    "libwinpthread-1.dll": {
+      "bytes": 64574,
+      "sha256": "e765ee6109a0080a7c42848911f4349099b3c15aa734d845cb0e438f6f5a91b5"
+    },
+    "pc-bios/bios-256k.bin": {
+      "bytes": 262144,
+      "sha256": "f1d4f396011197eb989029659cde250751cc711c336b8fbbe6f77cfe0dc5dcd8"
+    },
+    "pc-bios/bios.bin": {
+      "bytes": 131072,
+      "sha256": "8244f3e5eaca828cc0a6a963f1fad15d68d8d3c0b5c80b8451b3067a85f14ae1"
+    },
+    "pc-bios/kvmvapic.bin": {
+      "bytes": 9216,
+      "sha256": "cdf057a71b07e3b52b19cbe210bdefa59250d01a9810b960f7fe1f98eed95a27"
+    },
+    "pc-bios/linuxboot_dma.bin": {
+      "bytes": 1536,
+      "sha256": "9c49e255340c78fc12e54ed043462bca02fb7fca29b7cfab62ff88a5344b6950"
+    },
+    "pc-bios/multiboot_dma.bin": {
+      "bytes": 1024,
+      "sha256": "e01667420ee78a318ea44627d2dd68058d3377d024e6eb7237700afe2e86507d"
+    },
+    "pc-bios/pvh.bin": {
+      "bytes": 1536,
+      "sha256": "918ff03a118615c2f4611a5df2d9496aabe099b5cfaaf69e544ebf973305d59d"
+    },
+    "pc-bios/vgabios-cirrus.bin": {
+      "bytes": 38912,
+      "sha256": "305d3b15f67e65f1899a1664621f6b471e4345d33fd9eb4f6320b4559f6a04f2"
+    },
+    "pc-bios/vgabios-stdvga.bin": {
+      "bytes": 39424,
+      "sha256": "651513519f9e0d5b99d3b051a8f5c68db69e987339b59a441d371068c34c146b"
+    },
+    "pc-bios/vgabios-virtio.bin": {
+      "bytes": 39424,
+      "sha256": "746f38c2023dbbc071503113f970bcf69d49c6e7c55fa8c0e3748dbccba42772"
+    },
+    "pc-bios/vgabios.bin": {
+      "bytes": 38912,
+      "sha256": "f0defab87465236d0d22b6000bd2c270e05a56ff3bb7fd209a56069caed86d57"
+    },
+    "qemu.dll": {
+      "bytes": 34166782,
+      "sha256": "538d4662a879eb767e0bebb5921e21d63280a2439e10a84996dc3ad59f97eac7"
+    }
+  }
+}
