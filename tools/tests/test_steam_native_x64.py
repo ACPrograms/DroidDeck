@@ -2,6 +2,8 @@ from pathlib import Path
 import hashlib
 import os
 import subprocess
+import socket
+import shlex
 import sys
 import tempfile
 import unittest
@@ -126,6 +128,28 @@ class NativeX64Test(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse((self.root / 'arm-downloader-ran').exists())
         self.assertEqual(pending.read_text(), 'ge\n')
+
+    def test_native_session_preserves_the_existing_system_bus(self):
+        source = (SCRIPT.parent / 'droiddeck-session').read_text()
+        start = source.index('    if [ "${BL_X64_NATIVE:-0}" = 1 ]; then\n      [ -S /run/dbus')
+        end = source.index('    # The UI bridge launches SteamVR', start)
+        block = source[start:end].replace('/run/dbus', shlex.quote(str(self.root / 'bus')))
+        block = block.replace('/usr/local/share/droiddeck', shlex.quote(str(self.root / 'config')))
+        bus_path = self.root / 'bus/system_bus_socket'
+        bus_path.parent.mkdir()
+        with socket.socket(socket.AF_UNIX) as bus:
+            bus.bind(str(bus_path))
+            self.stub('dbus-daemon', 'touch "$HOME/replaced-bus"\n')
+            result = subprocess.run(['bash', '-c', block + '\nprintf "%s" "$DBUS_SYSTEM_BUS_ADDRESS"'],
+                                    env=self.env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, 'unix:path=' + str(bus_path))
+            self.assertTrue(bus_path.exists())
+            self.assertFalse((self.root / 'replaced-bus').exists())
+        bus_path.unlink()
+        missing = subprocess.run(['bash', '-c', block], env=self.env,
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual(missing.returncode, 69)
 
     def test_arm_specific_profile_and_tool_mapping_are_not_applied(self):
         self.installed()

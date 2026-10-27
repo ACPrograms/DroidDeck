@@ -846,7 +846,13 @@ case $mode in
       echo "== autolaunch $_bl_url"
       set -- "$@" "$_bl_url"
     fi
-    if command -v dbus-daemon >/dev/null 2>&1 && command -v droiddeck-netmanager >/dev/null 2>&1; then
+    if [ "${BL_X64_NATIVE:-0}" = 1 ]; then
+      [ -S /run/dbus/system_bus_socket ] || {
+        echo "== network: native Linux system bus is unavailable"
+        exit 69
+      }
+      export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+    elif command -v dbus-daemon >/dev/null 2>&1 && command -v droiddeck-netmanager >/dev/null 2>&1; then
       mkdir -p /run/dbus /usr/local/share/droiddeck
       cat > /usr/local/share/droiddeck/system-bus.conf <<'BUSCONF'
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
