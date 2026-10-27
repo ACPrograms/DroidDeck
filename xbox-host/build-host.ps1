@@ -13,6 +13,32 @@ Set-Location $ScriptDir
 
 Write-Host "=== Building DroidDeck Xbox Host ($Configuration | $Platform) ==="
 
+# Package artwork is derived from the original app's logo at UWP-required sizes.
+Add-Type -AssemblyName System.Drawing
+$logoPath = Join-Path $ScriptDir '..\app\src\main\res\drawable-nodpi\logo.png'
+$logo = [System.Drawing.Image]::FromFile((Resolve-Path $logoPath))
+try {
+    foreach ($asset in @(
+        @{ Name = 'Square150x150Logo.png'; Width = 150; Height = 150; Mark = 150 },
+        @{ Name = 'Square44x44Logo.png'; Width = 44; Height = 44; Mark = 44 },
+        @{ Name = 'StoreLogo.png'; Width = 50; Height = 50; Mark = 50 },
+        @{ Name = 'SplashScreen.png'; Width = 620; Height = 300; Mark = 180 }
+    )) {
+        $bitmap = [System.Drawing.Bitmap]::new($asset.Width, $asset.Height)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.Clear([System.Drawing.Color]::FromArgb(10, 11, 13))
+            $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $x = [int](($asset.Width - $asset.Mark) / 2)
+            $y = [int](($asset.Height - $asset.Mark) / 2)
+            $graphics.DrawImage($logo, $x, $y, [int]$asset.Mark, [int]$asset.Mark)
+            $bitmap.Save((Join-Path $ScriptDir ('Assets\' + $asset.Name)), [System.Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally { $graphics.Dispose(); $bitmap.Dispose() }
+    }
+}
+finally { $logo.Dispose() }
+
 # 1. Verify UI production assets exist
 $uiDir = Join-Path $ScriptDir 'Assets\DroidDeckUI'
 if (!(Test-Path $uiDir) -or !(Get-ChildItem $uiDir -Filter *.wasm)) {

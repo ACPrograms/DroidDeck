@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Windows.Storage;
@@ -21,6 +22,19 @@ namespace DroidDeckXboxHost
     {
         private static readonly object _syncLock = new object();
         private const int MaxLogEntries = 20;
+
+        [DllImport("api-ms-win-core-file-l1-1-0.dll", EntryPoint = "GetDiskFreeSpaceExW", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
+
+        public ulong? AppVolumeFreeBytes
+        {
+            get
+            {
+                ulong available, total, free;
+                return GetDiskFreeSpaceEx(ApplicationData.Current.LocalFolder.Path, out available, out total, out free)
+                    ? (ulong?)available : null;
+            }
+        }
 
         public HostLifecycleState State { get; private set; } = HostLifecycleState.NotInitialized;
         public bool IsUiReady => State == HostLifecycleState.UiReady;
@@ -97,6 +111,7 @@ namespace DroidDeckXboxHost
                 return JsonSerializer.Serialize(new
                 {
                     State = State.ToString(),
+                    AppVolumeFreeBytes,
                     IsUiReady,
                     InitializationTimestamp,
                     ReadyTimestamp,
