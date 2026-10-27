@@ -1,0 +1,32 @@
+name: Build original DroidDeck Xbox UI host
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Compile original Compose sources
+        shell: pwsh
+        run: ./gradlew.bat -p xbox-ui wasmJsBrowserDistribution --no-daemon
+      - name: Package original UI in Xbox host
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force xbox-host/Assets/DroidDeckUI | Out-Null
+          Copy-Item xbox-ui/build/dist/wasmJs/productionExecutable/* xbox-host/Assets/DroidDeckUI/ -Recurse -Force
+          ./xbox-host/build-host.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droiddeck-original-ui-host
+          path: xbox-host/AppPackages/
+          if-no-files-found: error
+          retention-days: 3
