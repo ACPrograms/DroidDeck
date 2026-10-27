@@ -87,7 +87,7 @@
       <TargetPath>pc-bios\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
     </Content>
     <Content Include="ThirdParty\*" />
-    <Content Include="..\tools\linuxfs\overlay\usr\local\bin\droiddeck-*">
+    <Content Include="..\tools\linuxfs\overlay\usr\local\bin\*">
       <Link>Assets\LinuxPlatform\overlay\usr\local\bin\%(Filename)%(Extension)</Link>
       <TargetPath>Assets\LinuxPlatform\overlay\usr\local\bin\%(Filename)%(Extension)</TargetPath>
     </Content>

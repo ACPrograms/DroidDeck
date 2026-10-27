@@ -15,7 +15,7 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
   xserver-xorg-core xserver-xorg-video-fbdev xserver-xorg-video-vesa \
   xserver-xorg-input-libinput x11-utils openbox dbus-x11 curl ca-certificates \
-  file unzip python3 procps util-linux libgtk-3-0 libnss3 libxss1 libasound2 \
+  file unzip xz-utils fonts-dejavu-core fonts-liberation python3 procps util-linux libgtk-3-0 libnss3 libxss1 libasound2 \
   pulseaudio libpulse0 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri \
   libc6:i386 libstdc++6:i386 libx11-6:i386 libxrandr2:i386 libglib2.0-0:i386 \
   libgl1-mesa-dri:i386 libgl1:i386 libvulkan1:i386 mesa-vulkan-drivers:i386
@@ -23,13 +23,14 @@ usermod -aG input,video,audio droiddeck
 if getent group render >/dev/null; then usermod -aG render droiddeck; fi
 install -d /usr/local/bin /usr/local/libexec/droiddeck-xbox
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/guest-gamepad.py" /usr/local/libexec/droiddeck-xbox/gamepad
-find "$original/usr/local/bin" -maxdepth 1 -type f -name 'droiddeck-*' \
+find "$original/usr/local/bin" -maxdepth 1 -type f \
   -exec install -m 755 '{}' /usr/local/bin/ \;
 
 cat > /etc/systemd/system/droiddeck-display.service <<'UNIT'
 [Unit]
 Description=DroidDeck Xbox guest display
 After=systemd-user-sessions.service
+Conflicts=getty@tty1.service
 [Service]
 ExecStart=/usr/lib/xorg/Xorg :0 -ac -nolisten tcp -noreset vt1
 [Install]
@@ -55,15 +56,16 @@ chmod 755 /usr/local/libexec/droiddeck-xbox/x11-session
 cat > /etc/systemd/system/droiddeck-steam.service <<'UNIT'
 [Unit]
 Description=Original DroidDeck native Steam session
-After=network-online.target droiddeck-display.service
+After=network-online.target droiddeck-display.service dbus.service
 Requires=droiddeck-display.service
-Wants=network-online.target
+Wants=network-online.target dbus.service
 [Service]
 User=droiddeck
 WorkingDirectory=/home/droiddeck
 RuntimeDirectory=droiddeck
 RuntimeDirectoryMode=0700
 Environment=HOME=/home/droiddeck DISPLAY=:0 XDG_RUNTIME_DIR=/run/droiddeck
+Environment=BL_LAUNCH_DIR=/run/droiddeck
 Environment=XDG_DATA_HOME=/home/droiddeck/.local/share
 Environment=BL_X64_NATIVE=1 BL_STEAM_CLIENT_ARCH=x86_64 BL_INSIDE=1
 Environment=BL_DESKTOP=1 BL_STEAM_UI=desktop BL_X64_DECK=0

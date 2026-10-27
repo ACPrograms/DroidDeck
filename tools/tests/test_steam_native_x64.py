@@ -151,6 +151,17 @@ class NativeX64Test(unittest.TestCase):
                                  capture_output=True, text=True, timeout=10)
         self.assertEqual(missing.returncode, 69)
 
+    def test_native_session_keeps_standard_valve_compatibility_mapping(self):
+        source = (SCRIPT.parent / 'droiddeck-session').read_text()
+        start = source.index('    if [ "$steam_x64" = 1 ] && [ "${BL_X64_NATIVE:-0}" != 1 ]; then\n      { droiddeck-steam-compat')
+        end = source.index('    _bl_ui=', start)
+        self.stub('droiddeck-steam-compat', 'touch "$HOME/android-mapping-ran"\n')
+        for native in ('1', '0'):
+            result = subprocess.run(['bash', '-c', 'steam_x64=1; steam_root=$HOME; ' + source[start:end] + '\nwait'],
+                                    env=dict(self.env, BL_X64_NATIVE=native), capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((self.root / 'android-mapping-ran').exists(), native == '0')
+
     def test_arm_specific_profile_and_tool_mapping_are_not_applied(self):
         self.installed()
         profile = self.steam / 'config/config.vdf'

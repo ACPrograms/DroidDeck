@@ -957,9 +957,9 @@ BUSCONF
       echo "== steam: devtools port $BL_CDP_PORT, guest processes only"
     fi
     [ -n "${BL_LAUNCH_DIR:-}" ] && mkdir -p "$BL_LAUNCH_DIR/agent" && echo "$BL_CDP_PORT" > "$BL_LAUNCH_DIR/agent/cdp-port"
-    if [ "$steam_x64" = 1 ]; then
+    if [ "$steam_x64" = 1 ] && [ "${BL_X64_NATIVE:-0}" != 1 ]; then
       { droiddeck-steam-compat --files-only "$steam_root" 2>&1 & }
-    else
+    elif [ "$steam_x64" = 0 ]; then
       { "${_bl_compat_env[@]}" droiddeck-steam-compat "$steam_root" 2>&1 & }
     fi
     _bl_ui=(-gamepadui)
