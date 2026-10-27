@@ -15,6 +15,11 @@ namespace DroidDeckXboxHost.Runtime
         /// </summary>
         public string RootDiskPath { get; set; }
 
+        public string ProvisioningReceiptPath { get; set; }
+
+        // Task-created NoCloud seed; never included in source or cloud builds.
+        public string SeedIsoPath { get; set; }
+
         /// <summary>
         /// Absolute path to packaged pc-bios directory containing BIOS ROM binaries.
         /// </summary>

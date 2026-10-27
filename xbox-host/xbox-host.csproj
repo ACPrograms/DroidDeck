@@ -68,7 +68,7 @@
     <Compile Include="..\xbox-runtime\Storage\SparseRawProvisioner.cs" Link="Storage\SparseRawProvisioner.cs" />
     <Compile Include="..\xbox-runtime\Storage\ProvisionModels.cs" Link="Storage\ProvisionModels.cs" />
     <Compile Include="..\xbox-runtime\Storage\ISparseProvisioner.cs" Link="Storage\ISparseProvisioner.cs" />
-    <Compile Include="Runtime\**\*.cs" Exclude="Runtime\QemuAdapterTests.cs" />
+    <Compile Include="Runtime\**\*.cs" Exclude="Runtime\**\*Tests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <None Include="Properties\Default.rd.xml" />
   </ItemGroup>

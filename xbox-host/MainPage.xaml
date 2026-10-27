@@ -13,5 +13,9 @@
             x:Name="HostWebView"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch" />
+        <SwapChainPanel x:Name="GuestPanel" Visibility="Collapsed" />
+        <Image x:Name="GuestImage" Visibility="Collapsed" Stretch="Uniform"
+               PointerMoved="OnGuestPointer" PointerPressed="OnGuestPointer"
+               PointerReleased="OnGuestPointer" PointerWheelChanged="OnGuestPointer" />
     </Grid>
 </Page>

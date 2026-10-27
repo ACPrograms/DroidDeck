@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json;
 using Windows.ApplicationModel;
 using Windows.Storage;
@@ -9,6 +10,8 @@ using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 
 namespace DroidDeckXboxHost
@@ -22,6 +25,11 @@ namespace DroidDeckXboxHost
         private string _uiAssetFolderPath;
         private bool _initializationStarted;
         private int? _webViewInitializationHResult;
+        private Runtime.RuntimeSession _runtime;
+        private readonly DispatcherTimer _guestTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+        private WriteableBitmap _guestBitmap;
+        private int _guestTicks;
+        private bool _guestPanelBound;
 
         public DiagnosticState Diagnostics => _diagnostics;
 
@@ -37,6 +45,94 @@ namespace DroidDeckXboxHost
 
             HostWebView.CoreWebView2Initialized += OnCoreWebView2Initialized;
             HostWebView.Loaded += OnPageLoaded;
+            _runtime = new Runtime.RuntimeSession(async (stage, percent, busy) =>
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                    HostWebView.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                    {
+                        type = "DROIDDECK_STATUS", ready = false, busy, stage, percent
+                    }))));
+            _guestTimer.Tick += OnGuestTick;
+            _guestTimer.Start();
+            Dispatcher.AcceleratorKeyActivated += (sender, args) =>
+            {
+                var backend = _runtime.Backend;
+                if (backend == null || !backend.IsRunning || GuestImage.Visibility != Visibility.Visible) return;
+                bool down = args.EventType == CoreAcceleratorKeyEventType.KeyDown || args.EventType == CoreAcceleratorKeyEventType.SystemKeyDown;
+                args.Handled = backend.InputBridge.ProcessKeyEvent(args.VirtualKey, args.KeyStatus, down);
+            };
+        }
+
+        private async void OnGuestTick(object sender, object args)
+        {
+            if (++_guestTicks % 150 == 0)
+            {
+                try { await _runtime.RefreshStatusAsync(); }
+                catch (Exception ex) { _diagnostics.AddMessage("Runtime status HRESULT=0x" + ex.HResult.ToString("X8")); }
+            }
+            var backend = _runtime.Backend;
+            if (backend == null || !backend.IsRunning)
+            {
+                GuestImage.Visibility = Visibility.Collapsed;
+                GuestPanel.Visibility = Visibility.Collapsed;
+                HostWebView.IsEnabled = true;
+                return;
+            }
+            try
+            {
+                var display = backend.DisplayBridge;
+                if (display.IsDirectModeRequested)
+                {
+                    if (!_guestPanelBound)
+                    {
+                        float scale = (float)Windows.Graphics.Display.DisplayInformation.GetForCurrentView().RawPixelsPerViewPixel;
+                        GuestPanel.Visibility = Visibility.Visible;
+                        display.BindSwapChainPanel(GuestPanel, ActualWidth, ActualHeight, scale, scale);
+                        _guestPanelBound = true;
+                    }
+                    display.TryAttachPanel();
+                    int directWidth, directHeight;
+                    display.CheckDirectFrameUpdate(out directWidth, out directHeight);
+                    if (display.DirectFrameCount > 0)
+                    {
+                        GuestImage.Visibility = Visibility.Collapsed;
+                        HostWebView.IsEnabled = false;
+                        return;
+                    }
+                }
+                byte[] pixels = display.GetSharedFramebuffer();
+                int width, height;
+                if (!display.TryGetFallbackFrame(pixels, out width, out height)) return;
+                if (width <= 0 || height <= 0 || width > 2560 || height > 1600) return;
+                if (_guestBitmap == null || _guestBitmap.PixelWidth != width || _guestBitmap.PixelHeight != height)
+                {
+                    _guestBitmap = new WriteableBitmap(width, height);
+                    GuestImage.Source = _guestBitmap;
+                }
+                using (Stream stream = _guestBitmap.PixelBuffer.AsStream()) stream.Write(pixels, 0, width * height * 4);
+                _guestBitmap.Invalidate();
+                GuestImage.Visibility = Visibility.Visible;
+                HostWebView.IsEnabled = false;
+                backend.InputBridge.FlushAbsolute();
+            }
+            catch (Exception ex)
+            {
+                _guestTimer.Stop();
+                _diagnostics.AddMessage("Guest display HRESULT=0x" + ex.HResult.ToString("X8"));
+            }
+        }
+
+        private void OnGuestPointer(object sender, PointerRoutedEventArgs args)
+        {
+            var backend = _runtime.Backend;
+            if (backend == null || !backend.IsRunning || _guestBitmap == null) return;
+            var point = args.GetCurrentPoint(GuestImage);
+            int buttons = (point.Properties.IsLeftButtonPressed ? 1 : 0) |
+                (point.Properties.IsRightButtonPressed ? 2 : 0) | (point.Properties.IsMiddleButtonPressed ? 4 : 0);
+            backend.InputBridge.UpdateAbsolutePointer(point.Position.X, point.Position.Y,
+                GuestImage.ActualWidth, GuestImage.ActualHeight, _guestBitmap.PixelWidth, _guestBitmap.PixelHeight,
+                point.Properties.MouseWheelDelta / 120, buttons);
+            backend.InputBridge.FlushAbsolute();
+            args.Handled = true;
         }
 
         private void OnCoreWebView2Initialized(Microsoft.UI.Xaml.Controls.WebView2 sender,
@@ -254,6 +350,11 @@ namespace DroidDeckXboxHost
                             });
                             sender.PostWebMessageAsString(ack);
                             await CaptureUiPreviewAsync(sender);
+                            await _runtime.StartIfRequestedAsync();
+                        }
+                        else if (messageType == "DROIDDECK_PLAY_STEAM")
+                        {
+                            await _runtime.StartIfRequestedAsync();
                         }
                         else
                         {
@@ -307,6 +408,11 @@ namespace DroidDeckXboxHost
 
         private void OnBackRequested(object sender, BackRequestedEventArgs e)
         {
+            if (_runtime.Backend != null && _runtime.Backend.IsRunning)
+            {
+                e.Handled = true;
+                return;
+            }
             if (HostWebView != null && HostWebView.CoreWebView2 != null && HostWebView.CanGoBack)
             {
                 HostWebView.GoBack();

@@ -132,17 +132,26 @@ namespace DroidDeckXboxHost.Runtime
             // addr=0x10 ensures stable PCI slot assignment (ens16) across disk changes
             list.AddRange(new string[]
             {
-                "-netdev", "user,id=n0,hostfwd=tcp::" + config.SshHostPort + "-:22",
+                "-netdev", "user,id=n0,hostfwd=tcp::" + config.SshHostPort + "-:22,hostfwd=tcp:127.0.0.1:2224-:2224",
                 "-device", "virtio-net-pci,netdev=n0,romfile=,addr=0x10"
             });
 
             // Storage: caller-provisioned owned fresh sparse raw root disk on virtio-blk-pci with dedicated iothread
             list.AddRange(new string[]
             {
-                "-drive", "file=" + config.RootDiskPath + ",format=raw,if=none,id=hd0,cache=writeback",
+                "-drive", "file=" + config.RootDiskPath.Replace(",", ",,") + ",format=raw,if=none,id=hd0,cache=writeback",
                 "-object", "iothread,id=io0",
                 "-device", "virtio-blk-pci,drive=hd0,serial=" + config.DiskSerial + ",iothread=io0,bootindex=0"
             });
+
+            if (!string.IsNullOrEmpty(config.SeedIsoPath))
+            {
+                list.AddRange(new string[]
+                {
+                    "-drive", "file=" + config.SeedIsoPath.Replace(",", ",,") + ",format=raw,if=none,id=seed,readonly=on",
+                    "-device", "virtio-blk-pci,drive=seed,serial=droiddeck-seed"
+                });
+            }
 
             // Input: Virtio absolute tablet
             list.AddRange(new string[]

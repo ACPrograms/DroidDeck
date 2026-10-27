@@ -33,12 +33,38 @@ kotlin {
             kotlin.srcDirs("src/wasmJsMain/kotlin", "../app/src/main/java")
             kotlin.include(
                 "**/Main.kt",
+                "**/R.kt",
+                "**/StringResource.kt",
                 "**/MathAdapter.kt",
                 "**/MotionAdapter.kt",
                 "**/ThemeAdapter.kt",
+                "**/Icons.kt",
+                "**/FilledIcons.kt",
+                "**/WasmContext.kt",
+                "**/WasmLocalContext.kt",
+                "**/LocalLifecycleOwner.kt",
+                "**/KeyEvent.kt",
+                "**/BackHandler.kt",
+                "**/SystemClock.kt",
+                "**/WasmFile.kt",
+                "**/WasmCoilCompose.kt",
+                "**/WasmImageRequest.kt",
+                "**/WasmScale.kt",
+                "**/WasmRoundedCornersTransformation.kt",
+                "**/WasmLibrary.kt",
+                "**/WasmSteamFeatured.kt",
+                "**/WasmSessionService.kt",
+                "**/WasmGlasses.kt",
+                "**/FrontEndModels.kt",
+                "**/FrontEndAdapters.kt",
                 "**/EmptyLibrary.kt",
                 "**/Throbber.kt",
-                "**/FitText.kt"
+                "**/FitText.kt",
+                "**/Wordmark.kt",
+                "**/SharedMotion.kt",
+                "**/DropSheet.kt",
+                "**/LiftSheet.kt",
+                "**/SteamHome.kt"
             )
         }
     }

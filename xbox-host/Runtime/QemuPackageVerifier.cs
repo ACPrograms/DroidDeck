@@ -141,8 +141,20 @@ namespace DroidDeckXboxHost.Runtime
             }
             result.RootDiskSizeBytes = fi.Length;
 
-            // Verify disk is NOT qcow2 (qcow2 causes unrecoverable crashes on Xbox UWP)
-            if (IsQcow2(diskPath))
+            // Mutable guest disks are validated by their provisioning receipt and metadata only.
+            // Header inspection is limited to explicit fresh public fixtures without a receipt.
+            if (!string.IsNullOrEmpty(config.ProvisioningReceiptPath))
+            {
+                var receipt = Provisioning.ProvisioningReceipt.LoadFromFile(config.ProvisioningReceiptPath);
+                if (receipt == null || !receipt.Matches(Provisioning.BackendProvisionerConstants.PinnedRawSha512,
+                    Provisioning.BackendProvisionerConstants.TargetLogicalSizeBytes) ||
+                    fi.Length != Provisioning.BackendProvisionerConstants.TargetLogicalSizeBytes)
+                {
+                    result.ErrorMessage = "Provisioning receipt or disk capacity mismatch.";
+                    return result;
+                }
+            }
+            else if (IsQcow2(diskPath))
             {
                 result.IsValid = false;
                 result.ErrorMessage = "QCOW2 disk format detected! Only raw sparse disks are supported on Xbox Dev Mode.";
