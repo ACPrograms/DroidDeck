@@ -56,6 +56,8 @@ namespace DroidDeckXboxHost
                     }))));
             _guestTimer.Tick += OnGuestTick;
             _guestTimer.Start();
+            Window.Current.CoreWindow.KeyDown += (sender, args) => ForwardFrontKey(args, true);
+            Window.Current.CoreWindow.KeyUp += (sender, args) => ForwardFrontKey(args, false);
             Dispatcher.AcceleratorKeyActivated += (sender, args) =>
             {
                 var backend = _runtime.Backend;
@@ -63,6 +65,44 @@ namespace DroidDeckXboxHost
                 bool down = args.EventType == CoreAcceleratorKeyEventType.KeyDown || args.EventType == CoreAcceleratorKeyEventType.SystemKeyDown;
                 args.Handled = backend.InputBridge.ProcessKeyEvent(args.VirtualKey, args.KeyStatus, down);
             };
+        }
+
+        private async void ForwardFrontKey(KeyEventArgs args, bool down)
+        {
+            if (GuestSurface.Visibility == Visibility.Visible || HostWebView.CoreWebView2 == null ||
+                !HostWebView.CoreWebView2.Source.StartsWith(VirtualBaseUri, StringComparison.OrdinalIgnoreCase)) return;
+            string key;
+            int code;
+            switch ((int)args.VirtualKey)
+            {
+                case 13: case 195: key = "Enter"; code = 13; break;
+                case 32: key = " "; code = 32; break;
+                case 27: case 196: key = "Escape"; code = 27; break;
+                case 37: case 205: key = "ArrowLeft"; code = 37; break;
+                case 38: case 203: key = "ArrowUp"; code = 38; break;
+                case 39: case 206: key = "ArrowRight"; code = 39; break;
+                case 40: case 204: key = "ArrowDown"; code = 40; break;
+                case 9: key = "Tab"; code = 9; break;
+                case 200: key = "["; code = 219; break;
+                case 199: key = "]"; code = 221; break;
+                default: return;
+            }
+            args.Handled = true;
+            try
+            {
+                string type = down ? "keydown" : "keyup";
+                string script = "(()=>{const c=document.querySelector('canvas');if(c){c.tabIndex=0;c.focus();c.dispatchEvent(new KeyboardEvent(" +
+                    JsonSerializer.Serialize(type) + ",{key:" + JsonSerializer.Serialize(key) + ",code:" + JsonSerializer.Serialize(key) +
+                    ",keyCode:" + code + ",which:" + code + ",repeat:" + (args.KeyStatus.WasKeyDown ? "true" : "false") +
+                    ",bubbles:true,cancelable:true}));}})()";
+                await HostWebView.CoreWebView2.ExecuteScriptAsync(script);
+                if (!down)
+                {
+                    _diagnostics.AddMessage("Forwarded platform UI navigation");
+                    await _diagnostics.SaveToDiskAsync();
+                }
+            }
+            catch (Exception ex) { _diagnostics.AddMessage("UI input HRESULT=0x" + ex.HResult.ToString("X8")); }
         }
 
         private async void OnGuestTick(object sender, object args)
@@ -380,6 +420,7 @@ namespace DroidDeckXboxHost
                         string messageType = typeProp.GetString();
                         if (string.Equals(messageType, "DROIDDECK_UI_READY", StringComparison.OrdinalIgnoreCase))
                         {
+                            HostWebView.Focus(FocusState.Programmatic);
                             _diagnostics.TransitionTo(HostLifecycleState.UiReady, "Compose Wasm dispatched DROIDDECK_UI_READY");
                             await _diagnostics.SaveToDiskAsync();
 
@@ -397,6 +438,8 @@ namespace DroidDeckXboxHost
                         }
                         else if (messageType == "DROIDDECK_PLAY_STEAM")
                         {
+                            _diagnostics.AddMessage("Original Play action received");
+                            await _diagnostics.SaveToDiskAsync();
                             await _runtime.StartIfRequestedAsync();
                         }
                         else
