@@ -1,0 +1,25 @@
+name: Check pinned Xbox native SDK download
+on:
+  push:
+    branches: [codex/xbox-adaptation]
+    paths: [.github/workflows/xbox-native-sdk.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Download exact upstream public engine artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 39386346738 --repo YoCanIGetUhhhh/XboxInstallOtherOS-dev --name XboxVmHost-package --dir native-sdk
+      - name: Verify pinned engine package
+        run: |
+          python3 - <<'PY'
+          import pathlib,hashlib
+          p=next(pathlib.Path('native-sdk').rglob('XboxVmHost_1.2.76.0_x64.msix'))
+          assert hashlib.sha256(p.read_bytes()).hexdigest()=='c100a055887e9c066068c4fbc6b00253e3ffdaabd125ea8f095211b00917ff69'
+          print('Pinned upstream SDK package verified')
+          PY
