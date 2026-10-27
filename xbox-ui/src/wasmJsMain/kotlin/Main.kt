@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -25,7 +26,7 @@ import com.droiddeck.launcher.ui.Themes
 import kotlin.js.ExperimentalWasmJsInterop
 import kotlinx.browser.document
 import kotlinx.browser.window
-import org.w3c.dom.MessageEvent
+import org.w3c.dom.events.EventTarget
 
 @OptIn(ExperimentalWasmJsInterop::class)
 private fun postHostMessage(type: String) {
@@ -47,32 +48,63 @@ private fun postHostMessage(type: String) {
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun extractStatusString(data: JsAny?, key: String): String? =
+private fun getChromeWebView(): EventTarget? =
     js(
         """
-        (function(d, k) {
+        (function() {
             try {
-                var obj = d;
-                if (typeof d === 'string') { obj = JSON.parse(d); }
-                if (obj && obj.type === 'DROIDDECK_STATUS' && obj[k] !== undefined && obj[k] !== null) {
-                    return String(obj[k]);
+                if (window.chrome && window.chrome.webview && typeof window.chrome.webview.addEventListener === 'function') {
+                    return window.chrome.webview;
                 }
             } catch (e) {}
             return null;
-        })(data, key)
+        })()
         """
     )
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun extractStatusBool(data: JsAny?, key: String): Boolean =
+private fun extractEventData(event: org.w3c.dom.events.Event): JsAny? =
+    js(
+        """
+        (function(e) {
+            try {
+                if (e && e.data !== undefined && e.data !== null) {
+                    return e.data;
+                }
+            } catch (err) {}
+            return null;
+        })(event)
+        """
+    )
+
+@OptIn(ExperimentalWasmJsInterop::class)
+private fun isStatusChannel(data: JsAny?): Boolean =
+    js(
+        """
+        (function(d) {
+            try {
+                var obj = d;
+                if (typeof d === 'string') {
+                    if (d.length > 4096) return false;
+                    obj = JSON.parse(d);
+                }
+                return (obj && typeof obj === 'object' && obj.type === 'DROIDDECK_STATUS');
+            } catch (e) {}
+            return false;
+        })(data)
+        """
+    )
+
+@OptIn(ExperimentalWasmJsInterop::class)
+private fun extractBoundedBool(data: JsAny?, key: String): Boolean =
     js(
         """
         (function(d, k) {
             try {
                 var obj = d;
                 if (typeof d === 'string') { obj = JSON.parse(d); }
-                if (obj && obj.type === 'DROIDDECK_STATUS' && obj[k] !== undefined) {
-                    return Boolean(obj[k]);
+                if (obj && obj.type === 'DROIDDECK_STATUS' && typeof obj[k] === 'boolean') {
+                    return obj[k];
                 }
             } catch (e) {}
             return false;
@@ -81,23 +113,59 @@ private fun extractStatusBool(data: JsAny?, key: String): Boolean =
     )
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun extractStatusInt(data: JsAny?, key: String, defaultVal: Int): Int =
+private fun extractBoundedStage(data: JsAny?): String =
     js(
         """
-        (function(d, k, def) {
+        (function(d) {
             try {
                 var obj = d;
                 if (typeof d === 'string') { obj = JSON.parse(d); }
-                if (obj && obj.type === 'DROIDDECK_STATUS' && typeof obj[k] === 'number') {
-                    return obj[k] | 0;
+                if (obj && obj.type === 'DROIDDECK_STATUS' && typeof obj.stage === 'string') {
+                    return obj.stage.replace(/[^\x20-\x7E]/g, '').slice(0, 64);
                 }
             } catch (e) {}
-            return def;
-        })(data, key, defaultVal)
+            return "";
+        })(data)
         """
     )
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalWasmJsInterop::class)
+private fun extractBoundedPercent(data: JsAny?): Int =
+    js(
+        """
+        (function(d) {
+            try {
+                var obj = d;
+                if (typeof d === 'string') { obj = JSON.parse(d); }
+                if (obj && obj.type === 'DROIDDECK_STATUS' && typeof obj.percent === 'number' && isFinite(obj.percent)) {
+                    var p = Math.floor(obj.percent);
+                    return (p >= 0 && p <= 100) ? p : -1;
+                }
+            } catch (e) {}
+            return -1;
+        })(data)
+        """
+    )
+
+@OptIn(ExperimentalWasmJsInterop::class)
+private fun extractBoundedVersion(data: JsAny?, key: String): String? =
+    js(
+        """
+        (function(d, k) {
+            try {
+                var obj = d;
+                if (typeof d === 'string') { obj = JSON.parse(d); }
+                if (obj && obj.type === 'DROIDDECK_STATUS' && typeof obj[k] === 'string') {
+                    var s = obj[k].replace(/[^\x20-\x7E]/g, '').slice(0, 32);
+                    return s.length > 0 ? s : null;
+                }
+            } catch (e) {}
+            return null;
+        })(data, key)
+        """
+    )
+
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalWasmJsInterop::class)
 fun main() {
     val body = document.body ?: return
 
@@ -122,23 +190,27 @@ fun main() {
 
         val frontFocus = remember { FrontFocus() }
 
-        LaunchedEffect(Unit) {
+        DisposableEffect(Unit) {
             val listener: (org.w3c.dom.events.Event) -> Unit = { event ->
-                val msgEvent = event as? MessageEvent
-                val data = msgEvent?.data
-                if (data != null) {
-                    val statusType = extractStatusString(data, "type")
-                    if (statusType == "DROIDDECK_STATUS") {
-                        ready = extractStatusBool(data, "ready")
-                        busy = extractStatusBool(data, "busy")
-                        stage = extractStatusString(data, "stage") ?: ""
-                        percent = extractStatusInt(data, "percent", -1)
-                        installed = extractStatusString(data, "installed")
-                        available = extractStatusString(data, "available")
-                    }
+                val data = extractEventData(event)
+                if (data != null && isStatusChannel(data)) {
+                    ready = extractBoundedBool(data, "ready")
+                    busy = extractBoundedBool(data, "busy")
+                    stage = extractBoundedStage(data)
+                    percent = extractBoundedPercent(data)
+                    installed = extractBoundedVersion(data, "installed")
+                    available = extractBoundedVersion(data, "available")
                 }
             }
+
+            val webview = getChromeWebView()
+            webview?.addEventListener("message", listener)
             window.addEventListener("message", listener)
+
+            onDispose {
+                webview?.removeEventListener("message", listener)
+                window.removeEventListener("message", listener)
+            }
         }
 
         val state = remember(ready, busy, stage, percent, installed, available) {

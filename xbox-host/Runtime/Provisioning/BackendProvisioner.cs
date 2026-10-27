@@ -2,16 +2,15 @@
 // DroidDeck Xbox Host Backend: Production Backend Provisioner
 //
 // Streams and decompresses public official Debian raw cloud images via caller-supplied factory,
-// delegates sparse hole allocation directly to Storage SparseRawProvisioner,
-// enforces pinned SHA-512 and 8 GiB capacity, and manages tamper-evident receipts
-// with strict protection for booted guest disks.
+// delegates sparse hole allocation directly to Storage SparseRawProvisioner via exact Stream signature,
+// enforces pinned SHA-512 and 8 GiB capacity, and manages metadata receipts with strict protection
+// for booted guest disks.
 // ------------------------------------------------------------------------------------------------
 
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using DroidDeck.XboxRuntime.Storage;
@@ -19,24 +18,14 @@ using DroidDeck.XboxRuntime.Storage;
 namespace DroidDeckXboxHost.Runtime.Provisioning
 {
     /// <summary>
-    /// Delegate contract matching the Stream overload of SparseRawProvisioner.
-    /// </summary>
-    public delegate ProvisionResult SparseStreamProvisionerFunc(
-        Stream publicSource,
-        string destination,
-        ProvisionOptions options,
-        IProgress<ProvisionProgress> progress,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Production backend provisioner for DroidDeck Linux guest disk on Xbox Dev Mode.
+    /// Operates on explicit runtime directory provided by host; zero WinRT or reflection dependencies.
     /// </summary>
     public sealed class BackendProvisioner : IBackendProvisioner
     {
         private readonly object _syncLock = new object();
         private readonly SemaphoreSlim _provisionLock = new SemaphoreSlim(1, 1);
         private readonly SparseRawProvisioner _sparseProvisioner;
-        private readonly SparseStreamProvisionerFunc _streamProvisioner;
         private volatile ProvisioningState _state = ProvisioningState.Idle;
 
         /// <inheritdoc />
@@ -56,85 +45,24 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         public string RuntimeDirectory { get; }
 
         /// <summary>
-        /// Initializes a new instance of BackendProvisioner targeting AppData DroidDeckRuntime.
+        /// Initializes a new instance of BackendProvisioner targeting an explicit runtime directory.
         /// </summary>
-        /// <param name="customRuntimeDirectory">Optional directory override for testing; defaults to LocalFolder/DroidDeckRuntime.</param>
+        /// <param name="runtimeDirectory">Explicit directory path supplied by the host runner (mandatory).</param>
         /// <param name="sparseProvisioner">Optional provisioner instance; defaults to new SparseRawProvisioner().</param>
-        /// <param name="customStreamProvisioner">Optional delegate for stream provisioning override in test environments.</param>
         public BackendProvisioner(
-            string customRuntimeDirectory = null,
-            SparseRawProvisioner sparseProvisioner = null,
-            SparseStreamProvisionerFunc customStreamProvisioner = null)
+            string runtimeDirectory,
+            SparseRawProvisioner sparseProvisioner = null)
         {
-            RuntimeDirectory = !string.IsNullOrWhiteSpace(customRuntimeDirectory)
-                ? customRuntimeDirectory
-                : ResolveDefaultRuntimeDirectory();
+            if (string.IsNullOrWhiteSpace(runtimeDirectory))
+            {
+                throw new ArgumentException("Runtime directory must be explicitly provided by the host.", nameof(runtimeDirectory));
+            }
 
+            RuntimeDirectory = runtimeDirectory;
             TargetDiskPath = Path.Combine(RuntimeDirectory, BackendProvisionerConstants.DiskFileName);
             ReceiptPath = Path.Combine(RuntimeDirectory, BackendProvisionerConstants.ReceiptFileName);
 
             _sparseProvisioner = sparseProvisioner ?? new SparseRawProvisioner();
-
-            if (customStreamProvisioner != null)
-            {
-                _streamProvisioner = customStreamProvisioner;
-            }
-            else
-            {
-                _streamProvisioner = ResolveDefaultStreamProvisioner(_sparseProvisioner);
-            }
-        }
-
-        private static string ResolveDefaultRuntimeDirectory()
-        {
-            try
-            {
-                return Path.Combine(Windows.Storage.ApplicationData.Current.LocalFolder.Path, BackendProvisionerConstants.RuntimeFolderName);
-            }
-            catch
-            {
-                // Fallback for non-AppContainer test fixtures or CLI runners
-                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, BackendProvisionerConstants.RuntimeFolderName);
-            }
-        }
-
-        private static SparseStreamProvisionerFunc ResolveDefaultStreamProvisioner(SparseRawProvisioner provisioner)
-        {
-            if (provisioner == null) provisioner = new SparseRawProvisioner();
-
-            // Resolve public overload: ProvisionRawImage(Stream, string, ProvisionOptions, IProgress<ProvisionProgress>, CancellationToken)
-            MethodInfo method = typeof(SparseRawProvisioner).GetMethod(
-                "ProvisionRawImage",
-                BindingFlags.Public | BindingFlags.Instance,
-                null,
-                new Type[]
-                {
-                    typeof(Stream),
-                    typeof(string),
-                    typeof(ProvisionOptions),
-                    typeof(IProgress<ProvisionProgress>),
-                    typeof(CancellationToken)
-                },
-                null);
-
-            if (method != null)
-            {
-                try
-                {
-                    return (SparseStreamProvisionerFunc)Delegate.CreateDelegate(
-                        typeof(SparseStreamProvisionerFunc),
-                        provisioner,
-                        method);
-                }
-                catch
-                {
-                    // Fallback to dynamic invocation wrapper if CreateDelegate is restricted
-                    return (src, dest, opt, prog, tok) =>
-                        (ProvisionResult)method.Invoke(provisioner, new object[] { src, dest, opt, prog, tok });
-                }
-            }
-
-            return null;
         }
 
         /// <inheritdoc />
@@ -194,8 +122,13 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
             IProgress<BackendProvisionProgress> progress = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            await _provisionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             Stopwatch stopwatch = Stopwatch.StartNew();
+            try { await _provisionLock.WaitAsync(cancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                State = ProvisioningState.Cancelled;
+                return BackendProvisionResult.CancelledResult(TargetDiskPath, ReceiptPath);
+            }
 
             try
             {
@@ -314,6 +247,9 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
                 if (File.Exists(ReceiptPath))
                 {
                     ProvisioningReceipt staleReceipt = ProvisioningReceipt.LoadFromFile(ReceiptPath);
+                    if (staleReceipt == null || !staleReceipt.Matches(BackendProvisionerConstants.PinnedRawSha512,
+                        BackendProvisionerConstants.TargetLogicalSizeBytes))
+                        throw new InvalidDataException("Unrecognized existing receipt; preserving it and refusing provisioning.");
                     if (staleReceipt != null && staleReceipt.GuestBootAttempted)
                     {
                         State = ProvisioningState.Faulted;
@@ -332,17 +268,6 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
                 if (!Directory.Exists(RuntimeDirectory))
                 {
                     Directory.CreateDirectory(RuntimeDirectory);
-                }
-
-                if (_streamProvisioner == null)
-                {
-                    State = ProvisioningState.Faulted;
-                    return BackendProvisionResult.FaultedResult(
-                        TargetDiskPath,
-                        ReceiptPath,
-                        "SparseRawProvisioner stream overload ProvisionRawImage(Stream, string, ProvisionOptions, ...) was not found." +
-                        " Please ensure Storage agent 891234 changes are present.",
-                        stopwatch.ElapsedMilliseconds);
                 }
 
                 State = ProvisioningState.OpeningSource;
@@ -370,7 +295,7 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
 
                 State = ProvisioningState.DecompressingAndAllocating;
 
-                // 3. Direct GZip streaming decompression into SparseRawProvisioner
+                // 3. Direct GZip streaming decompression into SparseRawProvisioner using exact signature
                 using (compressedSourceStream)
                 using (GZipStream gzipStream = new GZipStream(compressedSourceStream, CompressionMode.Decompress, leaveOpen: false))
                 {
@@ -403,8 +328,9 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
                         });
                     }
 
+                    // Direct invocation of exact stream overload (no runtime reflection)
                     ProvisionResult provisionResult = await Task.Run(() =>
-                        _streamProvisioner(gzipStream, TargetDiskPath, options, storageProgress, cancellationToken),
+                        _sparseProvisioner.ProvisionRawImage(gzipStream, TargetDiskPath, options, storageProgress, cancellationToken),
                         cancellationToken).ConfigureAwait(false);
 
                     if (!provisionResult.Success)
@@ -485,35 +411,63 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         }
 
         /// <inheritdoc />
-        public Task<bool> MarkBootAttemptedAsync()
+        public async Task<bool> MarkBootAttemptedAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Task.Run(() => MarkBootAttempted());
+            await _provisionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return MarkBootAttemptedCore();
+            }
+            finally
+            {
+                _provisionLock.Release();
+            }
         }
 
         /// <inheritdoc />
         public bool MarkBootAttempted()
         {
-            lock (_syncLock)
+            _provisionLock.Wait();
+            try
             {
-                if (!File.Exists(TargetDiskPath) || !File.Exists(ReceiptPath))
+                return MarkBootAttemptedCore();
+            }
+            finally
+            {
+                _provisionLock.Release();
+            }
+        }
+
+        private bool MarkBootAttemptedCore()
+        {
+            if (!File.Exists(TargetDiskPath) || !File.Exists(ReceiptPath))
+            {
+                return false;
+            }
+
+            try
+            {
+                ProvisioningReceipt receipt = ProvisioningReceipt.LoadFromFile(ReceiptPath);
+                if (receipt == null || !receipt.Matches(BackendProvisionerConstants.PinnedRawSha512,
+                    BackendProvisionerConstants.TargetLogicalSizeBytes) ||
+                    new FileInfo(TargetDiskPath).Length != BackendProvisionerConstants.TargetLogicalSizeBytes) return false;
+
+                receipt.GuestBootAttempted = true;
+                receipt.LastBootAttemptUtc = DateTimeOffset.UtcNow.ToString("O");
+                ProvisioningReceipt.SaveAtomic(ReceiptPath, receipt);
+
+                // Verify that the bootflag was successfully persisted to disk before returning true
+                ProvisioningReceipt verified = ProvisioningReceipt.LoadFromFile(ReceiptPath);
+                if (verified == null || !verified.GuestBootAttempted)
                 {
                     return false;
                 }
 
-                try
-                {
-                    ProvisioningReceipt receipt = ProvisioningReceipt.LoadFromFile(ReceiptPath);
-                    if (receipt == null) return false;
-
-                    receipt.GuestBootAttempted = true;
-                    receipt.LastBootAttemptUtc = DateTimeOffset.UtcNow.ToString("O");
-                    ProvisioningReceipt.SaveAtomic(ReceiptPath, receipt);
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
     }

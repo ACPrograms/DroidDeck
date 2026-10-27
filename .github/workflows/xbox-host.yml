@@ -25,6 +25,7 @@ jobs:
         run: |
           python tools/xbox/test_guest_gamepad.py -v
           bash -n tools/xbox/prepare-native-guest.sh
+          bash -n tools/xbox/bootstrap-native-guest.sh
       - uses: actions/cache@v4
         id: native-sdk
         with:

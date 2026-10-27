@@ -1,8 +1,9 @@
 // ------------------------------------------------------------------------------------------------
 // DroidDeck Xbox Host Backend: Provisioning Receipt
 //
-// Persistent, tamper-evident metadata receipt guaranteeing that an existing virtual disk
-// was verified against pinned public OS distribution hash before guest execution.
+// Persistent metadata receipt documenting provisioned disk parameters and boot protection flags.
+// NOTE: This receipt is an unauthenticated, non-tamper-evident JSON record for state tracking
+// and boot protection, not a cryptographic attestation.
 // ------------------------------------------------------------------------------------------------
 
 using System;
@@ -13,8 +14,10 @@ using System.Text.Json.Serialization;
 namespace DroidDeckXboxHost.Runtime.Provisioning
 {
     /// <summary>
-    /// Persistent verification receipt created atomically upon successful sparse disk provisioning.
-    /// Used to safely reuse existing guest disks without re-reading or re-hashing mutable filesystem data.
+    /// Persistent metadata receipt created atomically upon successful sparse disk provisioning.
+    /// Documents verified source hash, size, and guest boot flags to avoid re-reading or re-hashing
+    /// mutable filesystem data after boot.
+    /// NOTE: Unauthenticated plaintext JSON; not tamper-evident.
     /// </summary>
     public sealed class ProvisioningReceipt
     {
@@ -147,7 +150,8 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
 
         /// <summary>
         /// Atomically saves the receipt to disk by writing to a temporary file, flushing,
-        /// and renaming to the destination path.
+        /// and renaming/replacing to the destination path.
+        /// Preserves prior receipt if replacement fails; never deletes existing receipt as fallback.
         /// </summary>
         public static void SaveAtomic(string receiptPath, ProvisioningReceipt receipt)
         {
@@ -181,15 +185,10 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
 
                 if (File.Exists(receiptPath))
                 {
-                    try
-                    {
-                        File.Replace(tempPath, receiptPath, null);
-                    }
-                    catch
-                    {
-                        File.Delete(receiptPath);
-                        File.Move(tempPath, receiptPath);
-                    }
+                    // Atomic replacement: preserves existing receipt if replacement fails.
+                    // Under no circumstances should receiptPath be deleted as a fallback.
+                    // Failure to replace means the existing receipt remains intact and no boot is permitted.
+                    File.Replace(tempPath, receiptPath, null);
                 }
                 else
                 {

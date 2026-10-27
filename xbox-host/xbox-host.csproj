@@ -87,6 +87,14 @@
       <TargetPath>pc-bios\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
     </Content>
     <Content Include="ThirdParty\*" />
+    <Content Include="..\tools\linuxfs\overlay\usr\local\bin\droiddeck-*">
+      <Link>Assets\LinuxPlatform\overlay\usr\local\bin\%(Filename)%(Extension)</Link>
+      <TargetPath>Assets\LinuxPlatform\overlay\usr\local\bin\%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="..\tools\xbox\prepare-native-guest.sh;..\tools\xbox\bootstrap-native-guest.sh;..\tools\xbox\guest-gamepad.py">
+      <Link>Assets\LinuxPlatform\xbox\%(Filename)%(Extension)</Link>
+      <TargetPath>Assets\LinuxPlatform\xbox\%(Filename)%(Extension)</TargetPath>
+    </Content>
     <Content Include="Assets\*.png" />
     <Content Include="Assets\DroidDeckUI\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

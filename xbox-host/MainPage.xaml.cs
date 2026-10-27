@@ -58,7 +58,7 @@ namespace DroidDeckXboxHost
             Dispatcher.AcceleratorKeyActivated += (sender, args) =>
             {
                 var backend = _runtime.Backend;
-                if (backend == null || !backend.IsRunning || GuestImage.Visibility != Visibility.Visible) return;
+                if (backend == null || !backend.IsRunning || GuestSurface.Visibility != Visibility.Visible) return;
                 bool down = args.EventType == CoreAcceleratorKeyEventType.KeyDown || args.EventType == CoreAcceleratorKeyEventType.SystemKeyDown;
                 args.Handled = backend.InputBridge.ProcessKeyEvent(args.VirtualKey, args.KeyStatus, down);
             };
@@ -76,6 +76,7 @@ namespace DroidDeckXboxHost
             {
                 GuestImage.Visibility = Visibility.Collapsed;
                 GuestPanel.Visibility = Visibility.Collapsed;
+                GuestSurface.Visibility = Visibility.Collapsed;
                 HostWebView.IsEnabled = true;
                 return;
             }
@@ -88,6 +89,7 @@ namespace DroidDeckXboxHost
                     {
                         float scale = (float)Windows.Graphics.Display.DisplayInformation.GetForCurrentView().RawPixelsPerViewPixel;
                         GuestPanel.Visibility = Visibility.Visible;
+                        GuestSurface.Visibility = Visibility.Visible;
                         display.BindSwapChainPanel(GuestPanel, ActualWidth, ActualHeight, scale, scale);
                         _guestPanelBound = true;
                     }
@@ -113,6 +115,7 @@ namespace DroidDeckXboxHost
                 using (Stream stream = _guestBitmap.PixelBuffer.AsStream()) stream.Write(pixels, 0, width * height * 4);
                 _guestBitmap.Invalidate();
                 GuestImage.Visibility = Visibility.Visible;
+                GuestSurface.Visibility = Visibility.Visible;
                 HostWebView.IsEnabled = false;
                 backend.InputBridge.FlushAbsolute();
             }
@@ -126,12 +129,17 @@ namespace DroidDeckXboxHost
         private void OnGuestPointer(object sender, PointerRoutedEventArgs args)
         {
             var backend = _runtime.Backend;
-            if (backend == null || !backend.IsRunning || _guestBitmap == null) return;
-            var point = args.GetCurrentPoint(GuestImage);
+            var surface = sender as FrameworkElement;
+            if (backend == null || !backend.IsRunning || surface == null) return;
+            var display = backend.DisplayBridge;
+            int width = display.DirectFrameCount > 0 ? display.LastDirectWidth : (_guestBitmap?.PixelWidth ?? 0);
+            int height = display.DirectFrameCount > 0 ? display.LastDirectHeight : (_guestBitmap?.PixelHeight ?? 0);
+            if (width <= 0 || height <= 0) return;
+            var point = args.GetCurrentPoint(surface);
             int buttons = (point.Properties.IsLeftButtonPressed ? 1 : 0) |
                 (point.Properties.IsRightButtonPressed ? 2 : 0) | (point.Properties.IsMiddleButtonPressed ? 4 : 0);
             backend.InputBridge.UpdateAbsolutePointer(point.Position.X, point.Position.Y,
-                GuestImage.ActualWidth, GuestImage.ActualHeight, _guestBitmap.PixelWidth, _guestBitmap.PixelHeight,
+                surface.ActualWidth, surface.ActualHeight, width, height,
                 point.Properties.MouseWheelDelta / 120, buttons);
             backend.InputBridge.FlushAbsolute();
             args.Handled = true;

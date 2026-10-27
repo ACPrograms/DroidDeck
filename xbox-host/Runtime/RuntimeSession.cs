@@ -82,6 +82,7 @@ namespace DroidDeckXboxHost.Runtime
                     RootDiskPath = provisioner.TargetDiskPath,
                     ProvisioningReceiptPath = provisioner.ReceiptPath,
                     SeedIsoPath = seed,
+                    SharedFolderPath = Path.Combine(Package.Current.InstalledLocation.Path, "Assets", "LinuxPlatform"),
                     BiosDirectory = Path.Combine(Package.Current.InstalledLocation.Path, "pc-bios"),
                     GpuMode = File.Exists(Path.Combine(_local, "runtime-gpu-angle.request"))
                         ? QemuGpuMode.GpuDirectAngle : QemuGpuMode.SoftwareFramebuffer,

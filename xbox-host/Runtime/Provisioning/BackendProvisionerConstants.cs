@@ -37,7 +37,7 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         public const int ChunkSizeBytes = 64 * 1024; // 65,536 bytes
 
         /// <summary>
-        /// Relative folder name inside AppData LocalFolder dedicated to DroidDeck VM runtime assets.
+        /// Default relative folder name for DroidDeck VM runtime assets.
         /// </summary>
         public const string RuntimeFolderName = "DroidDeckRuntime";
 

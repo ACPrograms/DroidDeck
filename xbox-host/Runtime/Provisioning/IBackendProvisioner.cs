@@ -24,12 +24,12 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         ProvisioningState State { get; }
 
         /// <summary>
-        /// Absolute path of the target root disk file (e.g. LocalFolder/DroidDeckRuntime/root.raw).
+        /// Absolute path of the target root disk file ({RuntimeDirectory}/root.raw).
         /// </summary>
         string TargetDiskPath { get; }
 
         /// <summary>
-        /// Absolute path of the atomic provisioning receipt record.
+        /// Absolute path of the atomic provisioning receipt record ({RuntimeDirectory}/root.raw.receipt.json).
         /// </summary>
         string ReceiptPath { get; }
 
@@ -67,11 +67,12 @@ namespace DroidDeckXboxHost.Runtime.Provisioning
         /// Flags the provisioning receipt to record that a VM boot has been attempted.
         /// MUST be invoked by the host runner immediately before calling QEMU Start.
         /// Once set, the provisioner will NEVER delete or modify this disk under any circumstance.
+        /// Serialized under the same semaphore as EnsureProvisionedAsync; verifies persistence before returning true.
         /// </summary>
-        Task<bool> MarkBootAttemptedAsync();
+        Task<bool> MarkBootAttemptedAsync(CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
-        /// Synchronous variant of MarkBootAttempted.
+        /// Synchronous variant of MarkBootAttemptedAsync.
         /// </summary>
         bool MarkBootAttempted();
     }
