@@ -1,5 +1,5 @@
 diff --git a/src/Backends/WaylandBackend.cpp b/src/Backends/WaylandBackend.cpp
-index 40164ba..876cafc 100644
+index 40164ba..1b85e63 100644
 --- a/src/Backends/WaylandBackend.cpp
 +++ b/src/Backends/WaylandBackend.cpp
 @@ -1698,6 +1698,52 @@ namespace gamescope
@@ -76,6 +76,16 @@ index 40164ba..876cafc 100644
              }
  
              m_pConnector->SetHostCompositorIsCurrentlyVRR( false );
+@@ -2636,6 +2684,9 @@ namespace gamescope
+     }
+     void CWaylandBackend::Wayland_Output_Mode( wl_output *pOutput, uint32_t uFlags, int32_t nWidth, int32_t nHeight, int32_t nRefresh )
+     {
++        // The followed rate comes from presentation feedback, so a still screen presents once for it.
++        if ( NestedRefreshFollowsHost() && m_pOutputs[ pOutput ].nRefresh != nRefresh )
++            force_repaint();
+         m_pOutputs[ pOutput ].nRefresh = nRefresh;
+     }
+     void CWaylandBackend::Wayland_Output_Done( wl_output *pOutput )
 diff --git a/src/steamcompmgr.cpp b/src/steamcompmgr.cpp
 index 6c9299d..5fb9086 100644
 --- a/src/steamcompmgr.cpp
