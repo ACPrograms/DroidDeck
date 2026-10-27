@@ -54,6 +54,8 @@ namespace DroidDeckXboxHost
         {
             if (_initializationStarted) return;
             _initializationStarted = true;
+            try { await StoragePreflight.RunIfRequestedAsync(); }
+            catch (Exception ex) { _diagnostics.AddMessage("Storage preflight HRESULT=0x" + ex.HResult.ToString("X8")); }
             _diagnostics.TransitionTo(HostLifecycleState.InitializingWebView2, "Starting EnsureCoreWebView2Async");
 
             try
