@@ -1,6 +1,9 @@
 name: Build original DroidDeck Xbox UI host
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/xbox-adaptation]
+    paths: [xbox-host/**, xbox-ui/**, .github/workflows/xbox-host.yml]
 permissions:
   contents: read
 jobs:
