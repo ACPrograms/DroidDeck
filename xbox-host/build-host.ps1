@@ -95,7 +95,7 @@ try {
         throw "MSBuild exited with code $LASTEXITCODE"
     }
 
-    $packages = @(Get-ChildItem $packageDir -Recurse -File | Where-Object { $_.Extension -in '.appx', '.msix' -and $_.Name -like 'DroidDeckXboxHost*' })
+    $packages = @(Get-ChildItem $packageDir -Recurse -File | Where-Object { $_.Extension -in '.appx', '.msix' -and $_.Name -like 'xbox-host_*' })
     if ($packages.Count -eq 0) {
         throw "No Appx/Msix package was produced in $packageDir."
     }

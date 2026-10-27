@@ -65,6 +65,7 @@
     </Compile>
     <Compile Include="DiagnosticState.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <None Include="Properties\Default.rd.xml" />
   </ItemGroup>
   <ItemGroup>
     <AppxManifest Include="Package.appxmanifest">
