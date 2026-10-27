@@ -20,7 +20,13 @@ jobs:
           java-version: '21'
           cache: gradle
           cache-dependency-path: xbox-ui/*.kts
+      - uses: actions/cache@v4
+        id: ui-assets
+        with:
+          path: xbox-ui/build/dist/wasmJs/productionExecutable
+          key: ${{ runner.os }}-droiddeck-compose-${{ hashFiles('xbox-ui/**', 'app/src/main/java/**', 'app/src/main/res/**') }}
       - name: Compile original Compose sources
+        if: steps.ui-assets.outputs.cache-hit != 'true'
         shell: pwsh
         run: ./gradlew.bat -p xbox-ui wasmJsBrowserDistribution --no-daemon
       - name: Package original UI in Xbox host

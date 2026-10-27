@@ -86,6 +86,10 @@
     <PackageReference Include="Microsoft.UI.Xaml">
       <Version>2.8.6</Version>
     </PackageReference>
+    <!-- WinUI 2 defaults to a WebView2 SDK that predates Xbox support. -->
+    <PackageReference Include="Microsoft.Web.WebView2">
+      <Version>1.0.2210.55</Version>
+    </PackageReference>
     <PackageReference Include="System.Text.Json">
       <Version>8.0.5</Version>
     </PackageReference>
