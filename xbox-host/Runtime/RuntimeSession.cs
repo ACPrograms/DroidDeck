@@ -21,26 +21,45 @@ namespace DroidDeckXboxHost.Runtime
         private QemuBackendAdapter _backend;
         private GamepadTransport _gamepad;
         private readonly SemaphoreSlim _saveLock = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _lifecycleLock = new SemaphoreSlim(1, 1);
 
         public RuntimeSession(Action<string, int, bool> report) { _report = report; }
         public QemuBackendAdapter Backend => _backend;
 
-        public Task PauseAsync() => Task.Run(() =>
+        public async Task PauseAsync()
         {
-            _gamepad?.Dispose();
-            _gamepad = null;
-            if (_backend != null && _backend.IsRunning) _backend.Pause(1000);
-        });
-
-        public Task ResumeAsync() => Task.Run(() =>
-        {
-            if (_backend == null || _backend.State != QemuAdapterState.Paused) return;
-            if (_backend.Resume(1000))
+            await _lifecycleLock.WaitAsync();
+            try
             {
-                _gamepad = new GamepadTransport();
-                _gamepad.Start();
+                await Task.Run(() =>
+                {
+                    _gamepad?.Dispose();
+                    _gamepad = null;
+                    if (_backend != null && _backend.IsRunning) _backend.Pause(1000);
+                });
             }
-        });
+            finally { _lifecycleLock.Release(); }
+        }
+
+        public async Task ResumeAsync()
+        {
+            await _lifecycleLock.WaitAsync();
+            try
+            {
+                await Task.Run(() =>
+                {
+                    if (_backend == null || !_backend.IsRunning) return;
+                    // A timed-out stop can still have paused the guest. Cont is idempotent.
+                    _backend.Resume(1000);
+                    if (_gamepad == null)
+                    {
+                        _gamepad = new GamepadTransport();
+                        _gamepad.Start();
+                    }
+                });
+            }
+            finally { _lifecycleLock.Release(); }
+        }
 
         public async Task StartIfRequestedAsync()
         {

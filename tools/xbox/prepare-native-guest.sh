@@ -65,7 +65,7 @@ Description=DroidDeck Xbox guest display
 After=systemd-user-sessions.service
 Conflicts=getty@tty1.service
 [Service]
-ExecStart=/usr/lib/xorg/Xorg :0 -ac -nolisten tcp -noreset vt1
+ExecStart=/usr/lib/xorg/Xorg :0 -ac -nolisten tcp -noreset -s 0 -dpms vt1
 [Install]
 WantedBy=multi-user.target
 UNIT
