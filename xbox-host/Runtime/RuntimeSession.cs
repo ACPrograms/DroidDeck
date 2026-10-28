@@ -121,6 +121,14 @@ namespace DroidDeckXboxHost.Runtime
                     config.RamMegabytes = 2048;
                     config.TbCacheMegabytes = 128;
                 }
+                // Diagnostic profile: retain Steam's SSE4.2 requirement without AVX or multi-thread TCG.
+                if (File.Exists(Path.Combine(_local, "runtime-cef-cpu.request")))
+                {
+                    config.CpuModel = "Nehalem";
+                    config.CpuCount = 1;
+                    config.RamMegabytes = 3072;
+                    config.TbCacheMegabytes = 128;
+                }
                 var validation = QemuPackageVerifier.Validate(Package.Current.InstalledLocation.Path, config, true);
                 if (!validation.IsValid) throw new InvalidOperationException(validation.ErrorMessage);
                 // Persist the protection flag BEFORE entering any native guest code.
