@@ -91,7 +91,7 @@
       <Link>Assets\LinuxPlatform\overlay\usr\local\bin\%(Filename)%(Extension)</Link>
       <TargetPath>Assets\LinuxPlatform\overlay\usr\local\bin\%(Filename)%(Extension)</TargetPath>
     </Content>
-    <Content Include="..\tools\xbox\prepare-native-guest.sh;..\tools\xbox\bootstrap-native-guest.sh;..\tools\xbox\guest-gamepad.py;..\tools\xbox\native-client-status.py">
+    <Content Include="..\tools\xbox\prepare-native-guest.sh;..\tools\xbox\bootstrap-native-guest.sh;..\tools\xbox\guest-gamepad.py;..\tools\xbox\native-client-status.py;..\tools\xbox\native-sparse-zero.c">
       <Link>Assets\LinuxPlatform\xbox\%(Filename)%(Extension)</Link>
       <TargetPath>Assets\LinuxPlatform\xbox\%(Filename)%(Extension)</TargetPath>
     </Content>

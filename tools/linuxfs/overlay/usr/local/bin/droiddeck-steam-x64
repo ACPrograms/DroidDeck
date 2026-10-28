@@ -843,6 +843,18 @@ x64_exec() {
     # A full Linux guest must let Valve select its normal container runtime.
     # The FEX/PRoot recursion bypass belongs only to the emulated Android path.
     unset STEAM_RUNTIME STEAM_STEAMRT_RECURSION_GUARD
+    # Valve imports preloads from HOME into its container. Keep this platform
+    # adapter outside Steam's managed files; it only activates in webhelper.
+    native_zero=/usr/local/libexec/droiddeck-xbox/libnative-sparse-zero.so
+    if [ "${BL_NATIVE_SPARSE_ZERO:-1}" = 1 ] && [ -r "$native_zero" ]; then
+      native_dir=$HOME/.local/lib/droiddeck-xbox
+      mkdir -p "$native_dir"
+      native_tmp=$(mktemp "$native_dir/.sparse-zero.XXXXXX")
+      install -m 644 "$native_zero" "$native_tmp"
+      mv -Tf "$native_tmp" "$native_dir/libnative-sparse-zero.so"
+      export LD_PRELOAD="$native_dir/libnative-sparse-zero.so${LD_PRELOAD:+:$LD_PRELOAD}"
+      export DROIDDECK_SPARSE_ZERO=1
+    fi
     cd "$STEAM_X64"
     exec "$STEAM_X64/steam.sh" "$@"
   fi

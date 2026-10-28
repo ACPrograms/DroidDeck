@@ -13,7 +13,7 @@ export DEBIAN_FRONTEND=noninteractive
 dpkg --add-architecture i386
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  steam-libs:amd64 steam-libs:i386 \
+  steam-libs:amd64 steam-libs:i386 gcc libc6-dev \
   libsdl2-2.0-0:amd64 libsdl2-2.0-0:i386 libcurl4:i386 libcurl3-gnutls:i386 \
   xserver-xorg-core xserver-xorg-video-fbdev xserver-xorg-video-vesa \
   xserver-xorg-input-libinput x11-utils openbox dbus-x11 curl ca-certificates \
@@ -56,6 +56,9 @@ else
 fi
 mount -o remount,size=3G /dev/shm
 install -d /usr/local/bin /usr/local/libexec/droiddeck-xbox
+gcc -shared -fPIC -O2 -fno-builtin -Wall -Wextra -Werror \
+  -o /usr/local/libexec/droiddeck-xbox/libnative-sparse-zero.so \
+  "$(dirname "${BASH_SOURCE[0]}")/native-sparse-zero.c" -ldl
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/guest-gamepad.py" /usr/local/libexec/droiddeck-xbox/gamepad
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/native-client-status.py" /usr/local/libexec/droiddeck-xbox/client-status
 find "$original/usr/local/bin" -maxdepth 1 -type f \

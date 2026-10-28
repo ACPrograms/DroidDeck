@@ -8,7 +8,13 @@ permissions:
   contents: read
   actions: read
 jobs:
+  native-memory:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/xbox/test_native_sparse_zero.py -v
   package:
+    needs: native-memory
     runs-on: windows-2022
     timeout-minutes: 25
     steps:
