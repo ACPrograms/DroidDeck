@@ -15,8 +15,8 @@ namespace DroidDeckXboxHost
             this.Suspending += OnSuspending;
             this.Resuming += OnResuming;
 
-            // Enable gamepad virtual mouse pointer on Xbox when requested
-            this.RequiresPointerMode = ApplicationRequiresPointerMode.WhenRequested;
+            // Steam's desktop needs Xbox's controller-driven mouse mode.
+            this.RequiresPointerMode = ApplicationRequiresPointerMode.Auto;
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)

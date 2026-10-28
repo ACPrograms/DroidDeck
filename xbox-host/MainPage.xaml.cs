@@ -34,6 +34,7 @@ namespace DroidDeckXboxHost
         private bool _guestTickPending;
         private bool _frontendSuspendAttempted;
         private int _guestPointerButtons;
+        private bool _pointerModeChordDown;
         private DateTimeOffset _guestRetryAfter;
 
         public DiagnosticState Diagnostics => _diagnostics;
@@ -62,15 +63,26 @@ namespace DroidDeckXboxHost
             _guestTimer.Start();
             Window.Current.CoreWindow.KeyDown += (sender, args) => ForwardFrontKey(args, true);
             Window.Current.CoreWindow.KeyUp += (sender, args) => ForwardFrontKey(args, false);
+            Window.Current.CoreWindow.Dispatcher.AcceleratorKeyActivated += OnGuestAcceleratorKey;
+        }
+
+        private void OnGuestAcceleratorKey(CoreDispatcher sender, AcceleratorKeyEventArgs args)
+        {
+            if (GuestSurface.Visibility != Visibility.Visible) return;
+            bool down = args.EventType == CoreAcceleratorKeyEventType.KeyDown ||
+                args.EventType == CoreAcceleratorKeyEventType.SystemKeyDown;
+            bool up = args.EventType == CoreAcceleratorKeyEventType.KeyUp ||
+                args.EventType == CoreAcceleratorKeyEventType.SystemKeyUp;
+            var backend = _runtime.Backend;
+            if ((down || up) && backend != null && backend.IsRunning)
+                args.Handled = backend.InputBridge.ProcessKeyEvent(args.VirtualKey, args.KeyStatus, down);
         }
 
         private async void ForwardFrontKey(KeyEventArgs args, bool down)
         {
             if (GuestSurface.Visibility == Visibility.Visible)
             {
-                var backend = _runtime.Backend;
-                if (backend != null && backend.IsRunning)
-                    args.Handled = backend.InputBridge.ProcessKeyEvent(args.VirtualKey, args.KeyStatus, down);
+                // Guest keys are handled once at dispatcher level, including Tab/Alt.
                 return;
             }
             if (HostWebView.CoreWebView2 == null ||
@@ -162,6 +174,16 @@ namespace DroidDeckXboxHost
                         catch (Exception ex) { _diagnostics.AddMessage("Launcher suspend HRESULT=0x" + ex.HResult.ToString("X8")); }
                     }
                     var display = backend.DisplayBridge;
+                    var pads = Windows.Gaming.Input.Gamepad.Gamepads;
+                    var modeButtons = Windows.Gaming.Input.GamepadButtons.Menu |
+                        Windows.Gaming.Input.GamepadButtons.View;
+                    bool modeChord = pads.Count > 0 &&
+                        (pads[0].GetCurrentReading().Buttons & modeButtons) == modeButtons;
+                    if (modeChord && !_pointerModeChordDown)
+                        Application.Current.RequiresPointerMode =
+                            Application.Current.RequiresPointerMode == ApplicationRequiresPointerMode.Auto
+                            ? ApplicationRequiresPointerMode.WhenRequested : ApplicationRequiresPointerMode.Auto;
+                    _pointerModeChordDown = modeChord;
                     // Input must advance even when the guest image is unchanged.
                     backend.InputBridge.FlushAbsolute();
                     if (display.IsDirectModeRequested)
