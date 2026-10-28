@@ -34,8 +34,11 @@ class NativeClientStatusTests(unittest.TestCase):
             ("mmap failed: cannot allocate memory", "ALLOCATION_FAILURE"),
             ("out of memory while allocating font atlas", "ALLOCATION_FAILURE"),
             # MISSING_LIBRARY
-            ("error while loading shared libraries: libgtk-x11-2.0.so.0: cannot open shared object file", "MISSING_LIBRARY"),
-            ("undefined symbol: XF86VidModeQueryExtension", "MISSING_LIBRARY"),
+            ("error while loading shared libraries: libgtk-x11-2.0.so.0: cannot open shared object file", "MISSING_GTK_LIBRARY"),
+            ("undefined symbol: XF86VidModeQueryExtension", "MISSING_SYMBOL"),
+            ("gameoverlayrenderer.so: cannot open shared object file", "MISSING_STEAM_OVERLAY"),
+            ("libEGL.so.1: cannot open shared object file", "MISSING_GRAPHICS_LIBRARY"),
+            ("libnm.so.0: cannot open shared object file", "MISSING_INPUT_NETWORK_LIBRARY"),
             # GRAPHICS_FAILURE
             ("libGL error: failed to create gl context", "GRAPHICS_FAILURE"),
             ("dri driver not found for gallium", "GRAPHICS_FAILURE"),

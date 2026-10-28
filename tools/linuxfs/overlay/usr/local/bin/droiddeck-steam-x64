@@ -840,7 +840,9 @@ x64_exec() {
     if [ "${BL_X64_CLIENT_SOFTWARE:-1}" = 1 ]; then
       export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe LIBGL_DRI3_DISABLE=1
     fi
-    export STEAM_RUNTIME=1 STEAM_STEAMRT_RECURSION_GUARD=1
+    # A full Linux guest must let Valve select its normal container runtime.
+    # The FEX/PRoot recursion bypass belongs only to the emulated Android path.
+    unset STEAM_RUNTIME STEAM_STEAMRT_RECURSION_GUARD
     cd "$STEAM_X64"
     exec "$STEAM_X64/steam.sh" "$@"
   fi

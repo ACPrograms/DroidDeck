@@ -55,13 +55,14 @@ class NativeX64Test(unittest.TestCase):
         self.assertEqual(result.stdout.splitlines(), ['-nobigpicture', 'steam://rungameid/123', 'argument with spaces'])
         self.assertFalse((self.root / '.droiddeck-x64').exists())
 
-    def test_native_software_renderer_retains_upstream_environment(self):
+    def test_native_software_renderer_clears_mobile_runtime_overrides(self):
         self.installed()
+        self.env.update(STEAM_RUNTIME='1', STEAM_STEAMRT_RECURSION_GUARD='1')
         (self.steam / 'steam.sh').write_text(
             '#!/bin/bash\nprintf "%s\\n" "$LIBGL_ALWAYS_SOFTWARE" "$GALLIUM_DRIVER" "$LIBGL_DRI3_DISABLE" "$STEAM_RUNTIME" "$STEAM_STEAMRT_RECURSION_GUARD"\n')
         result = self.run_client('--exec')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines(), ['1', 'llvmpipe', '1', '1', '1'])
+        self.assertEqual(result.stdout.splitlines(), ['1', 'llvmpipe', '1', '', ''])
 
     def test_existing_native_install_does_not_require_fex(self):
         self.installed()

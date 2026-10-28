@@ -34,6 +34,14 @@ REASONS = (
     "CLIENT_ABORT",
     "ALLOCATION_FAILURE",
     "MISSING_LIBRARY",
+    "MISSING_SYMBOL",
+    "MISSING_STEAM_OVERLAY",
+    "MISSING_GRAPHICS_LIBRARY",
+    "MISSING_GTK_LIBRARY",
+    "MISSING_X11_LIBRARY",
+    "MISSING_AUDIO_LIBRARY",
+    "MISSING_INPUT_NETWORK_LIBRARY",
+    "MISSING_CRYPTO_LIBRARY",
     "GRAPHICS_FAILURE",
     "CLIENT_ASSERTION",
     "DISK_FULL",
@@ -96,6 +104,17 @@ WHITELIST_PATTERNS = [
     ),
 ]
 
+# Only fixed public library families are exported, never names parsed from output.
+LIBRARY_GROUPS = (
+    ("MISSING_STEAM_OVERLAY", ("gameoverlayrenderer.so",)),
+    ("MISSING_GRAPHICS_LIBRARY", ("libgl.so", "libegl.so", "libgles", "libvulkan", "libglx", "libgbm", "libdrm")),
+    ("MISSING_GTK_LIBRARY", ("libgtk-", "libgdk-", "libgdk_pixbuf", "libpango", "libatk")),
+    ("MISSING_X11_LIBRARY", ("libx11", "libxcb", "libxi.so", "libxtst", "libxrandr")),
+    ("MISSING_AUDIO_LIBRARY", ("libpulse", "libpipewire", "libasound", "libopenal")),
+    ("MISSING_INPUT_NETWORK_LIBRARY", ("libnm.so", "libibus", "libudev")),
+    ("MISSING_CRYPTO_LIBRARY", ("libnss", "libnspr", "libssl", "libcrypto")),
+)
+
 
 def classify_line(line: str) -> Optional[str]:
     """Pure classifier: matches known fatal error patterns against a bounded text slice.
@@ -105,6 +124,13 @@ def classify_line(line: str) -> Optional[str]:
     """
     for reason, pattern in WHITELIST_PATTERNS:
         if pattern.search(line):
+            if reason == "MISSING_LIBRARY":
+                lowered = line.lower()
+                if "undefined symbol" in lowered:
+                    return "MISSING_SYMBOL"
+                for family, libraries in LIBRARY_GROUPS:
+                    if any(library in lowered for library in libraries):
+                        return family
             return reason
     return None
 
