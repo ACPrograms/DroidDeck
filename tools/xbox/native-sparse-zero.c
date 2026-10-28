@@ -52,7 +52,10 @@ __attribute__((constructor)) static void initialize(void)
                 status_fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
                 if (status_fd >= 0) {
                     static const char state[] = "HELPER_LOADED\n";
-                    (void)write(status_fd, state, sizeof(state) - 1);
+                    if (write(status_fd, state, sizeof(state) - 1) != (ssize_t)(sizeof(state) - 1)) {
+                        close(status_fd);
+                        status_fd = -1;
+                    }
                 }
             }
         }
@@ -163,7 +166,10 @@ void *memset(void *destination, int value, size_t length)
         next_memset((char *)destination + full_pages, 0, length - full_pages);
         if (!atomic_flag_test_and_set(&reported) && status_fd >= 0) {
             static const char state[] = "SPARSE_ZERO_USED\n";
-            (void)write(status_fd, state, sizeof(state) - 1);
+            if (write(status_fd, state, sizeof(state) - 1) != (ssize_t)(sizeof(state) - 1)) {
+                close(status_fd);
+                status_fd = -1;
+            }
         }
     }
     inside = 0;

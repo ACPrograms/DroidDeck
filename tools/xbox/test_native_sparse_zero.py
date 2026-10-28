@@ -55,7 +55,7 @@ class NativeSparseZeroTest(unittest.TestCase):
             for fixture_build, force_fixture in ((False, True), (True, False), (True, True)):
                 library = root / ('fixture.so' if fixture_build else 'production.so')
                 command = ['gcc', '-shared', '-fPIC', '-O2', '-fno-builtin',
-                           '-Wall', '-Wextra', '-Werror']
+                           '-Wall', '-Wextra', '-Werror', '-D_FORTIFY_SOURCE=2']
                 if fixture_build:
                     command.append('-DDROIDDECK_SPARSE_ZERO_FIXTURE')
                 subprocess.run(command + ['-o', str(library), str(SOURCE), '-ldl'], check=True)
