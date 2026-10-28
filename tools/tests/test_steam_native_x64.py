@@ -155,6 +155,21 @@ class NativeX64Test(unittest.TestCase):
                 expected = ['-cef-force-gpu', '-cef-use-gl=angle', '-cef-use-angle=vulkan']
             self.assertEqual(result.stdout.splitlines(), expected)
 
+    def test_native_single_process_probe_is_opt_in_and_keeps_legacy_default(self):
+        source = (SCRIPT.parent / 'droiddeck-session').read_text()
+        block = source[source.index('    _bl_ui=(-gamepadui)'):source.index('    if [ "${BL_STEAM_UI:-}" != desktop ]; then')]
+        for native, probe in [('0', '0'), ('0', '1'), ('1', '0'), ('1', '1')]:
+            env = dict(self.env, BL_X64_NATIVE=native, BL_NATIVE_CEF_SINGLE_PROCESS=probe,
+                       BL_NATIVE_CEF_DISABLE_HANG_TIMEOUTS='0', BL_NATIVE_CEF_GPU='0',
+                       BL_DESKTOP='1', BL_STEAM_UI='desktop')
+            result = subprocess.run(['bash', '-c', block + '\nprintf "%s\\n" "${_bl_cef[@]}"'],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            expected = ['-cef-disable-gpu']
+            if native == probe == '1':
+                expected.append('-cef-single-process')
+            self.assertEqual(result.stdout.splitlines(), expected)
+
     def test_bad_download_checksum_cannot_become_an_install(self):
         self.client_archive(corrupt=True)
         result = self.run_client('--prepare')
