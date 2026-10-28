@@ -13,6 +13,7 @@ export DEBIAN_FRONTEND=noninteractive
 dpkg --add-architecture i386
 apt-get update -qq
 apt-get install -y --no-install-recommends \
+  steam-libs:amd64 steam-libs:i386 \
   xserver-xorg-core xserver-xorg-video-fbdev xserver-xorg-video-vesa \
   xserver-xorg-input-libinput x11-utils openbox dbus-x11 curl ca-certificates \
   file unzip xz-utils fonts-dejavu-core fonts-liberation python3 procps util-linux libgtk-3-0 libnss3 libxss1 libasound2 \
