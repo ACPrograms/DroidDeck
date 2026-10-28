@@ -61,6 +61,7 @@ gcc -shared -fPIC -O2 -fno-builtin -Wall -Wextra -Werror \
   "$(dirname "${BASH_SOURCE[0]}")/native-sparse-zero.c" -ldl
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/guest-gamepad.py" /usr/local/libexec/droiddeck-xbox/gamepad
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/native-client-status.py" /usr/local/libexec/droiddeck-xbox/client-status
+install -m 755 "$(dirname "${BASH_SOURCE[0]}")/guest-dns.py" /usr/local/libexec/droiddeck-xbox/dns-transport
 find "$original/usr/local/bin" -maxdepth 1 -type f \
   -exec install -m 755 '{}' /usr/local/bin/ \;
 
@@ -91,12 +92,24 @@ trap 'kill "$wm" 2>/dev/null || true' EXIT
 /usr/local/libexec/droiddeck-xbox/client-status
 SESSION
 chmod 755 /usr/local/libexec/droiddeck-xbox/x11-session
+cat > /etc/systemd/system/droiddeck-dns-transport.service <<'UNIT'
+[Unit]
+Description=DroidDeck guest TCP DNS transport
+Wants=network-online.target
+After=network-online.target
+Before=droiddeck-steam.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/droiddeck-xbox/dns-transport
+RemainAfterExit=yes
+UNIT
 cat > /etc/systemd/system/droiddeck-steam.service <<'UNIT'
 [Unit]
 Description=Original DroidDeck native Steam session
 After=network-online.target droiddeck-display.service dbus.service
 Requires=droiddeck-display.service
-Wants=network-online.target dbus.service
+Wants=network-online.target dbus.service droiddeck-dns-transport.service
+After=droiddeck-dns-transport.service
 [Service]
 User=droiddeck
 WorkingDirectory=/home/droiddeck
