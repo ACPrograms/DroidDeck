@@ -129,6 +129,8 @@ namespace DroidDeckXboxHost.Runtime
                     config.RamMegabytes = 3072;
                     config.TbCacheMegabytes = 128;
                 }
+                if (File.Exists(Path.Combine(_local, "runtime-tb512.request")))
+                    config.TbCacheMegabytes = 512;
                 var validation = QemuPackageVerifier.Validate(Package.Current.InstalledLocation.Path, config, true);
                 if (!validation.IsValid) throw new InvalidOperationException(validation.ErrorMessage);
                 // Persist the protection flag BEFORE entering any native guest code.
