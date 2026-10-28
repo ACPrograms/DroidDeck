@@ -53,6 +53,7 @@ class NativeClientStatusTests(unittest.TestCase):
             # Normal / non-fatal lines return None
             ("Steam logging initialized successfully", None),
             ("/dev/shm is available", None),
+            ("/dev/shm initialized successfully", None),
             ("Starting steamwebhelper in background", None),
             ("PulseAudio connected to default sink", None),
             ("User logged in with normal status", None),

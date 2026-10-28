@@ -94,6 +94,7 @@ User=droiddeck
 WorkingDirectory=/home/droiddeck
 RuntimeDirectory=droiddeck
 RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 Environment=HOME=/home/droiddeck DISPLAY=:0 XDG_RUNTIME_DIR=/run/droiddeck
 Environment=BL_LAUNCH_DIR=/run/droiddeck
 Environment=XDG_DATA_HOME=/home/droiddeck/.local/share

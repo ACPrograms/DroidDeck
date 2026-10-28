@@ -44,7 +44,7 @@ REASONS = (
 # Input strings are evaluated solely for enum classification and immediately discarded.
 WHITELIST_PATTERNS = [
     ("SHM_EXHAUSTED", re.compile(
-        r"^(?=.*(?:/dev/shm|shared memory|shm_open|shmat))(?=.*(?:no space|out of space|exhausted|enospc|full))", re.IGNORECASE)),
+        r"^(?=.*(?:/dev/shm|shared memory|shm_open|shmat))(?=.*\b(?:no space|out of space|exhausted|enospc|full)\b)", re.IGNORECASE)),
     ("SHM_FAILURE", re.compile(
         r"(?:shm_open|shmat|posixsharedmemory|createanonymoussharedmemory).*(?:failed|error)|failed to allocate shared memory", re.IGNORECASE)),
     ("BUS_FAULT", re.compile(r"bus error|sigbus", re.IGNORECASE)),
