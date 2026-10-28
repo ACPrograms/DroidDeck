@@ -19,7 +19,10 @@ apt-get install -y --no-install-recommends \
   pulseaudio libpulse0 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri \
   libgtk2.0-0 libpipewire-0.3-0 libxcb-res0 libopenal1 libnm0 libibus-1.0-5 \
   libc6:i386 libstdc++6:i386 libx11-6:i386 libxrandr2:i386 libglib2.0-0:i386 \
-  libgl1-mesa-dri:i386 libgl1:i386 libvulkan1:i386 mesa-vulkan-drivers:i386
+  libgl1-mesa-dri:i386 libgl1:i386 libvulkan1:i386 mesa-vulkan-drivers:i386 \
+  libxtst6:i386 libxi6:i386 libgtk2.0-0:i386 libpipewire-0.3-0:i386 \
+  libpulse0:i386 libgdk-pixbuf-2.0-0:i386 libxcb-res0:i386 libva2:i386 \
+  libvdpau1:i386 libbz2-1.0:i386
 usermod -aG input,video,audio droiddeck
 if getent group render >/dev/null; then usermod -aG render droiddeck; fi
 
