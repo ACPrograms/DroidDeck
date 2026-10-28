@@ -149,6 +149,9 @@ namespace DroidDeckXboxHost
                         HostWebView.IsEnabled = false;
                         IsTabStop = true;
                         Focus(FocusState.Programmatic);
+                        Canvas.SetLeft(GuestPointer, Math.Max(0, ActualWidth / 2 - GuestPointer.Width / 2));
+                        Canvas.SetTop(GuestPointer, Math.Max(0, ActualHeight / 2 - GuestPointer.Height / 2));
+                        GuestPointer.Visibility = Visibility.Visible;
                         await System.Threading.Tasks.Task.Delay(100);
                         try
                         {

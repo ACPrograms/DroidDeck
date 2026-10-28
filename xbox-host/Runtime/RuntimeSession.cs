@@ -178,6 +178,8 @@ namespace DroidDeckXboxHost.Runtime
                     NativeState = _backend == null ? "NotStarted" : _backend.State.ToString(),
                     ExitCode = _backend == null ? (int?)null : _backend.ExitCode,
                     FrameSequence = _backend?.DisplayBridge?.FrameSequence ?? 0,
+                    KeysDispatched = _backend?.InputBridge?.KeysDispatched ?? 0,
+                    PointerEventsDispatched = _backend?.InputBridge?.AbsoluteMouseDispatched ?? 0,
                     NativeError = _backend?.GetDiagnosticSnapshot().LastErrorMessage,
                     Utc = DateTimeOffset.UtcNow
                 });
