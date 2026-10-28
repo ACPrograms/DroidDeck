@@ -970,6 +970,9 @@ BUSCONF
       _bl_cef=(-cef-disable-gpu)
       _bl_ui=(-nobigpicture)
     fi
+    if [ "${BL_X64_NATIVE:-0}" = 1 ] && [ "${BL_NATIVE_CEF_DISABLE_HANG_TIMEOUTS:-0}" = 1 ]; then
+      _bl_cef+=(-cef-disable-hang-timeouts)
+    fi
     if [ "${BL_STEAM_UI:-}" != desktop ]; then
       if [ "$steam_x64" = 0 ] || [ "${BL_X64_DECK:-1}" != 0 ]; then
         _bl_ui+=(-steamdeck -steamos3)
