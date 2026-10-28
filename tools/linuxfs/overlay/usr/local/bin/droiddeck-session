@@ -972,9 +972,12 @@ BUSCONF
       fi
       _bl_ui=(-nobigpicture)
     fi
-    if [ "${BL_X64_NATIVE:-0}" = 1 ] && [ "${BL_NATIVE_CEF_GPU:-0}" = 1 ] &&
-       [ "${BL_NATIVE_CEF_ANGLE_GL:-0}" = 1 ]; then
-      _bl_cef=(-cef-force-gpu -cef-use-gl=angle -cef-use-angle=gl)
+    if [ "${BL_X64_NATIVE:-0}" = 1 ] && [ "${BL_NATIVE_CEF_GPU:-0}" = 1 ]; then
+      if [ "${BL_NATIVE_CEF_ANGLE_GLES:-0}" = 1 ]; then
+        _bl_cef=(-cef-force-gpu -cef-use-gl=angle -cef-use-angle=gles)
+      elif [ "${BL_NATIVE_CEF_ANGLE_GL:-0}" = 1 ]; then
+        _bl_cef=(-cef-force-gpu -cef-use-gl=angle -cef-use-angle=gl)
+      fi
     fi
     if [ "${BL_X64_NATIVE:-0}" = 1 ] && [ "${BL_NATIVE_CEF_DISABLE_HANG_TIMEOUTS:-0}" = 1 ]; then
       _bl_cef+=(-cef-disable-hang-timeouts)
