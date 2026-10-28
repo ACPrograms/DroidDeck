@@ -189,6 +189,8 @@ def run_diagnostic(
     try:
         proc = subprocess.Popen(
             cmd,
+            # Valve's logger otherwise redirects console output before classification.
+            env=dict(os.environ, STEAM_RUNTIME_LOGGER="0"),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             close_fds=True,
