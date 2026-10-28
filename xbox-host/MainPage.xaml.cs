@@ -33,6 +33,7 @@ namespace DroidDeckXboxHost
         private bool _guestCapturePending;
         private bool _guestTickPending;
         private bool _frontendSuspendAttempted;
+        private int _guestPointerButtons;
         private DateTimeOffset _guestRetryAfter;
 
         public DiagnosticState Diagnostics => _diagnostics;
@@ -145,6 +146,9 @@ namespace DroidDeckXboxHost
                     {
                         _frontendSuspendAttempted = true;
                         HostWebView.Visibility = Visibility.Collapsed;
+                        HostWebView.IsEnabled = false;
+                        IsTabStop = true;
+                        Focus(FocusState.Programmatic);
                         await System.Threading.Tasks.Task.Delay(100);
                         try
                         {
@@ -260,10 +264,25 @@ namespace DroidDeckXboxHost
             var point = args.GetCurrentPoint(surface);
             int buttons = (point.Properties.IsLeftButtonPressed ? 1 : 0) |
                 (point.Properties.IsRightButtonPressed ? 2 : 0) | (point.Properties.IsMiddleButtonPressed ? 4 : 0);
+            var localPoint = args.GetCurrentPoint(GuestSurface);
+            Canvas.SetLeft(GuestPointer, localPoint.Position.X - GuestPointer.Width / 2);
+            Canvas.SetTop(GuestPointer, localPoint.Position.Y - GuestPointer.Height / 2);
+            GuestPointer.Visibility = Visibility.Visible;
+            bool buttonsChanged = buttons != _guestPointerButtons;
+            if (buttonsChanged && buttons != 0)
+            {
+                Focus(FocusState.Programmatic);
+                surface.CapturePointer(args.Pointer);
+            }
             backend.InputBridge.UpdateAbsolutePointer(point.Position.X, point.Position.Y,
                 surface.ActualWidth, surface.ActualHeight, width, height,
                 point.Properties.MouseWheelDelta / 120, buttons);
-            backend.InputBridge.FlushAbsolute();
+            // Movement is coalesced by the display tick; button/wheel events
+            // must retain their ordering even while the guest is busy.
+            if (buttonsChanged || point.Properties.MouseWheelDelta != 0)
+                backend.InputBridge.FlushAbsolute();
+            if (buttonsChanged && buttons == 0) surface.ReleasePointerCapture(args.Pointer);
+            _guestPointerButtons = buttons;
             args.Handled = true;
         }
 

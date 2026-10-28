@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
 using System.Threading;
@@ -38,12 +39,15 @@ namespace DroidDeckXboxHost.Runtime
                         using (var packet = new MemoryStream(24))
                         using (var writer = new BinaryWriter(packet))
                         {
+                            var lastState = new byte[16];
+                            var lastSend = Stopwatch.StartNew();
+                            bool sent = false;
                             while (!_stop.IsCancellationRequested)
                             {
                                 var pads = Gamepad.Gamepads;
                                 GamepadReading reading = pads.Count > 0 ? pads[0].GetCurrentReading() : default(GamepadReading);
                                 packet.Position = 0;
-                                writer.Write(new byte[] { 68, 68, 80, 49 }); // DDP1
+                                writer.Write(0x31504444u); // DDP1, little endian
                                 writer.Write(++sequence);
                                 writer.Write((uint)reading.Buttons & 0x3FFF); // Paddles do not invalidate standard pad packets.
                                 writer.Write(Axis(reading.LeftThumbstickX));
@@ -52,7 +56,19 @@ namespace DroidDeckXboxHost.Runtime
                                 writer.Write(Axis(-reading.RightThumbstickY));
                                 writer.Write(Axis(reading.LeftTrigger));
                                 writer.Write(Axis(reading.RightTrigger));
-                                await stream.WriteAsync(packet.GetBuffer(), 0, 24, _stop.Token);
+                                byte[] bytes = packet.GetBuffer();
+                                bool changed = !sent;
+                                for (int i = 0; i < lastState.Length; i++)
+                                    if (lastState[i] != bytes[i + 8]) changed = true;
+                                // Preserve 60 Hz input changes without flooding SLIRP
+                                // with identical packets. Keep below the guest's 500 ms timeout.
+                                if (changed || lastSend.ElapsedMilliseconds >= 200)
+                                {
+                                    await stream.WriteAsync(bytes, 0, 24, _stop.Token);
+                                    Buffer.BlockCopy(bytes, 8, lastState, 0, lastState.Length);
+                                    sent = true;
+                                    lastSend.Restart();
+                                }
                                 await Task.Delay(16, _stop.Token);
                             }
                         }

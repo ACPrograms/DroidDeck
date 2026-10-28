@@ -20,6 +20,11 @@
             <Image x:Name="GuestImage" Visibility="Collapsed" Stretch="Uniform"
                    PointerMoved="OnGuestPointer" PointerPressed="OnGuestPointer"
                    PointerReleased="OnGuestPointer" PointerWheelChanged="OnGuestPointer" />
+            <Canvas IsHitTestVisible="False">
+                <Ellipse x:Name="GuestPointer" Width="14" Height="14"
+                         Fill="White" Stroke="Black" StrokeThickness="2"
+                         Visibility="Collapsed" />
+            </Canvas>
         </Grid>
     </Grid>
 </Page>
