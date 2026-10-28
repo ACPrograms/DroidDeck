@@ -181,8 +181,17 @@ namespace DroidDeckXboxHost
                     int width, height;
                     if (!display.TryGetFallbackFrame(pixels, out width, out height))
                     {
-                        if (_guestBitmap != null)
-                            await CaptureGuestPreviewIfRequestedAsync(pixels, _guestBitmap.PixelWidth, _guestBitmap.PixelHeight);
+                        if (_guestBitmap != null && File.Exists(Path.Combine(ApplicationData.Current.LocalFolder.Path, "runtime-preview.request")))
+                        {
+                            // With no new frame, snapshot the bitmap actually displayed, not the native scratch buffer.
+                            byte[] displayedPixels = new byte[checked(_guestBitmap.PixelWidth * _guestBitmap.PixelHeight * 4)];
+                            using (Stream rendered = _guestBitmap.PixelBuffer.AsStream())
+                            {
+                                if (rendered.Read(displayedPixels, 0, displayedPixels.Length) != displayedPixels.Length)
+                                    throw new IOException("Displayed frame snapshot was incomplete.");
+                            }
+                            await CaptureGuestPreviewIfRequestedAsync(displayedPixels, _guestBitmap.PixelWidth, _guestBitmap.PixelHeight);
+                        }
                         return;
                     }
                     if (width <= 0 || height <= 0 || width > 2560 || height > 1600) return;
